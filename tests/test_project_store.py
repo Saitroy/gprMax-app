@@ -38,6 +38,8 @@ class JsonProjectStoreTests(unittest.TestCase):
                 ),
                 model=ProjectModel(
                     title="Stage 2 model",
+                    notes="Model notes",
+                    tags=["stage4", "editor"],
                     domain=ModelDomain(
                         size_m=Vector3(x=2.0, y=1.5, z=0.2),
                         resolution_m=Vector3(x=0.01, y=0.01, z=0.01),
@@ -48,6 +50,8 @@ class JsonProjectStoreTests(unittest.TestCase):
                             identifier="sand",
                             relative_permittivity=4.0,
                             conductivity=0.001,
+                            notes="Reference material",
+                            tags=["soil"],
                         )
                     ],
                     waveforms=[
@@ -56,6 +60,8 @@ class JsonProjectStoreTests(unittest.TestCase):
                             kind="ricker",
                             amplitude=1.0,
                             center_frequency_hz=1e9,
+                            notes="Default waveform",
+                            tags=["default"],
                         )
                     ],
                     sources=[
@@ -65,6 +71,9 @@ class JsonProjectStoreTests(unittest.TestCase):
                             axis="z",
                             position_m=Vector3(x=0.1, y=0.1, z=0.0),
                             waveform_id="wf1",
+                            delay_s=1e-9,
+                            notes="Transmitter",
+                            tags=["tx"],
                         )
                     ],
                     receivers=[
@@ -72,12 +81,18 @@ class JsonProjectStoreTests(unittest.TestCase):
                             identifier="rx1",
                             position_m=Vector3(x=0.2, y=0.1, z=0.0),
                             outputs=["Ez"],
+                            notes="Receiver",
+                            tags=["rx"],
                         )
                     ],
                     geometry=[
                         GeometryPrimitive(
                             kind="box",
+                            label="slab",
                             material_ids=["sand"],
+                            dielectric_smoothing=False,
+                            notes="Test geometry",
+                            tags=["geom"],
                             parameters={
                                 "lower_left_m": {"x": 0.0, "y": 0.0, "z": 0.0},
                                 "upper_right_m": {"x": 1.0, "y": 1.0, "z": 0.2},
@@ -95,10 +110,16 @@ class JsonProjectStoreTests(unittest.TestCase):
             self.assertTrue(project_file.exists())
             self.assertEqual(loaded.metadata.name, "Demo project")
             self.assertEqual(loaded.model.title, "Stage 2 model")
+            self.assertEqual(loaded.model.notes, "Model notes")
+            self.assertEqual(loaded.model.tags, ["stage4", "editor"])
             self.assertEqual(loaded.model.domain.size_m.x, 2.0)
             self.assertEqual(loaded.model.materials[0].identifier, "sand")
+            self.assertEqual(loaded.model.materials[0].tags, ["soil"])
             self.assertEqual(loaded.model.sources[0].waveform_id, "wf1")
+            self.assertEqual(loaded.model.sources[0].delay_s, 1e-9)
             self.assertEqual(loaded.model.receivers[0].outputs, ["Ez"])
+            self.assertFalse(loaded.model.geometry[0].dielectric_smoothing)
+            self.assertEqual(loaded.model.geometry[0].label, "slab")
             self.assertEqual(loaded.advanced_input_overrides, ["# custom raw command"])
 
 

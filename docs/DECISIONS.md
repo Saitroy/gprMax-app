@@ -81,3 +81,34 @@ Consequence:
 - each run gets its own metadata manifest and log files;
 - the UI talks to application services and run records, not to `subprocess.Popen`;
 - a future hybrid API path must still conform to the same run-artifact contract.
+
+## 2026-03-15: Keep Stage 4 model editing form-based and tab-oriented
+
+Status: accepted
+
+Rationale:
+
+- the current project schema and input-generation coverage are stronger than any scene/canvas model we could justify at this stage;
+- non-programmer users benefit more from explicit forms and validation than from a premature pseudo-CAD workflow;
+- tabs plus list-detail editors give a stable path to incremental coverage growth.
+
+Consequence:
+
+- top-level model editing stays organized by command family or entity group;
+- entity tabs can evolve independently as more `gprMax` coverage is added;
+- a future visual scene editor, if introduced, should sit on top of the same domain/application services rather than replace them.
+
+## 2026-03-15: Stage 4 MVP entity subset is materials, waveforms, sources, receivers, and three volumetric geometry primitives
+
+Status: accepted
+
+Rationale:
+
+- this subset gives a real end-to-end authoring workflow with manageable engineering cost;
+- `box`, `sphere`, and `cylinder` map cleanly to the current input generator and validation layer;
+- waveforms plus a focused source subset are enough to keep Stage 3 execution useful without pretending to cover the full `gprMax` surface.
+
+Consequence:
+
+- unsupported commands remain future work instead of hidden partial UI;
+- input generation, validation, persistence, and editor UX can grow together from a working base.

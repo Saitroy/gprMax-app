@@ -46,6 +46,8 @@ class MaterialDefinition:
     conductivity: float
     relative_permeability: float = 1.0
     magnetic_loss: float = 0.0
+    notes: str = ""
+    tags: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -54,6 +56,8 @@ class WaveformDefinition:
     kind: str
     amplitude: float
     center_frequency_hz: float
+    notes: str = ""
+    tags: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -63,6 +67,10 @@ class SourceDefinition:
     position_m: Vector3
     waveform_id: str
     identifier: str = ""
+    delay_s: float = 0.0
+    resistance_ohms: float | None = None
+    notes: str = ""
+    tags: list[str] = field(default_factory=list)
     parameters: dict[str, Any] = field(default_factory=dict)
 
 
@@ -71,6 +79,8 @@ class ReceiverDefinition:
     position_m: Vector3
     identifier: str = ""
     outputs: list[str] = field(default_factory=list)
+    notes: str = ""
+    tags: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -79,6 +89,9 @@ class GeometryPrimitive:
     parameters: dict[str, Any] = field(default_factory=dict)
     material_ids: list[str] = field(default_factory=list)
     label: str = ""
+    dielectric_smoothing: bool = True
+    notes: str = ""
+    tags: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -94,6 +107,8 @@ class GeometryView:
 class ProjectModel:
     title: str
     domain: ModelDomain = field(default_factory=ModelDomain)
+    notes: str = ""
+    tags: list[str] = field(default_factory=list)
     materials: list[MaterialDefinition] = field(default_factory=list)
     waveforms: list[WaveformDefinition] = field(default_factory=list)
     sources: list[SourceDefinition] = field(default_factory=list)

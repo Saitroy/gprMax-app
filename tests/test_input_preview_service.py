@@ -7,10 +7,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from gprmax_workbench.domain.gprmax_config import SimulationRunConfig
+from gprmax_workbench.application.services.input_generation_service import (
+    InputGenerationService,
+)
+from gprmax_workbench.application.services.input_preview_service import InputPreviewService
+from gprmax_workbench.application.services.validation_service import ValidationService
+from gprmax_workbench.application.state import AppState
 from gprmax_workbench.domain.models import (
     GeometryPrimitive,
-    GeometryView,
     MaterialDefinition,
     ReceiverDefinition,
     SourceDefinition,
@@ -19,12 +23,13 @@ from gprmax_workbench.domain.models import (
     default_project,
 )
 from gprmax_workbench.infrastructure.gprmax.input_generator import GprMaxInputGenerator
+from gprmax_workbench.infrastructure.persistence.artifact_store import RunArtifactStore
 
 
-class InputGeneratorTests(unittest.TestCase):
-    def test_generates_minimum_supported_input(self) -> None:
+class InputPreviewServiceTests(unittest.TestCase):
+    def test_generate_preview_uses_current_project_model(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            project = default_project("Generator Demo", Path(temp_dir))
+            project = default_project("Preview Demo", Path(temp_dir))
             project.model.materials = [
                 MaterialDefinition(
                     identifier="soil",
@@ -47,7 +52,7 @@ class InputGeneratorTests(unittest.TestCase):
                     axis="z",
                     position_m=Vector3(0.1, 0.1, 0.0),
                     waveform_id="wf1",
-                    delay_s=5e-10,
+                    delay_s=1e-9,
                     resistance_ohms=75.0,
                 )
             ]
@@ -60,43 +65,33 @@ class InputGeneratorTests(unittest.TestCase):
             ]
             project.model.geometry = [
                 GeometryPrimitive(
-                    kind="box",
+                    kind="sphere",
+                    label="target",
                     material_ids=["soil"],
                     dielectric_smoothing=False,
                     parameters={
-                        "lower_left_m": {"x": 0.0, "y": 0.0, "z": 0.0},
-                        "upper_right_m": {"x": 1.0, "y": 0.5, "z": 0.1},
+                        "center_m": {"x": 0.5, "y": 0.5, "z": 0.05},
+                        "radius_m": 0.1,
                     },
                 )
             ]
-            project.model.geometry_views = [
-                GeometryView(
-                    lower_left_m=Vector3(0.0, 0.0, 0.0),
-                    upper_right_m=Vector3(1.0, 0.5, 0.1),
-                    resolution_m=Vector3(0.01, 0.01, 0.01),
-                    filename="geom",
-                )
-            ]
 
-            generated = GprMaxInputGenerator().generate(
-                project=project,
-                configuration=SimulationRunConfig(),
-                output_dir="../output",
+            state = AppState(current_project=project)
+            preview_service = InputPreviewService(
+                input_generation_service=InputGenerationService(
+                    generator=GprMaxInputGenerator(),
+                    artifact_store=RunArtifactStore(),
+                ),
+                validation_service=ValidationService(state),
             )
 
-            self.assertIn("#domain:", generated.text)
-            self.assertIn("#dx_dy_dz:", generated.text)
-            self.assertIn("#material:", generated.text)
-            self.assertIn("#waveform:", generated.text)
-            self.assertIn("#voltage_source:", generated.text)
-            self.assertIn("#rx:", generated.text)
-            self.assertIn("#box:", generated.text)
-            self.assertIn("#geometry_view:", generated.text)
-            self.assertIn("#output_dir: ../output", generated.text)
-            self.assertIn("75", generated.text)
-            self.assertIn("5e-10", generated.text)
-            self.assertIn(" n", generated.text)
-            self.assertTrue(generated.warnings)
+            preview = preview_service.generate_preview(project)
+
+            self.assertTrue(preview.generated)
+            self.assertIn("#voltage_source:", preview.text)
+            self.assertIn("75", preview.text)
+            self.assertIn("#sphere:", preview.text)
+            self.assertIn(" n", preview.text)
 
 
 if __name__ == "__main__":

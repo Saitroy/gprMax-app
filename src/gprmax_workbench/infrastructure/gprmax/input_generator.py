@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Iterable
 
 from ...domain.execution_status import SimulationMode
 from ...domain.gprmax_config import SimulationRunConfig
@@ -129,22 +128,30 @@ class GprMaxInputGenerator:
         return renderer(source)
 
     def _render_hertzian_dipole(self, source: SourceDefinition) -> str:
-        return (
+        line = (
             f"#{source.kind}: "
             f"{source.axis} "
             f"{self._format_vector(source.position_m)} "
             f"{source.waveform_id}"
         )
+        if source.delay_s > 0:
+            line = f"{line} {self._format_number(source.delay_s)}"
+        return line
 
     def _render_voltage_source(self, source: SourceDefinition) -> str:
-        resistance = source.parameters.get("resistance_ohms", 50)
-        return (
+        resistance = source.resistance_ohms
+        if resistance is None:
+            resistance = float(source.parameters.get("resistance_ohms", 50))
+        line = (
             "#voltage_source: "
             f"{source.axis} "
             f"{self._format_vector(source.position_m)} "
             f"{self._format_number(float(resistance))} "
             f"{source.waveform_id}"
         )
+        if source.delay_s > 0:
+            line = f"{line} {self._format_number(source.delay_s)}"
+        return line
 
     def _render_receiver(self, receiver: ReceiverDefinition) -> str:
         return f"#rx: {self._format_vector(receiver.position_m)}"
@@ -163,26 +170,29 @@ class GprMaxInputGenerator:
         return renderer(geometry)
 
     def _render_box(self, geometry: GeometryPrimitive) -> str:
-        return (
+        line = (
             "#box: "
             f"{self._format_from_parameters(geometry, 'lower_left_m')} "
             f"{self._format_from_parameters(geometry, 'upper_right_m')} "
             f"{self._require_material_id(geometry)}"
         )
+        return self._append_dielectric_smoothing(line, geometry)
 
     def _render_sphere(self, geometry: GeometryPrimitive) -> str:
         center = self._format_from_parameters(geometry, "center_m")
         radius = self._format_number(float(geometry.parameters["radius_m"]))
-        return f"#sphere: {center} {radius} {self._require_material_id(geometry)}"
+        line = f"#sphere: {center} {radius} {self._require_material_id(geometry)}"
+        return self._append_dielectric_smoothing(line, geometry)
 
     def _render_cylinder(self, geometry: GeometryPrimitive) -> str:
-        return (
+        line = (
             "#cylinder: "
             f"{self._format_from_parameters(geometry, 'start_m')} "
             f"{self._format_from_parameters(geometry, 'end_m')} "
             f"{self._format_number(float(geometry.parameters['radius_m']))} "
             f"{self._require_material_id(geometry)}"
         )
+        return self._append_dielectric_smoothing(line, geometry)
 
     def _render_geometry_view(self, view: GeometryView) -> str:
         return (
@@ -213,6 +223,14 @@ class GprMaxInputGenerator:
                 f"Geometry '{geometry.kind}' does not reference a material."
             )
         return geometry.material_ids[0]
+
+    def _append_dielectric_smoothing(
+        self,
+        line: str,
+        geometry: GeometryPrimitive,
+    ) -> str:
+        smoothing = "y" if geometry.dielectric_smoothing else "n"
+        return f"{line} {smoothing}"
 
     def _format_vector(self, vector: Vector3) -> str:
         return " ".join(

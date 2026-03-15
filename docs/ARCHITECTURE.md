@@ -90,6 +90,26 @@ Responsibilities:
 7. A run repository persists metadata/history and exposes it back to the UI.
 8. Results services can later index run outputs and expose them back to the UI.
 
+## Stage 4 model editor foundation
+
+The current model editor deliberately uses a form-first architecture instead of a canvas/CAD scene builder.
+
+Why:
+
+- it matches the current project model and input-generation maturity;
+- it keeps the GUI understandable for non-programmers;
+- it gives a stable path to validation, persistence, and preview;
+- it avoids baking a weak visual scene model into the long-term architecture too early.
+
+Top-level editor composition:
+
+- summary/header card with project location and validation state;
+- tabbed sections for general settings, materials, waveforms, sources, receivers, geometry, and input preview;
+- list-detail editors inside entity tabs;
+- application-layer mutation services that update `AppState` and validation state directly.
+
+The editor does not generate input lines or subprocess commands itself. It only edits the typed project model and asks dedicated services for validation and preview.
+
 ## `gprMax` integration strategy
 
 ### Recommended default: subprocess-first
@@ -199,11 +219,12 @@ Current typed sections:
 
 - `metadata`: project identity and timestamps;
 - `model.domain`: domain size, spatial resolution, time window, PML cells;
+- `model.notes` and `model.tags`: editor-facing metadata for guided workflows;
 - `model.materials`: material definitions;
 - `model.waveforms`: waveform definitions;
 - `model.sources`: source definitions with waveform references;
 - `model.receivers`: receiver definitions;
-- `model.geometry`: ordered geometry command placeholders with parameters and material references;
+- `model.geometry`: ordered geometry primitives with parameters, material references, labels, notes, tags, and dielectric-smoothing flag;
 - `model.geometry_views`: geometry-view requests;
 - `advanced.raw_input_overrides`: raw text hooks for later advanced mode.
 
@@ -224,6 +245,8 @@ Format shape:
   "metadata": {},
   "model": {
     "title": "",
+    "notes": "",
+    "tags": [],
     "domain": {},
     "materials": [],
     "waveforms": [],
@@ -245,6 +268,16 @@ Rationale:
 - versioned schema from the start;
 - clear separation between editable project state and generated/run artifacts;
 - enough structure to drive Stage 3 generation and validation without locking us into a fake full editor too early.
+
+## Stage 4 editor services
+
+The Stage 4 editor introduces three application-level services:
+
+- `ModelEditorService`: owns in-memory CRUD operations for model entities and marks the current project dirty;
+- `ValidationService`: exposes filtered validation results for editor sections and summary banners;
+- `InputPreviewService`: builds/export previews from the current project without touching the run lifecycle.
+
+This keeps the UI thin enough to stay replaceable while still giving the editor direct, low-latency feedback.
 
 ## UI shell
 

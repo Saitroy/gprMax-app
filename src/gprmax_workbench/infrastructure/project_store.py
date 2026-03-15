@@ -48,6 +48,8 @@ class JsonProjectStore:
             },
             "model": {
                 "title": project.model.title,
+                "notes": project.model.notes,
+                "tags": list(project.model.tags),
                 "domain": {
                     "size_m": _vector_to_payload(project.model.domain.size_m),
                     "resolution_m": _vector_to_payload(
@@ -104,6 +106,8 @@ class JsonProjectStore:
             ),
             model=ProjectModel(
                 title=model_payload.get("title", ""),
+                notes=str(model_payload.get("notes", "")),
+                tags=[str(item) for item in model_payload.get("tags", [])],
                 domain=ModelDomain(
                     size_m=_vector_from_payload(
                         domain_payload.get("size_m"),
@@ -213,6 +217,8 @@ def _material_to_payload(material: MaterialDefinition) -> dict[str, float | str]
         "conductivity": material.conductivity,
         "relative_permeability": material.relative_permeability,
         "magnetic_loss": material.magnetic_loss,
+        "notes": material.notes,
+        "tags": list(material.tags),
     }
 
 
@@ -223,6 +229,8 @@ def _material_from_payload(value: dict[str, Any]) -> MaterialDefinition:
         conductivity=float(value.get("conductivity", 0.0)),
         relative_permeability=float(value.get("relative_permeability", 1.0)),
         magnetic_loss=float(value.get("magnetic_loss", 0.0)),
+        notes=str(value.get("notes", "")),
+        tags=[str(item) for item in value.get("tags", [])],
     )
 
 
@@ -232,6 +240,8 @@ def _waveform_to_payload(waveform: WaveformDefinition) -> dict[str, float | str]
         "kind": waveform.kind,
         "amplitude": waveform.amplitude,
         "center_frequency_hz": waveform.center_frequency_hz,
+        "notes": waveform.notes,
+        "tags": list(waveform.tags),
     }
 
 
@@ -241,6 +251,8 @@ def _waveform_from_payload(value: dict[str, Any]) -> WaveformDefinition:
         kind=str(value.get("kind", "")),
         amplitude=float(value.get("amplitude", 1.0)),
         center_frequency_hz=float(value.get("center_frequency_hz", 0.0)),
+        notes=str(value.get("notes", "")),
+        tags=[str(item) for item in value.get("tags", [])],
     )
 
 
@@ -251,6 +263,10 @@ def _source_to_payload(source: SourceDefinition) -> dict[str, Any]:
         "axis": source.axis,
         "position_m": _vector_to_payload(source.position_m),
         "waveform_id": source.waveform_id,
+        "delay_s": source.delay_s,
+        "resistance_ohms": source.resistance_ohms,
+        "notes": source.notes,
+        "tags": list(source.tags),
         "parameters": dict(source.parameters),
     }
 
@@ -265,6 +281,14 @@ def _source_from_payload(value: dict[str, Any]) -> SourceDefinition:
             default=Vector3(x=0.0, y=0.0, z=0.0),
         ),
         waveform_id=str(value.get("waveform_id", "")),
+        delay_s=float(value.get("delay_s", 0.0)),
+        resistance_ohms=(
+            float(value["resistance_ohms"])
+            if value.get("resistance_ohms") is not None
+            else None
+        ),
+        notes=str(value.get("notes", "")),
+        tags=[str(item) for item in value.get("tags", [])],
         parameters=dict(value.get("parameters", {}))
         if isinstance(value.get("parameters"), dict)
         else {},
@@ -276,6 +300,8 @@ def _receiver_to_payload(receiver: ReceiverDefinition) -> dict[str, Any]:
         "identifier": receiver.identifier,
         "position_m": _vector_to_payload(receiver.position_m),
         "outputs": list(receiver.outputs),
+        "notes": receiver.notes,
+        "tags": list(receiver.tags),
     }
 
 
@@ -287,6 +313,8 @@ def _receiver_from_payload(value: dict[str, Any]) -> ReceiverDefinition:
             default=Vector3(x=0.0, y=0.0, z=0.0),
         ),
         outputs=[str(item) for item in value.get("outputs", [])],
+        notes=str(value.get("notes", "")),
+        tags=[str(item) for item in value.get("tags", [])],
     )
 
 
@@ -295,6 +323,9 @@ def _geometry_to_payload(geometry: GeometryPrimitive) -> dict[str, Any]:
         "kind": geometry.kind,
         "label": geometry.label,
         "material_ids": list(geometry.material_ids),
+        "dielectric_smoothing": geometry.dielectric_smoothing,
+        "notes": geometry.notes,
+        "tags": list(geometry.tags),
         "parameters": dict(geometry.parameters),
     }
 
@@ -304,6 +335,9 @@ def _geometry_from_payload(value: dict[str, Any]) -> GeometryPrimitive:
         kind=str(value.get("kind", "")),
         label=str(value.get("label", "")),
         material_ids=[str(item) for item in value.get("material_ids", [])],
+        dielectric_smoothing=bool(value.get("dielectric_smoothing", True)),
+        notes=str(value.get("notes", "")),
+        tags=[str(item) for item in value.get("tags", [])],
         parameters=dict(value.get("parameters", {}))
         if isinstance(value.get("parameters"), dict)
         else {},

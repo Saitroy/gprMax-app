@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..application.services.project_service import ProjectValidationError
 from ..application.services.simulation_service import (
     SimulationPreparationError,
 )
@@ -57,7 +58,11 @@ class MainWindow(QMainWindow):
         self._simulation_refresh_timer.timeout.connect(self._refresh_simulation_runtime_state)
 
         self._welcome_view = WelcomeView()
-        self._project_view = ProjectView()
+        self._project_view = ProjectView(
+            model_editor_service=context.model_editor_service,
+            validation_service=context.validation_service,
+            input_preview_service=context.input_preview_service,
+        )
         self._simulation_view = SimulationView(
             runtime_label=context.simulation_service.runtime_label()
         )
@@ -85,7 +90,7 @@ class MainWindow(QMainWindow):
             ),
             PageSpec(
                 title="Model Editor",
-                description="Essential project settings and core model metadata.",
+                description="Form-based MVP editor for model setup, materials, entities, and input preview.",
                 widget=self._project_view,
             ),
             PageSpec(
@@ -110,6 +115,7 @@ class MainWindow(QMainWindow):
         self._welcome_view.open_project_requested.connect(self._on_open_project)
         self._welcome_view.recent_project_requested.connect(self._on_open_recent_project)
         self._project_view.save_requested.connect(self._on_save_project)
+        self._project_view.editor_changed.connect(self._on_project_editor_changed)
         self._settings_view.save_requested.connect(self._on_save_settings)
         self._simulation_view.preview_requested.connect(self._on_preview_input)
         self._simulation_view.export_requested.connect(self._on_export_input)
@@ -156,7 +162,7 @@ class MainWindow(QMainWindow):
 
         self.setCentralWidget(central)
         self.statusBar().showMessage(
-            "Stage 3 foundation ready for input generation and subprocess execution."
+            "Stage 4 foundation ready for guided model editing and Stage 3 execution flow."
         )
 
     def refresh_views(self) -> None:
@@ -195,6 +201,17 @@ class MainWindow(QMainWindow):
         self._save_project_action.setEnabled(project is not None)
         self._update_window_title()
         self._refresh_simulation_runtime_state()
+
+    def _refresh_shell_state(self) -> None:
+        workspace = self._context.workspace_service
+        project = workspace.state.current_project
+        self._welcome_view.set_current_project(project)
+        self._simulation_view.set_project_state(
+            project_name=project.metadata.name if project else None,
+            is_dirty=workspace.state.current_project_dirty,
+        )
+        self._save_project_action.setEnabled(project is not None)
+        self._update_window_title()
 
     def _build_sidebar(self) -> QWidget:
         frame = QFrame()
@@ -323,19 +340,20 @@ class MainWindow(QMainWindow):
             )
             return
 
-        draft = self._project_view.collect_draft()
-        validation = self._context.workspace_service.save_draft(draft)
-        self.refresh_views()
-
-        if not validation.is_valid:
+        try:
+            validation = self._context.workspace_service.save_current_project()
+        except ProjectValidationError as exc:
             QMessageBox.warning(
                 self,
                 "Save Project",
                 "\n".join(
-                    f"{issue.path}: {issue.message}" for issue in validation.errors
+                    f"{issue.path}: {issue.message}"
+                    for issue in exc.validation.errors
                 ),
             )
             return
+
+        self.refresh_views()
 
         warning_text = ""
         if validation.warnings:
@@ -348,6 +366,9 @@ class MainWindow(QMainWindow):
             f"Project saved successfully.{warning_text}",
             8000,
         )
+
+    def _on_project_editor_changed(self) -> None:
+        self._refresh_shell_state()
 
     def _on_save_settings(self) -> None:
         settings = self._context.settings_service.update_preferences(
@@ -537,5 +558,5 @@ class MainWindow(QMainWindow):
         QMessageBox.information(
             self,
             "About GPRMax Workbench",
-            "Stage 3 foundation: input generation, subprocess execution, artifacts, and run history.",
+            "Stage 4 foundation: form-based model editor MVP on top of Stage 3 input generation and subprocess execution.",
         )

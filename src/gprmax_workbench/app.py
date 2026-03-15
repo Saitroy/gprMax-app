@@ -7,12 +7,15 @@ from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
 
+from .application.services.input_preview_service import InputPreviewService
 from .application.services.input_generation_service import InputGenerationService
+from .application.services.model_editor_service import ModelEditorService
 from .application.services.project_service import ProjectService
 from .application.services.results_service import ResultsService
 from .application.services.run_service import RunService
 from .application.services.settings_service import SettingsService
 from .application.services.simulation_service import SimulationService
+from .application.services.validation_service import ValidationService
 from .application.services.workspace_service import WorkspaceService
 from .application.state import AppState
 from .infrastructure.gprmax.adapter import SubprocessGprMaxAdapter
@@ -38,7 +41,10 @@ class ApplicationContext:
     project_store: JsonProjectStore
     project_service: ProjectService
     gprmax_adapter: SubprocessGprMaxAdapter
+    model_editor_service: ModelEditorService
+    validation_service: ValidationService
     input_generation_service: InputGenerationService
+    input_preview_service: InputPreviewService
     simulation_service: SimulationService
     run_service: RunService
     results_service: ResultsService
@@ -62,6 +68,8 @@ def build_context() -> ApplicationContext:
         settings_service=settings_service,
     )
     state = AppState(recent_projects=settings_service.recent_projects())
+    validation_service = ValidationService(state)
+    model_editor_service = ModelEditorService(state)
     workspace_service = WorkspaceService(
         project_service=project_service,
         settings_service=settings_service,
@@ -70,6 +78,10 @@ def build_context() -> ApplicationContext:
     input_generation_service = InputGenerationService(
         generator=GprMaxInputGenerator(),
         artifact_store=artifact_store,
+    )
+    input_preview_service = InputPreviewService(
+        input_generation_service=input_generation_service,
+        validation_service=validation_service,
     )
     simulation_service = SimulationService(
         adapter=gprmax_adapter,
@@ -90,7 +102,10 @@ def build_context() -> ApplicationContext:
         project_store=project_store,
         project_service=project_service,
         gprmax_adapter=gprmax_adapter,
+        model_editor_service=model_editor_service,
+        validation_service=validation_service,
         input_generation_service=input_generation_service,
+        input_preview_service=input_preview_service,
         simulation_service=simulation_service,
         run_service=run_service,
         results_service=results_service,

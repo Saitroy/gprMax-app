@@ -20,6 +20,7 @@ This repository currently contains:
 - Stage 1 application skeleton with a runnable PySide6 shell;
 - Stage 2 foundation layer with project model, validation, persistence, and settings flows;
 - Stage 3 subprocess-first integration with `gprMax`, input generation, run artifacts, live logs, and run history;
+- Stage 4 model editor MVP with guided forms for essential model setup, materials, waveforms, sources, receivers, geometry, and input preview;
 - layered package structure for UI, application services, domain, infrastructure, and jobs.
 
 ## Repository structure
@@ -65,6 +66,14 @@ Stage 3 currently supports:
 - future-ready hooks for MPI and batch-related CLI flags;
 - persisted run metadata, logs, and output directories per run.
 
+Stage 4 currently supports:
+
+- form-based editing of project/model overview data;
+- CRUD flows for materials, waveforms, sources, receivers, and a focused geometry subset;
+- model validation wired to editor state and save flow;
+- generated input preview from the current in-memory model;
+- direct wiring from model editor state into persistence and the existing simulation runner.
+
 ## Development
 
 Create a virtual environment and install dependencies:
@@ -89,11 +98,11 @@ python -m unittest discover -s tests
 
 The next engineering steps are:
 
-1. add the first guided model editor flow for materials, waveforms, sources, and geometry;
-2. expand input generation coverage across more `gprMax` commands;
-3. add a minimal results browser/viewer on top of run artifacts;
-4. harden cancellation/error handling with real-world `gprMax` runtime testing;
-5. prepare packaging/runtime-discovery decisions for Windows distribution.
+1. expand input generation and editor coverage across more `gprMax` commands and model entities;
+2. add a minimal results browser/viewer on top of run artifacts;
+3. harden cancellation/error handling with real-world `gprMax` runtime testing;
+4. prepare packaging/runtime-discovery decisions for Windows distribution;
+5. design the first advanced-mode bridge for raw input overrides and power-user workflows.
 
 ## References
 

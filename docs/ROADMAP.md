@@ -65,9 +65,10 @@ Exit criteria:
 Deliverables:
 
 - guided forms for core model parameters;
-- materials, geometry, sources, receivers, and grid primitives;
+- materials, waveforms, sources, receivers, and focused geometry subset;
 - validation and sensible defaults;
-- generated input preview.
+- generated input preview;
+- wiring to project state, persistence, and the existing simulation runner.
 
 Exit criteria:
 
