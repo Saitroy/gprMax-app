@@ -49,11 +49,12 @@ Exit criteria:
 Deliverables:
 
 - subprocess adapter for `gprMax`;
-- run request model;
-- stdout/stderr capture;
-- run history;
+- input generation service and writer;
+- run configuration model;
+- stdout/stderr capture with live UI updates;
+- run history and per-run metadata manifests;
 - validation before launch;
-- failure reporting.
+- failure reporting and cancellation.
 
 Exit criteria:
 

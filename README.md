@@ -19,6 +19,7 @@ This repository currently contains:
 - Stage 0 discovery and architecture documentation;
 - Stage 1 application skeleton with a runnable PySide6 shell;
 - Stage 2 foundation layer with project model, validation, persistence, and settings flows;
+- Stage 3 subprocess-first integration with `gprMax`, input generation, run artifacts, live logs, and run history;
 - layered package structure for UI, application services, domain, infrastructure, and jobs.
 
 ## Repository structure
@@ -54,6 +55,16 @@ The Stage 2 project model mirrors the `gprMax` documentation at a foundation lev
 - ordered geometry primitives as future editor-backed commands;
 - optional advanced raw input overrides.
 
+Stage 3 currently supports:
+
+- input generation for the essential domain commands;
+- materials, waveforms, receivers, a limited source subset, and a limited geometry subset;
+- subprocess execution through `python -m gprMax`;
+- geometry-only mode;
+- GPU flag wiring;
+- future-ready hooks for MPI and batch-related CLI flags;
+- persisted run metadata, logs, and output directories per run.
+
 ## Development
 
 Create a virtual environment and install dependencies:
@@ -78,10 +89,10 @@ python -m unittest discover -s tests
 
 The next engineering steps are:
 
-1. implement the Stage 3 `gprMax` subprocess runner with logs, status tracking, and cancellation;
-2. generate actual `.in` files from the Stage 2 project model;
-3. add the first guided model editor flow for materials, waveforms, and antennas;
-4. add a minimal results browser/viewer;
+1. add the first guided model editor flow for materials, waveforms, sources, and geometry;
+2. expand input generation coverage across more `gprMax` commands;
+3. add a minimal results browser/viewer on top of run artifacts;
+4. harden cancellation/error handling with real-world `gprMax` runtime testing;
 5. prepare packaging/runtime-discovery decisions for Windows distribution.
 
 ## References

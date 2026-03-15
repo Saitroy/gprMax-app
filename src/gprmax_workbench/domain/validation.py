@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import StrEnum
 
+from .execution_status import SimulationMode
+from .gprmax_config import SimulationRunConfig
 from .models import BUILTIN_MATERIAL_IDENTIFIERS, Project
 
 
@@ -187,6 +189,62 @@ def validate_project(project: Project) -> ValidationResult:
         result.add_warning(
             "model.receivers",
             "No receivers are defined yet. Results collection is not configured.",
+        )
+
+    return result
+
+
+def validate_project_for_execution(
+    project: Project,
+    configuration: SimulationRunConfig,
+) -> ValidationResult:
+    result = validate_project(project)
+
+    supported_source_kinds = {"hertzian_dipole", "magnetic_dipole", "voltage_source"}
+    supported_geometry_kinds = {"box", "sphere", "cylinder"}
+
+    for index, source in enumerate(project.model.sources):
+        if source.kind not in supported_source_kinds:
+            result.add_error(
+                f"model.sources[{index}].kind",
+                f"Source kind '{source.kind}' is not supported by the current input generator.",
+            )
+
+    for index, primitive in enumerate(project.model.geometry):
+        if primitive.kind not in supported_geometry_kinds:
+            result.add_error(
+                f"model.geometry[{index}].kind",
+                f"Geometry kind '{primitive.kind}' is not supported by the current input generator.",
+            )
+
+    if configuration.use_gpu and configuration.mpi_tasks:
+        result.add_warning(
+            "run_config",
+            "GPU and MPI options are configured together. This is left as an advanced/future-ready path and may require environment-specific tuning.",
+        )
+
+    if configuration.mode == SimulationMode.GEOMETRY_ONLY and not project.model.geometry_views:
+        result.add_warning(
+            "model.geometry_views",
+            "Geometry-only mode is enabled but no geometry views are configured.",
+        )
+
+    if configuration.num_model_runs < 1:
+        result.add_error(
+            "run_config.num_model_runs",
+            "The number of model runs must be at least 1.",
+        )
+
+    if configuration.restart_from_model is not None and configuration.restart_from_model < 1:
+        result.add_error(
+            "run_config.restart_from_model",
+            "Restart model index must be at least 1.",
+        )
+
+    if configuration.mpi_tasks is not None and configuration.mpi_tasks < 1:
+        result.add_error(
+            "run_config.mpi_tasks",
+            "MPI tasks must be at least 1 when configured.",
         )
 
     return result

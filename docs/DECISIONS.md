@@ -65,3 +65,19 @@ Rationale:
 - the data model should reflect `gprMax` concepts such as domain, materials, waveforms, sources, receivers, and geometry;
 - JSON keeps the file easy to diff, inspect, and test;
 - ordered geometry entries preserve future command-generation order without forcing premature GUI abstractions.
+
+## 2026-03-15: Keep Stage 3 execution subprocess-first and artifact-centric
+
+Status: accepted
+
+Rationale:
+
+- `gprMax` has a documented CLI surface that is more stable than direct UI-level imports;
+- stdout/stderr capture and per-run folders are easier to reason about than in-process execution side effects;
+- this keeps run history, cancellation, error reporting, and future post-processing grounded in explicit artifacts.
+
+Consequence:
+
+- each run gets its own metadata manifest and log files;
+- the UI talks to application services and run records, not to `subprocess.Popen`;
+- a future hybrid API path must still conform to the same run-artifact contract.

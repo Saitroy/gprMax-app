@@ -71,6 +71,8 @@ class WorkspaceService:
         self._state.current_project = None
         self._state.current_project_dirty = False
         self._state.current_project_validation = ValidationResult()
+        self._state.active_run = None
+        self._state.run_history = []
 
     def refresh_recent_projects(self) -> None:
         self._state.recent_projects = self._settings_service.recent_projects()
@@ -79,4 +81,6 @@ class WorkspaceService:
         self._state.current_project = project
         self._state.current_project_dirty = is_dirty
         self._state.current_project_validation = validate_project(project)
+        self._state.active_run = None
+        self._state.run_history = []
         self.refresh_recent_projects()

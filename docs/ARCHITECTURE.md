@@ -84,10 +84,11 @@ Responsibilities:
 1. User edits project/model data in the GUI.
 2. UI sends commands to application services.
 3. Application services validate input and persist project state.
-4. A generator serializes GUI/domain state into one or more `gprMax` input artifacts.
-5. A simulation service creates a run request and passes it to the `gprMax` adapter.
-6. The adapter launches `gprMax`, captures stdout/stderr, and records artifacts.
-7. Results services index run outputs and expose them back to the UI.
+4. An input-generation service serializes project state into a `gprMax` input artifact.
+5. A simulation service creates a typed run configuration and passes it to the `gprMax` adapter.
+6. A subprocess runner launches `gprMax`, streams stdout/stderr, and writes run artifacts.
+7. A run repository persists metadata/history and exposes it back to the UI.
+8. Results services can later index run outputs and expose them back to the UI.
 
 ## `gprMax` integration strategy
 
@@ -112,6 +113,56 @@ Why this is the default:
 Some future features may benefit from controlled direct imports of a public `gprMax` Python API, but only behind the same adapter boundary and only where the import path is stable enough.
 
 The UI should never care whether a run came from subprocess mode or a future in-process implementation.
+
+## Stage 3 execution foundation
+
+The current runner is intentionally scoped to a minimum viable but extensible subset.
+
+Directly supported now:
+
+- essential domain commands;
+- materials;
+- waveforms;
+- receivers;
+- source subset: `hertzian_dipole`, `magnetic_dipole`, `voltage_source`;
+- geometry subset: `box`, `sphere`, `cylinder`;
+- `geometry_view`;
+- geometry-only execution mode;
+- GPU flag wiring;
+- future hooks for `-mpi`, `--mpi-no-spawn`, `-n`, `-restart`, `--write-processed`.
+
+Deferred deliberately:
+
+- broad object-command coverage;
+- full HPC orchestration;
+- structured results parsing;
+- advanced recovery/retry policies;
+- a polished expert run configuration UX.
+
+## Run artifact layout
+
+Stage 3 run folders use the following structure:
+
+```text
+project/
+  runs/
+    20260315-153000-ab12cd34/
+      input/
+        simulation.in
+      logs/
+        stdout.log
+        stderr.log
+        combined.log
+      output/
+      metadata.json
+```
+
+Rationale:
+
+- one immutable folder per run;
+- explicit separation of input snapshot, logs, and outputs;
+- metadata remains human-readable and testable;
+- future results viewers can target `runs/<run-id>/output` without guessing.
 
 ## Project layout on disk
 
