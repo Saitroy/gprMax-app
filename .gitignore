@@ -1,0 +1,33 @@
+.idea/
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.pyc
+*.pyo
+*.pyd
+*.log
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+*.spec
+
+# Qt / desktop artifacts
+*.h5
+*.vtk
+*.out
+*.npy
+*.tmp
+
+# Local application/runtime data
+.cache/
+.tmp/
+.workbench/
+
+# OS files
+Thumbs.db
+.DS_Store

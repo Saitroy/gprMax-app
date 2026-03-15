@@ -1,0 +1,153 @@
+# Architecture
+
+## Product framing
+
+`GPRMax Workbench` is a desktop application that wraps `gprMax` with a guided UI, project system, run management, and results access. It is not a fork of `gprMax` and not a rewrite of `gprMax-Designer`.
+
+The desktop app owns:
+
+- project lifecycle;
+- user-facing forms and workflows;
+- validation and defaults;
+- generation of `gprMax` input artifacts;
+- simulation orchestration and logging;
+- results discovery and viewing.
+
+`gprMax` remains the computation engine and functional source of truth.
+
+## Architectural principles
+
+- layered structure with explicit boundaries;
+- UI depends on application services, not on `gprMax` internals;
+- integration with `gprMax` is isolated behind adapters;
+- project metadata is persisted independently from generated simulation artifacts;
+- long-running work is represented as jobs, not run on the UI thread;
+- the generated `gprMax` input file is a transparent artifact, not a hidden internal detail.
+
+## Layers
+
+### `ui/`
+
+Responsibilities:
+
+- windows, dialogs, views, view composition;
+- navigation, actions, empty/error/loading states;
+- presentation models for widgets and forms.
+
+Rules:
+
+- should not spawn `gprMax` directly;
+- should not know process arguments or filesystem layouts beyond data exposed by services.
+
+### `application/`
+
+Responsibilities:
+
+- use-case orchestration;
+- application/session state;
+- project lifecycle coordination;
+- simulation preparation and results coordination.
+
+Rules:
+
+- may coordinate multiple infrastructure services;
+- should express product workflows in stable interfaces that UI can consume.
+
+### `domain/`
+
+Responsibilities:
+
+- core entities such as project, run record, and result set;
+- validation rules and business constraints;
+- stable concepts that are not tied to Qt or process execution.
+
+### `infrastructure/`
+
+Responsibilities:
+
+- project persistence;
+- settings storage;
+- logging setup;
+- filesystem interactions;
+- `gprMax` adapter implementations.
+
+### `jobs/`
+
+Responsibilities:
+
+- background job contracts and job state;
+- cancellation primitives;
+- future execution queue integration.
+
+## Data flow
+
+1. User edits project/model data in the GUI.
+2. UI sends commands to application services.
+3. Application services validate input and persist project state.
+4. A generator serializes GUI/domain state into one or more `gprMax` input artifacts.
+5. A simulation service creates a run request and passes it to the `gprMax` adapter.
+6. The adapter launches `gprMax`, captures stdout/stderr, and records artifacts.
+7. Results services index run outputs and expose them back to the UI.
+
+## `gprMax` integration strategy
+
+### Recommended default: subprocess-first
+
+The preferred integration mode is launching `gprMax` as an external process, typically via:
+
+```text
+python -m gprMax <input-file> [options]
+```
+
+Why this is the default:
+
+- it matches `gprMax`'s public CLI contract;
+- it is less coupled to internal module structure;
+- it naturally exposes stdout/stderr for logs;
+- it keeps GPU/MPI/runtime concerns outside the GUI process;
+- it is easier to support across future `gprMax` versions.
+
+### Secondary mode: optional hybrid integration
+
+Some future features may benefit from controlled direct imports of a public `gprMax` Python API, but only behind the same adapter boundary and only where the import path is stable enough.
+
+The UI should never care whether a run came from subprocess mode or a future in-process implementation.
+
+## Project layout on disk
+
+Proposed project folder layout:
+
+```text
+MyProject/
+  project.gprwb.json
+  generated/
+    current.in
+  runs/
+    20260315-153000/
+      command.json
+      stdout.log
+      stderr.log
+      generated.in
+      output/
+  results/
+  assets/
+```
+
+Notes:
+
+- `project.gprwb.json` stores editor-facing project state;
+- `generated/` stores reproducible generated input files;
+- `runs/` stores immutable execution artifacts and logs;
+- `results/` can contain indexed or curated outputs exposed by viewers.
+
+## UI shell
+
+The Stage 1 shell is organized around five top-level workspaces:
+
+- Welcome / Project Manager
+- Model Editor
+- Simulation Runner
+- Results Viewer
+- Settings
+
+This gives a stable navigation model without prematurely locking the internal editor architecture.
