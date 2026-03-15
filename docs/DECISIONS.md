@@ -147,6 +147,38 @@
 
 ## English
 
+## 2026-03-15: Treat the bundled engine as the default runtime baseline
+
+Status: accepted
+
+Rationale:
+
+- the product target is a single-installer desktop experience for non-programmers;
+- relying on user-managed Python, Conda, or Git environments contradicts that goal;
+- `gprMax` already exposes a stable CLI contract that can run inside a managed bundled runtime.
+
+Consequences:
+
+- the default execution path is a bundled Python runtime plus bundled `gprMax`;
+- external Python/gprMax stays only as an advanced fallback and development path;
+- packaging decisions must preserve a clear separation between app files, engine files, project data, and user settings.
+
+## 2026-03-15: Use installer-oriented path management and runtime diagnostics as first-class architecture
+
+Status: accepted
+
+Rationale:
+
+- desktop packaging becomes fragile when runtime discovery depends on the current working directory or ad hoc relative paths;
+- bundled delivery needs explicit diagnostics for damaged or incomplete installs;
+- CPU baseline and optional GPU/MPI capabilities need a clear model instead of implicit failure modes.
+
+Consequences:
+
+- a dedicated runtime layer resolves installation paths, engine paths, and user-data paths;
+- the settings screen becomes a runtime diagnostics surface, not just a manual configuration form;
+- future installer and release work can build on a stable engine manifest and capability contract.
+
 ## 2026-03-15: Use `GPRMax Workbench` / `gprmax_workbench` as the initial project name
 
 Status: accepted

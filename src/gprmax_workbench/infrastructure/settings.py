@@ -10,7 +10,7 @@ from pathlib import Path
 from ..domain.models import RecentProject
 
 SETTINGS_SCHEMA_NAME = "gprmax-workbench-settings"
-SETTINGS_SCHEMA_VERSION = 2
+SETTINGS_SCHEMA_VERSION = 3
 DEFAULT_INTERFACE_LANGUAGE = "ru"
 
 

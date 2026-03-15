@@ -52,7 +52,7 @@ class SettingsService:
         return {
             "settings_file": str(self._settings_manager.settings_path),
             "logs_directory": str(self._settings_manager.logs_dir),
-            "gprmax_runtime": self._settings.gprmax_python_executable or "python",
+            "gprmax_runtime": self._settings.gprmax_python_executable or "",
             "advanced_mode": "true" if self._settings.advanced_mode else "false",
             "recent_projects": str(len(self._settings.recent_projects)),
             "interface_language": self._settings.language,

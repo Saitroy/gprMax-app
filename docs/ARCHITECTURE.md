@@ -331,6 +331,52 @@ Stage 1 shell организован вокруг пяти top-level workspaces:
 
 ## English
 
+## Stage 6 Runtime Foundation
+
+### Русский
+
+Stage 6 добавляет отдельный runtime layer между приложением и subprocess runner.
+
+Новые ответственности:
+
+- `infrastructure/runtime/path_manager.py`: installer-oriented пути, отделённые от project data и user settings;
+- `infrastructure/runtime/engine_locator.py`: bundled-first выбор execution engine;
+- `infrastructure/runtime/diagnostics.py`: health checks и capability detection;
+- `application/services/runtime_service.py`: единая orchestration point для runtime resolution + adapter configuration + diagnostics report;
+- `ui/views/settings_view.py`: пользовательский diagnostics screen вместо сценария ручной настройки Python как основного пути.
+
+Поток runtime resolution:
+
+1. `PathManager` вычисляет `install_root`, `engine_root`, `settings/logs/cache/temp`.
+2. `EngineLocator` пытается выбрать встроенное ядро.
+3. Если bundled runtime отсутствует, advanced mode может использовать внешний fallback.
+4. `RuntimeService` конфигурирует `SubprocessGprMaxAdapter` выбранным engine config.
+5. `RuntimeDiagnostics` строит report для UI и troubleshooting.
+
+`SimulationService` и UI запуска не знают деталей install layout. Они продолжают работать через adapter boundary.
+
+### English
+
+Stage 6 adds a dedicated runtime layer between the application and the subprocess runner.
+
+New responsibilities:
+
+- `infrastructure/runtime/path_manager.py`: installer-oriented paths separated from project data and user settings;
+- `infrastructure/runtime/engine_locator.py`: bundled-first engine selection;
+- `infrastructure/runtime/diagnostics.py`: health checks and capability detection;
+- `application/services/runtime_service.py`: single orchestration point for runtime resolution, adapter configuration, and diagnostics;
+- `ui/views/settings_view.py`: a user-facing diagnostics screen instead of manual Python path configuration as the default workflow.
+
+Runtime resolution flow:
+
+1. `PathManager` resolves `install_root`, `engine_root`, `settings/logs/cache/temp`.
+2. `EngineLocator` tries to select the bundled engine.
+3. If the bundled runtime is missing, advanced mode may use an external fallback.
+4. `RuntimeService` configures `SubprocessGprMaxAdapter` with the selected engine config.
+5. `RuntimeDiagnostics` builds a report for the UI and troubleshooting.
+
+`SimulationService` and the run UI do not know install layout details. They continue to work through the adapter boundary.
+
 ## Product framing
 
 `GPRMax Workbench` is a desktop application that wraps `gprMax` with a guided UI, project system, run management, and results access. It is not a fork of `gprMax` and not a rewrite of `gprMax-Designer`.

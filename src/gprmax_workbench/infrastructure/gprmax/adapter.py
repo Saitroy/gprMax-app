@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
+from ...domain.engine_config import EngineConfig, EngineMode
 from ...domain.gprmax_config import GprMaxRuntimeConfig, SimulationRunConfig
 from .command_builder import GprMaxCommandBuilder, GprMaxCommandRequest
 
@@ -39,10 +40,18 @@ class SubprocessGprMaxAdapter:
         python_executable: str | None = None,
         module_name: str = "gprMax",
         command_builder: GprMaxCommandBuilder | None = None,
+        engine_config: EngineConfig | None = None,
     ) -> None:
-        self._runtime = GprMaxRuntimeConfig(
-            python_executable=python_executable or sys.executable,
+        resolved_engine = engine_config or EngineConfig(
+            mode=EngineMode.EXTERNAL,
+            python_executable=Path(python_executable or sys.executable),
             module_name=module_name,
+            source_label="Development fallback",
+        )
+        self._engine_config = resolved_engine
+        self._runtime = GprMaxRuntimeConfig(
+            python_executable=str(resolved_engine.python_executable),
+            module_name=resolved_engine.module_name,
         )
         self._command_builder = command_builder or GprMaxCommandBuilder()
 
@@ -57,19 +66,33 @@ class SubprocessGprMaxAdapter:
         )
 
     def describe_runtime(self) -> str:
-        return f"{self._runtime.python_executable} -m {self._runtime.module_name}"
+        return self._engine_config.runtime_label()
 
     def runtime_config(self) -> GprMaxRuntimeConfig:
         return self._runtime
+
+    def engine_config(self) -> EngineConfig:
+        return self._engine_config
 
     def configure_runtime(
         self,
         python_executable: str | None,
         module_name: str | None = None,
     ) -> None:
+        self.configure_engine(
+            EngineConfig(
+                mode=EngineMode.EXTERNAL,
+                python_executable=Path(python_executable or sys.executable),
+                module_name=module_name or self._runtime.module_name,
+                source_label="External fallback",
+            )
+        )
+
+    def configure_engine(self, engine_config: EngineConfig) -> None:
+        self._engine_config = engine_config
         self._runtime = GprMaxRuntimeConfig(
-            python_executable=python_executable or sys.executable,
-            module_name=module_name or self._runtime.module_name,
+            python_executable=str(engine_config.python_executable),
+            module_name=engine_config.module_name,
         )
 
     def probe_runtime(self, timeout_seconds: float = 5.0) -> tuple[bool, str]:

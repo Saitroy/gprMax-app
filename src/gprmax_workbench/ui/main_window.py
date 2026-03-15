@@ -198,7 +198,7 @@ class MainWindow(QMainWindow):
         )
         self._settings_view.set_settings(
             settings=settings_service.settings,
-            summary=settings_service.runtime_summary(),
+            runtime_info=self._context.runtime_service.runtime_info(),
         )
         self._results_view.refresh_project(project.root if project is not None else None)
         self._simulation_view.set_runtime_label(
@@ -472,9 +472,7 @@ class MainWindow(QMainWindow):
             language=self._settings_view.selected_language(),
         )
         self._localization.set_language(settings.language)
-        self._context.gprmax_adapter.configure_runtime(
-            settings.gprmax_python_executable
-        )
+        self._context.runtime_service.refresh()
         self.retranslate_ui()
         self.refresh_views()
         self.statusBar().showMessage(

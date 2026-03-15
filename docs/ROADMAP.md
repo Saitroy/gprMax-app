@@ -255,3 +255,22 @@ Deliverables:
 Exit criteria:
 
 - the project is ready for external contributors and early adopters.
+# Stage 6
+
+## Русский
+
+- bundled-first runtime foundation;
+- engine resolution layer;
+- installer-oriented path management;
+- runtime diagnostics and capability reporting;
+- settings UI as runtime/health screen;
+- foundation for future installer and release engineering.
+
+## English
+
+- bundled-first runtime foundation;
+- engine resolution layer;
+- installer-oriented path management;
+- runtime diagnostics and capability reporting;
+- settings UI as a runtime/health screen;
+- foundation for future installer and release engineering.

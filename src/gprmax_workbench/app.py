@@ -10,10 +10,13 @@ from PySide6.QtWidgets import QApplication
 from .application.services.input_preview_service import InputPreviewService
 from .application.services.input_generation_service import InputGenerationService
 from .application.services.bscan_service import BscanService
+from .application.services.diagnostics_service import DiagnosticsService
+from .application.services.engine_resolution_service import EngineResolutionService
 from .application.services.localization_service import LocalizationService
 from .application.services.model_editor_service import ModelEditorService
 from .application.services.project_service import ProjectService
 from .application.services.results_service import ResultsService
+from .application.services.runtime_service import RuntimeService
 from .application.services.run_service import RunService
 from .application.services.settings_service import SettingsService
 from .application.services.simulation_service import SimulationService
@@ -32,6 +35,12 @@ from .infrastructure.results.artifact_locator import ResultArtifactLocator
 from .infrastructure.results.bscan_builder import BscanBuilder
 from .infrastructure.results.hdf5_reader import Hdf5ResultsReader
 from .infrastructure.results.result_repository import ResultRepository
+from .infrastructure.runtime.bundled_runtime import BundledRuntimeProvider
+from .infrastructure.runtime.diagnostics import RuntimeDiagnostics
+from .infrastructure.runtime.engine_locator import EngineLocator
+from .infrastructure.runtime.external_runtime import ExternalRuntimeProvider
+from .infrastructure.runtime.path_manager import PathManager
+from .infrastructure.runtime.versioning import VersioningService
 from .infrastructure.settings import SettingsManager
 from .ui.main_window import MainWindow
 from .ui.theme import apply_theme
@@ -46,6 +55,7 @@ class ApplicationContext:
     settings_manager: SettingsManager
     settings_service: SettingsService
     localization_service: LocalizationService
+    runtime_service: RuntimeService
     project_store: JsonProjectStore
     project_service: ProjectService
     gprmax_adapter: SubprocessGprMaxAdapter
@@ -65,9 +75,29 @@ class ApplicationContext:
 def build_context() -> ApplicationContext:
     settings_manager = SettingsManager(app_name="gprmax_workbench")
     setup_logging(settings_manager.logs_dir)
+    path_manager = PathManager(settings_manager=settings_manager)
+    path_manager.ensure_user_runtime_directories()
 
     settings_service = SettingsService(settings_manager)
     localization_service = LocalizationService(settings_service.settings.language)
+    gprmax_adapter = SubprocessGprMaxAdapter()
+    runtime_service = RuntimeService(
+        settings_service=settings_service,
+        engine_resolution_service=EngineResolutionService(
+            EngineLocator(
+                bundled_provider=BundledRuntimeProvider(path_manager),
+                external_provider=ExternalRuntimeProvider(),
+            )
+        ),
+        diagnostics_service=DiagnosticsService(
+            RuntimeDiagnostics(
+                path_manager=path_manager,
+                versioning=VersioningService(),
+            )
+        ),
+        adapter=gprmax_adapter,
+    )
+    runtime_service.refresh()
     project_store = JsonProjectStore()
     artifact_store = RunArtifactStore()
     run_repository = RunRepository()
@@ -75,9 +105,6 @@ def build_context() -> ApplicationContext:
         run_repository=run_repository,
         artifact_locator=ResultArtifactLocator(),
         reader=Hdf5ResultsReader(),
-    )
-    gprmax_adapter = SubprocessGprMaxAdapter(
-        python_executable=settings_service.settings.gprmax_python_executable
     )
     project_service = ProjectService(
         project_store=project_store,
@@ -121,6 +148,7 @@ def build_context() -> ApplicationContext:
         settings_manager=settings_manager,
         settings_service=settings_service,
         localization_service=localization_service,
+        runtime_service=runtime_service,
         project_store=project_store,
         project_service=project_service,
         gprmax_adapter=gprmax_adapter,

@@ -213,6 +213,100 @@ _TRANSLATIONS["ru"].update(
     }
 )
 
+_EXTERNAL_EXACT_TRANSLATIONS_RU.update(
+    {
+        "Using bundled engine from the installation directory.": "Используется встроенное ядро из каталога установки.",
+        "Using configured external fallback runtime.": "Используется внешний fallback runtime, указанный в настройках.",
+        "Using current Python interpreter as a development fallback.": "Используется текущий интерпретатор Python как fallback для режима разработки.",
+        "Timed out while checking the gprMax runtime.": "Проверка runtime gprMax завершилась по таймауту.",
+        "Could not parse runtime probe output.": "Не удалось разобрать результат проверки runtime.",
+        "gprMax runtime probe failed.": "Проверка runtime gprMax завершилась с ошибкой.",
+    }
+)
+
+_EXTERNAL_PATTERN_TRANSLATIONS_RU.extend(
+    [
+        (
+            re.compile(r"^Bundled engine was not found at expected path: (.+)$"),
+            "external.bundled_engine_missing",
+            lambda match: {"path": match.group(1)},
+        ),
+        (
+            re.compile(r"^Bundled engine directory is missing: (.+)$"),
+            "external.bundled_engine_directory_missing",
+            lambda match: {"path": match.group(1)},
+        ),
+        (
+            re.compile(r"^Bundled engine manifest is missing: (.+)$"),
+            "external.bundled_engine_manifest_missing",
+            lambda match: {"path": match.group(1)},
+        ),
+    ]
+)
+
+_TRANSLATIONS["ru"].update(
+    {
+        "external.bundled_engine_missing": "Встроенное ядро не найдено по ожидаемому пути: {path}",
+        "external.bundled_engine_directory_missing": "Каталог встроенного ядра отсутствует: {path}",
+        "external.bundled_engine_manifest_missing": "Manifest встроенного ядра отсутствует: {path}",
+        "settings.runtime_section": "Текущая runtime-конфигурация",
+        "settings.capabilities_section": "Доступные возможности",
+        "settings.diagnostics_section": "Диагностика",
+        "settings.runtime_mode": "Режим runtime",
+        "settings.runtime_mode.bundled": "Встроенный",
+        "settings.runtime_mode.external": "Внешний fallback",
+        "settings.install_root": "Каталог установки",
+        "settings.engine_root": "Каталог ядра",
+        "settings.python_executable": "Python executable",
+        "settings.app_version": "Версия приложения",
+        "settings.engine_version": "Версия engine bundle",
+        "settings.gprmax_version_label": "Версия gprMax",
+        "settings.cache_directory": "Каталог кэша",
+        "settings.temp_directory": "Временный каталог",
+        "settings.external_runtime_executable": "Внешний fallback Python executable",
+        "settings.external_runtime_placeholder": "Необязательно. Используется только в advanced/debug fallback-сценариях.",
+        "settings.diagnostics_placeholder": "Диагностических замечаний нет.",
+        "settings.capability.cpu": "CPU",
+        "settings.capability.gpu": "GPU",
+        "settings.capability.mpi": "MPI",
+        "settings.capability_status.ready": "готово",
+        "settings.capability_status.optional": "опционально",
+        "settings.capability_status.unavailable": "недоступно",
+        "settings.summary.settings_file": "Файл настроек",
+        "settings.summary.logs_directory": "Каталог логов",
+    }
+)
+
+_TRANSLATIONS["en"].update(
+    {
+        "settings.runtime_section": "Current runtime",
+        "settings.capabilities_section": "Capabilities",
+        "settings.diagnostics_section": "Diagnostics",
+        "settings.runtime_mode": "Runtime mode",
+        "settings.runtime_mode.bundled": "Bundled",
+        "settings.runtime_mode.external": "External fallback",
+        "settings.install_root": "Installation root",
+        "settings.engine_root": "Engine root",
+        "settings.python_executable": "Python executable",
+        "settings.app_version": "App version",
+        "settings.engine_version": "Engine bundle version",
+        "settings.gprmax_version_label": "gprMax version",
+        "settings.cache_directory": "Cache directory",
+        "settings.temp_directory": "Temporary directory",
+        "settings.external_runtime_executable": "External fallback Python executable",
+        "settings.external_runtime_placeholder": "Optional. Used only for advanced/debug fallback scenarios.",
+        "settings.diagnostics_placeholder": "No runtime diagnostics to show.",
+        "settings.capability.cpu": "CPU",
+        "settings.capability.gpu": "GPU",
+        "settings.capability.mpi": "MPI",
+        "settings.capability_status.ready": "ready",
+        "settings.capability_status.optional": "optional",
+        "settings.capability_status.unavailable": "unavailable",
+        "settings.summary.settings_file": "Settings file",
+        "settings.summary.logs_directory": "Logs directory",
+    }
+)
+
 _TRANSLATIONS["ru"].update(
     {
         "app.name": "GPRMax Workbench",
