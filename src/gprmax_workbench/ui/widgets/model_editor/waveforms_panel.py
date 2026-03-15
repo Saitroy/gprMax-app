@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ....application.services.localization_service import LocalizationService
 from ....application.services.model_editor_service import ModelEditorService
 from ....application.services.validation_service import ValidationService
 from ....domain.model_entities import EDITOR_WAVEFORM_KINDS
@@ -33,11 +34,13 @@ class WaveformsPanel(QWidget):
 
     def __init__(
         self,
+        localization: LocalizationService,
         model_editor_service: ModelEditorService,
         validation_service: ValidationService,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
+        self._localization = localization
         self._model_editor_service = model_editor_service
         self._validation_service = validation_service
         self._loading = False
@@ -45,24 +48,23 @@ class WaveformsPanel(QWidget):
         self._list = QListWidget()
         self._list.currentRowChanged.connect(self._load_current_waveform)
 
-        add_button = QPushButton("Add")
-        add_button.clicked.connect(self._add_waveform)
-        duplicate_button = QPushButton("Duplicate")
-        duplicate_button.clicked.connect(self._duplicate_waveform)
-        delete_button = QPushButton("Delete")
-        delete_button.clicked.connect(self._delete_waveform)
-        self._duplicate_button = duplicate_button
-        self._delete_button = delete_button
+        self._add_button = QPushButton()
+        self._add_button.clicked.connect(self._add_waveform)
+        self._duplicate_button = QPushButton()
+        self._duplicate_button.clicked.connect(self._duplicate_waveform)
+        self._delete_button = QPushButton()
+        self._delete_button.clicked.connect(self._delete_waveform)
 
         list_panel = QWidget()
         list_layout = QVBoxLayout(list_panel)
         list_layout.setContentsMargins(0, 0, 0, 0)
-        list_layout.addWidget(QLabel("Waveforms"))
+        self._list_title = QLabel()
+        list_layout.addWidget(self._list_title)
         list_layout.addWidget(self._list, 1)
         buttons = QHBoxLayout()
-        buttons.addWidget(add_button)
-        buttons.addWidget(duplicate_button)
-        buttons.addWidget(delete_button)
+        buttons.addWidget(self._add_button)
+        buttons.addWidget(self._duplicate_button)
+        buttons.addWidget(self._delete_button)
         buttons.addStretch(1)
         list_layout.addLayout(buttons)
 
@@ -79,18 +81,24 @@ class WaveformsPanel(QWidget):
         self._notes_edit = QPlainTextEdit()
         self._notes_edit.setFixedHeight(90)
         self._tags_edit = QLineEdit()
-        self._status_label = build_status_label("Select a waveform to edit it.")
+        self._status_label = build_status_label("")
 
         detail_panel = QWidget()
         detail_layout = QVBoxLayout(detail_panel)
         detail_layout.setContentsMargins(0, 0, 0, 0)
         form = QFormLayout()
-        form.addRow("Identifier", self._identifier_edit)
-        form.addRow("Kind", self._kind_combo)
-        form.addRow("Amplitude", self._amplitude)
-        form.addRow("Center frequency (Hz)", self._center_frequency)
-        form.addRow("Notes", self._notes_edit)
-        form.addRow("Tags", self._tags_edit)
+        self._identifier_label = QLabel()
+        self._kind_label = QLabel()
+        self._amplitude_label = QLabel()
+        self._center_frequency_label = QLabel()
+        self._notes_label = QLabel()
+        self._tags_label = QLabel()
+        form.addRow(self._identifier_label, self._identifier_edit)
+        form.addRow(self._kind_label, self._kind_combo)
+        form.addRow(self._amplitude_label, self._amplitude)
+        form.addRow(self._center_frequency_label, self._center_frequency)
+        form.addRow(self._notes_label, self._notes_edit)
+        form.addRow(self._tags_label, self._tags_edit)
         detail_layout.addLayout(form)
         detail_layout.addWidget(self._status_label)
         detail_layout.addStretch(1)
@@ -111,6 +119,7 @@ class WaveformsPanel(QWidget):
         self._notes_edit.textChanged.connect(self._apply_changes)
         self._tags_edit.textChanged.connect(self._apply_changes)
 
+        self.retranslate_ui()
         self.set_project(None)
 
     def set_project(self, project: Project | None) -> None:
@@ -135,7 +144,7 @@ class WaveformsPanel(QWidget):
         self._status_label.setText(
             join_messages(
                 self._validation_service.messages_for_prefixes(*prefixes),
-                "No waveform-specific validation issues.",
+                self._localization.text("editor.waveforms.valid"),
             )
         )
 
@@ -225,9 +234,30 @@ class WaveformsPanel(QWidget):
         self.model_changed.emit()
 
     def _item_text(self, waveform: WaveformDefinition) -> str:
-        return f"{waveform.identifier or '<unnamed>'} | {waveform.kind}"
+        return (
+            f"{waveform.identifier or self._localization.text('editor.waveforms.unnamed')} "
+            f"| {waveform.kind}"
+        )
 
     def _update_buttons(self) -> None:
         enabled = self._list.currentRow() >= 0
         self._duplicate_button.setEnabled(enabled)
         self._delete_button.setEnabled(enabled)
+
+    def retranslate_ui(self) -> None:
+        self._list_title.setText(self._localization.text("editor.waveforms.list_title"))
+        self._add_button.setText(self._localization.text("common.add"))
+        self._duplicate_button.setText(self._localization.text("common.duplicate"))
+        self._delete_button.setText(self._localization.text("common.delete"))
+        self._identifier_label.setText(self._localization.text("editor.waveforms.identifier"))
+        self._kind_label.setText(self._localization.text("editor.waveforms.kind"))
+        self._amplitude_label.setText(self._localization.text("editor.waveforms.amplitude"))
+        self._center_frequency_label.setText(
+            self._localization.text("editor.waveforms.center_frequency")
+        )
+        self._notes_label.setText(self._localization.text("editor.waveforms.notes"))
+        self._tags_label.setText(self._localization.text("editor.waveforms.tags"))
+        if self._list.currentRow() < 0:
+            self._status_label.setText(self._localization.text("editor.waveforms.select"))
+        else:
+            self.refresh_validation()

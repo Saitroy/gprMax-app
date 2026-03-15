@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ....application.services.localization_service import LocalizationService
 from ....application.services.model_editor_service import ModelEditorService
 from ....application.services.validation_service import ValidationService
 from ....domain.models import MaterialDefinition, Project
@@ -31,11 +32,13 @@ class MaterialsPanel(QWidget):
 
     def __init__(
         self,
+        localization: LocalizationService,
         model_editor_service: ModelEditorService,
         validation_service: ValidationService,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
+        self._localization = localization
         self._model_editor_service = model_editor_service
         self._validation_service = validation_service
         self._loading = False
@@ -43,24 +46,23 @@ class MaterialsPanel(QWidget):
         self._list = QListWidget()
         self._list.currentRowChanged.connect(self._load_current_material)
 
-        add_button = QPushButton("Add")
-        add_button.clicked.connect(self._add_material)
-        duplicate_button = QPushButton("Duplicate")
-        duplicate_button.clicked.connect(self._duplicate_material)
-        delete_button = QPushButton("Delete")
-        delete_button.clicked.connect(self._delete_material)
-        self._duplicate_button = duplicate_button
-        self._delete_button = delete_button
+        self._add_button = QPushButton()
+        self._add_button.clicked.connect(self._add_material)
+        self._duplicate_button = QPushButton()
+        self._duplicate_button.clicked.connect(self._duplicate_material)
+        self._delete_button = QPushButton()
+        self._delete_button.clicked.connect(self._delete_material)
 
         list_panel = QWidget()
         list_layout = QVBoxLayout(list_panel)
         list_layout.setContentsMargins(0, 0, 0, 0)
-        list_layout.addWidget(QLabel("Materials"))
+        self._list_title = QLabel()
+        list_layout.addWidget(self._list_title)
         list_layout.addWidget(self._list, 1)
         buttons = QHBoxLayout()
-        buttons.addWidget(add_button)
-        buttons.addWidget(duplicate_button)
-        buttons.addWidget(delete_button)
+        buttons.addWidget(self._add_button)
+        buttons.addWidget(self._duplicate_button)
+        buttons.addWidget(self._delete_button)
         buttons.addStretch(1)
         list_layout.addLayout(buttons)
 
@@ -72,19 +74,26 @@ class MaterialsPanel(QWidget):
         self._notes_edit = QPlainTextEdit()
         self._notes_edit.setFixedHeight(90)
         self._tags_edit = QLineEdit()
-        self._status_label = build_status_label("Select a material to edit it.")
+        self._status_label = build_status_label("")
 
         detail_panel = QWidget()
         detail_layout = QVBoxLayout(detail_panel)
         detail_layout.setContentsMargins(0, 0, 0, 0)
         form = QFormLayout()
-        form.addRow("Identifier", self._identifier_edit)
-        form.addRow("Relative permittivity", self._relative_permittivity)
-        form.addRow("Conductivity", self._conductivity)
-        form.addRow("Relative permeability", self._relative_permeability)
-        form.addRow("Magnetic loss", self._magnetic_loss)
-        form.addRow("Notes", self._notes_edit)
-        form.addRow("Tags", self._tags_edit)
+        self._identifier_label = QLabel()
+        self._relative_permittivity_label = QLabel()
+        self._conductivity_label = QLabel()
+        self._relative_permeability_label = QLabel()
+        self._magnetic_loss_label = QLabel()
+        self._notes_label = QLabel()
+        self._tags_label = QLabel()
+        form.addRow(self._identifier_label, self._identifier_edit)
+        form.addRow(self._relative_permittivity_label, self._relative_permittivity)
+        form.addRow(self._conductivity_label, self._conductivity)
+        form.addRow(self._relative_permeability_label, self._relative_permeability)
+        form.addRow(self._magnetic_loss_label, self._magnetic_loss)
+        form.addRow(self._notes_label, self._notes_edit)
+        form.addRow(self._tags_label, self._tags_edit)
         detail_layout.addLayout(form)
         detail_layout.addWidget(self._status_label)
         detail_layout.addStretch(1)
@@ -112,6 +121,7 @@ class MaterialsPanel(QWidget):
         ):
             widget.valueChanged.connect(self._apply_changes)
 
+        self.retranslate_ui()
         self.set_project(None)
 
     def set_project(self, project: Project | None) -> None:
@@ -136,7 +146,7 @@ class MaterialsPanel(QWidget):
         self._status_label.setText(
             join_messages(
                 self._validation_service.messages_for_prefixes(*prefixes),
-                "No material-specific validation issues.",
+                self._localization.text("editor.materials.valid"),
             )
         )
 
@@ -230,9 +240,37 @@ class MaterialsPanel(QWidget):
         self.model_changed.emit()
 
     def _item_text(self, material: MaterialDefinition) -> str:
-        return f"{material.identifier or '<unnamed>'} | er={material.relative_permittivity:.3g}"
+        return (
+            f"{material.identifier or self._localization.text('editor.materials.unnamed')} "
+            f"| er={material.relative_permittivity:.3g}"
+        )
 
     def _update_buttons(self) -> None:
         enabled = self._list.currentRow() >= 0
         self._duplicate_button.setEnabled(enabled)
         self._delete_button.setEnabled(enabled)
+
+    def retranslate_ui(self) -> None:
+        self._list_title.setText(self._localization.text("editor.materials.list_title"))
+        self._add_button.setText(self._localization.text("common.add"))
+        self._duplicate_button.setText(self._localization.text("common.duplicate"))
+        self._delete_button.setText(self._localization.text("common.delete"))
+        self._identifier_label.setText(self._localization.text("editor.materials.identifier"))
+        self._relative_permittivity_label.setText(
+            self._localization.text("editor.materials.relative_permittivity")
+        )
+        self._conductivity_label.setText(
+            self._localization.text("editor.materials.conductivity")
+        )
+        self._relative_permeability_label.setText(
+            self._localization.text("editor.materials.relative_permeability")
+        )
+        self._magnetic_loss_label.setText(
+            self._localization.text("editor.materials.magnetic_loss")
+        )
+        self._notes_label.setText(self._localization.text("editor.materials.notes"))
+        self._tags_label.setText(self._localization.text("editor.materials.tags"))
+        if self._list.currentRow() < 0:
+            self._status_label.setText(self._localization.text("editor.materials.select"))
+        else:
+            self.refresh_validation()

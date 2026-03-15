@@ -10,7 +10,8 @@ from pathlib import Path
 from ..domain.models import RecentProject
 
 SETTINGS_SCHEMA_NAME = "gprmax-workbench-settings"
-SETTINGS_SCHEMA_VERSION = 1
+SETTINGS_SCHEMA_VERSION = 2
+DEFAULT_INTERFACE_LANGUAGE = "ru"
 
 
 @dataclass(slots=True)
@@ -18,6 +19,7 @@ class AppSettings:
     recent_projects: list[RecentProject] = field(default_factory=list)
     advanced_mode: bool = False
     gprmax_python_executable: str | None = None
+    language: str = DEFAULT_INTERFACE_LANGUAGE
 
 
 class SettingsManager:
@@ -54,6 +56,7 @@ class SettingsManager:
             recent_projects=recent_projects,
             advanced_mode=bool(payload.get("advanced_mode", False)),
             gprmax_python_executable=payload.get("gprmax_python_executable"),
+            language=str(payload.get("language", DEFAULT_INTERFACE_LANGUAGE)),
         )
 
     def save(self, settings: AppSettings) -> None:
@@ -67,6 +70,7 @@ class SettingsManager:
             ],
             "advanced_mode": settings.advanced_mode,
             "gprmax_python_executable": settings.gprmax_python_executable,
+            "language": settings.language,
         }
         self.settings_path.write_text(
             json.dumps(payload, indent=2, ensure_ascii=False),

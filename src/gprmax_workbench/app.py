@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QApplication
 from .application.services.input_preview_service import InputPreviewService
 from .application.services.input_generation_service import InputGenerationService
 from .application.services.bscan_service import BscanService
+from .application.services.localization_service import LocalizationService
 from .application.services.model_editor_service import ModelEditorService
 from .application.services.project_service import ProjectService
 from .application.services.results_service import ResultsService
@@ -44,6 +45,7 @@ LOGGER = logging.getLogger(__name__)
 class ApplicationContext:
     settings_manager: SettingsManager
     settings_service: SettingsService
+    localization_service: LocalizationService
     project_store: JsonProjectStore
     project_service: ProjectService
     gprmax_adapter: SubprocessGprMaxAdapter
@@ -65,6 +67,7 @@ def build_context() -> ApplicationContext:
     setup_logging(settings_manager.logs_dir)
 
     settings_service = SettingsService(settings_manager)
+    localization_service = LocalizationService(settings_service.settings.language)
     project_store = JsonProjectStore()
     artifact_store = RunArtifactStore()
     run_repository = RunRepository()
@@ -117,6 +120,7 @@ def build_context() -> ApplicationContext:
     return ApplicationContext(
         settings_manager=settings_manager,
         settings_service=settings_service,
+        localization_service=localization_service,
         project_store=project_store,
         project_service=project_service,
         gprmax_adapter=gprmax_adapter,

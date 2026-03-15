@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ...application.services.localization_service import LocalizationService
 from ...domain.execution_status import SimulationMode
 from ...domain.gprmax_config import SimulationRunConfig
 from ...domain.simulation import SimulationRunRecord
@@ -34,32 +35,37 @@ class SimulationView(QWidget):
     open_run_directory_requested = Signal()
     open_output_directory_requested = Signal()
 
-    def __init__(self, runtime_label: str, parent=None) -> None:
+    def __init__(
+        self,
+        *,
+        localization: LocalizationService,
+        runtime_label: str,
+        parent=None,
+    ) -> None:
         super().__init__(parent)
+        self._localization = localization
+        self._card_headings: dict[str, QLabel] = {}
 
-        title = QLabel("Simulation Runner")
-        title.setObjectName("ViewTitle")
+        self._title = QLabel()
+        self._title.setObjectName("ViewTitle")
 
-        subtitle = QLabel(
-            "Stage 3 adds input generation, subprocess execution, live logs, and run "
-            "history. The current screen intentionally focuses on reliable execution flow."
-        )
-        subtitle.setObjectName("ViewSubtitle")
-        subtitle.setWordWrap(True)
+        self._subtitle = QLabel()
+        self._subtitle.setObjectName("ViewSubtitle")
+        self._subtitle.setWordWrap(True)
 
         self._runtime_label = QLabel(runtime_label)
-        self._project_state_label = QLabel("No project loaded.")
-        self._status_label = QLabel("No run prepared.")
-        self._validation_label = QLabel("Validation messages will appear here.")
+        self._project_state_label = QLabel()
+        self._status_label = QLabel()
+        self._validation_label = QLabel()
         self._validation_label.setWordWrap(True)
 
         self._mode_combo = QComboBox()
-        self._mode_combo.addItem("Normal run", SimulationMode.NORMAL.value)
-        self._mode_combo.addItem("Geometry-only", SimulationMode.GEOMETRY_ONLY.value)
+        self._mode_combo.addItem("", SimulationMode.NORMAL.value)
+        self._mode_combo.addItem("", SimulationMode.GEOMETRY_ONLY.value)
 
-        self._gpu_checkbox = QCheckBox("Use GPU")
+        self._gpu_checkbox = QCheckBox()
         self._gpu_devices_edit = QLineEdit()
-        self._gpu_devices_edit.setPlaceholderText("Optional device IDs, e.g. 0 1")
+        self._gpu_devices_edit.setPlaceholderText("")
 
         self._num_runs_spinbox = QSpinBox()
         self._num_runs_spinbox.setRange(1, 1_000_000)
@@ -73,76 +79,86 @@ class SimulationView(QWidget):
         self._mpi_tasks_spinbox.setRange(0, 4096)
         self._mpi_tasks_spinbox.setValue(0)
 
-        self._geometry_fixed_checkbox = QCheckBox("Geometry fixed")
-        self._write_processed_checkbox = QCheckBox("Write processed input")
-        self._benchmark_checkbox = QCheckBox("Benchmark mode")
-        self._mpi_no_spawn_checkbox = QCheckBox("MPI no spawn")
+        self._geometry_fixed_checkbox = QCheckBox()
+        self._write_processed_checkbox = QCheckBox()
+        self._benchmark_checkbox = QCheckBox()
+        self._mpi_no_spawn_checkbox = QCheckBox()
         self._extra_args_edit = QLineEdit()
-        self._extra_args_edit.setPlaceholderText("Optional raw CLI args")
+        self._extra_args_edit.setPlaceholderText("")
 
         self._preview_text = QPlainTextEdit()
         self._preview_text.setReadOnly(True)
-        self._preview_text.setPlaceholderText("Generated gprMax input preview")
+        self._preview_text.setPlaceholderText("")
 
         self._log_text = QPlainTextEdit()
         self._log_text.setReadOnly(True)
-        self._log_text.setPlaceholderText("Live stdout/stderr output")
+        self._log_text.setPlaceholderText("")
 
         self._run_history = QListWidget()
 
-        preview_button = QPushButton("Build Preview")
-        preview_button.clicked.connect(self.preview_requested.emit)
+        self._preview_button = QPushButton()
+        self._preview_button.clicked.connect(self.preview_requested.emit)
 
-        export_button = QPushButton("Export Input")
-        export_button.clicked.connect(self.export_requested.emit)
+        self._export_button = QPushButton()
+        self._export_button.clicked.connect(self.export_requested.emit)
 
-        start_button = QPushButton("Start Run")
-        start_button.clicked.connect(self.start_requested.emit)
-        self._start_button = start_button
+        self._start_button = QPushButton()
+        self._start_button.clicked.connect(self.start_requested.emit)
 
-        cancel_button = QPushButton("Cancel Run")
-        cancel_button.clicked.connect(self.cancel_requested.emit)
-        self._cancel_button = cancel_button
+        self._cancel_button = QPushButton()
+        self._cancel_button.clicked.connect(self.cancel_requested.emit)
 
-        open_run_button = QPushButton("Open Run Folder")
-        open_run_button.clicked.connect(self.open_run_directory_requested.emit)
+        self._open_run_button = QPushButton()
+        self._open_run_button.clicked.connect(self.open_run_directory_requested.emit)
 
-        open_output_button = QPushButton("Open Output Folder")
-        open_output_button.clicked.connect(self.open_output_directory_requested.emit)
+        self._open_output_button = QPushButton()
+        self._open_output_button.clicked.connect(self.open_output_directory_requested.emit)
 
         buttons = QHBoxLayout()
-        buttons.addWidget(preview_button)
-        buttons.addWidget(export_button)
-        buttons.addWidget(start_button)
-        buttons.addWidget(cancel_button)
-        buttons.addWidget(open_run_button)
-        buttons.addWidget(open_output_button)
+        buttons.addWidget(self._preview_button)
+        buttons.addWidget(self._export_button)
+        buttons.addWidget(self._start_button)
+        buttons.addWidget(self._cancel_button)
+        buttons.addWidget(self._open_run_button)
+        buttons.addWidget(self._open_output_button)
         buttons.addStretch(1)
 
         runtime_card = self._build_card(
-            "Execution context",
+            "simulation.runtime_card",
             self._build_runtime_widget(),
         )
-        config_card = self._build_card("Run configuration", self._build_config_widget())
-        history_card = self._build_card("Run history", self._run_history)
+        config_card = self._build_card(
+            "simulation.config_card",
+            self._build_config_widget(),
+        )
+        history_card = self._build_card("simulation.history_card", self._run_history)
 
         io_layout = QGridLayout()
-        io_layout.addWidget(self._build_card("Input preview", self._preview_text), 0, 0)
-        io_layout.addWidget(self._build_card("Live log output", self._log_text), 0, 1)
+        io_layout.addWidget(
+            self._build_card("simulation.preview_card", self._preview_text),
+            0,
+            0,
+        )
+        io_layout.addWidget(
+            self._build_card("simulation.log_card", self._log_text),
+            0,
+            1,
+        )
         io_layout.setColumnStretch(0, 1)
         io_layout.setColumnStretch(1, 1)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(18)
-        layout.addWidget(title)
-        layout.addWidget(subtitle)
+        layout.addWidget(self._title)
+        layout.addWidget(self._subtitle)
         layout.addWidget(runtime_card)
         layout.addWidget(config_card)
         layout.addLayout(buttons)
         layout.addLayout(io_layout)
         layout.addWidget(history_card, 1)
 
+        self.retranslate_ui()
         self.set_run_state(None, [])
         self.set_project_state(project_name=None, is_dirty=False)
 
@@ -176,16 +192,24 @@ class SimulationView(QWidget):
 
     def set_project_state(self, *, project_name: str | None, is_dirty: bool) -> None:
         if project_name is None:
-            self._project_state_label.setText("No project loaded.")
+            self._project_state_label.setText(self._localization.text("simulation.no_project"))
             return
-        dirty_state = "unsaved changes" if is_dirty else "saved"
+        dirty_state = self._localization.text(
+            "simulation.project_state.dirty" if is_dirty else "simulation.project_state.saved"
+        )
         self._project_state_label.setText(
-            f"Project: {project_name} ({dirty_state})"
+            self._localization.text(
+                "simulation.project_state",
+                name=project_name,
+                state=dirty_state,
+            )
         )
 
     def set_validation_messages(self, messages: list[str]) -> None:
         if not messages:
-            self._validation_label.setText("Validation messages will appear here.")
+            self._validation_label.setText(
+                self._localization.text("simulation.validation_placeholder")
+            )
             return
         self._validation_label.setText("\n".join(messages))
 
@@ -204,12 +228,20 @@ class SimulationView(QWidget):
         history: list[SimulationRunRecord],
     ) -> None:
         if active_run is None:
-            self._status_label.setText("No active run.")
+            self._status_label.setText(
+                self._localization.text("simulation.run_state.none")
+            )
             self._cancel_button.setEnabled(False)
             self._start_button.setEnabled(True)
         else:
             self._status_label.setText(
-                f"Run {active_run.run_id}: {active_run.status.value}"
+                self._localization.text(
+                    "simulation.run_state.active",
+                    run_id=active_run.run_id,
+                    status=self._localization.simulation_status_text(
+                        active_run.status.value
+                    ),
+                )
             )
             is_running = active_run.status.value in {"preparing", "running"}
             self._cancel_button.setEnabled(is_running)
@@ -219,7 +251,9 @@ class SimulationView(QWidget):
         self._run_history.clear()
         for run in history:
             item = QListWidgetItem(
-                f"{run.run_id} | {run.status.value} | {run.created_at.isoformat()}"
+                f"{run.run_id} | "
+                f"{self._localization.simulation_status_text(run.status.value)} | "
+                f"{run.created_at.isoformat()}"
             )
             item.setData(Qt.ItemDataRole.UserRole, run.run_id)
             self._run_history.addItem(item)
@@ -238,37 +272,48 @@ class SimulationView(QWidget):
     def _build_runtime_widget(self) -> QWidget:
         widget = QWidget()
         layout = QFormLayout(widget)
-        layout.addRow("Runtime", self._runtime_label)
-        layout.addRow("Project state", self._project_state_label)
-        layout.addRow("Run state", self._status_label)
-        layout.addRow("Messages", self._validation_label)
+        self._runtime_row_label = QLabel()
+        self._project_state_row_label = QLabel()
+        self._run_state_row_label = QLabel()
+        self._messages_row_label = QLabel()
+        layout.addRow(self._runtime_row_label, self._runtime_label)
+        layout.addRow(self._project_state_row_label, self._project_state_label)
+        layout.addRow(self._run_state_row_label, self._status_label)
+        layout.addRow(self._messages_row_label, self._validation_label)
         return widget
 
     def _build_config_widget(self) -> QWidget:
         widget = QWidget()
         layout = QFormLayout(widget)
-        layout.addRow("Mode", self._mode_combo)
+        self._mode_label = QLabel()
+        self._gpu_devices_label = QLabel()
+        self._num_runs_label = QLabel()
+        self._restart_label = QLabel()
+        self._mpi_tasks_label = QLabel()
+        self._extra_args_label = QLabel()
+        layout.addRow(self._mode_label, self._mode_combo)
         layout.addRow("", self._gpu_checkbox)
-        layout.addRow("GPU device IDs", self._gpu_devices_edit)
-        layout.addRow("Model runs (-n)", self._num_runs_spinbox)
-        layout.addRow("Restart model (-restart)", self._restart_spinbox)
-        layout.addRow("MPI tasks (-mpi)", self._mpi_tasks_spinbox)
+        layout.addRow(self._gpu_devices_label, self._gpu_devices_edit)
+        layout.addRow(self._num_runs_label, self._num_runs_spinbox)
+        layout.addRow(self._restart_label, self._restart_spinbox)
+        layout.addRow(self._mpi_tasks_label, self._mpi_tasks_spinbox)
         layout.addRow("", self._geometry_fixed_checkbox)
         layout.addRow("", self._write_processed_checkbox)
         layout.addRow("", self._benchmark_checkbox)
         layout.addRow("", self._mpi_no_spawn_checkbox)
-        layout.addRow("Extra CLI args", self._extra_args_edit)
+        layout.addRow(self._extra_args_label, self._extra_args_edit)
         return widget
 
-    def _build_card(self, title: str, content: QWidget) -> QFrame:
+    def _build_card(self, title_key: str, content: QWidget) -> QFrame:
         card = QFrame()
         card.setObjectName("ViewCard")
         layout = QVBoxLayout(card)
         layout.setContentsMargins(20, 18, 20, 18)
         layout.setSpacing(10)
 
-        heading = QLabel(title)
+        heading = QLabel()
         heading.setObjectName("SectionTitle")
+        self._card_headings[title_key] = heading
 
         layout.addWidget(heading)
         layout.addWidget(content)
@@ -285,3 +330,77 @@ class SimulationView(QWidget):
             except ValueError:
                 continue
         return values
+
+    def retranslate_ui(self) -> None:
+        self._title.setText(self._localization.text("simulation.title"))
+        self._subtitle.setText(self._localization.text("simulation.subtitle"))
+        self._mode_combo.setItemText(
+            0, self._localization.simulation_mode_text(SimulationMode.NORMAL.value)
+        )
+        self._mode_combo.setItemText(
+            1,
+            self._localization.simulation_mode_text(
+                SimulationMode.GEOMETRY_ONLY.value
+            ),
+        )
+        self._gpu_checkbox.setText(self._localization.text("simulation.gpu"))
+        self._geometry_fixed_checkbox.setText(
+            self._localization.text("simulation.geometry_fixed")
+        )
+        self._write_processed_checkbox.setText(
+            self._localization.text("simulation.write_processed")
+        )
+        self._benchmark_checkbox.setText(
+            self._localization.text("simulation.benchmark")
+        )
+        self._mpi_no_spawn_checkbox.setText(
+            self._localization.text("simulation.mpi_no_spawn")
+        )
+        self._gpu_devices_edit.setPlaceholderText(
+            self._localization.text("simulation.gpu_devices_placeholder")
+        )
+        self._extra_args_edit.setPlaceholderText(
+            self._localization.text("simulation.extra_args_placeholder")
+        )
+        self._preview_text.setPlaceholderText(
+            self._localization.text("simulation.preview_placeholder")
+        )
+        self._log_text.setPlaceholderText(
+            self._localization.text("simulation.log_placeholder")
+        )
+        self._preview_button.setText(
+            self._localization.text("simulation.action.preview")
+        )
+        self._export_button.setText(
+            self._localization.text("simulation.action.export")
+        )
+        self._start_button.setText(self._localization.text("simulation.action.start"))
+        self._cancel_button.setText(
+            self._localization.text("simulation.action.cancel")
+        )
+        self._open_run_button.setText(
+            self._localization.text("simulation.action.open_run")
+        )
+        self._open_output_button.setText(
+            self._localization.text("simulation.action.open_output")
+        )
+        self._runtime_row_label.setText(self._localization.text("simulation.runtime"))
+        self._project_state_row_label.setText(
+            self._localization.text("simulation.project_state_label")
+        )
+        self._run_state_row_label.setText(
+            self._localization.text("simulation.run_state_label")
+        )
+        self._messages_row_label.setText(
+            self._localization.text("simulation.messages")
+        )
+        self._mode_label.setText(self._localization.text("simulation.mode"))
+        self._gpu_devices_label.setText(
+            self._localization.text("simulation.gpu_devices")
+        )
+        self._num_runs_label.setText(self._localization.text("simulation.num_runs"))
+        self._restart_label.setText(self._localization.text("simulation.restart"))
+        self._mpi_tasks_label.setText(self._localization.text("simulation.mpi_tasks"))
+        self._extra_args_label.setText(self._localization.text("simulation.extra_args"))
+        for key, heading in self._card_headings.items():
+            heading.setText(self._localization.text(key))

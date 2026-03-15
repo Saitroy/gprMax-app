@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ....application.services.localization_service import LocalizationService
 from ....application.services.model_editor_service import ModelEditorService
 from ....application.services.validation_service import ValidationService
 from ....domain.model_entities import EDITOR_SOURCE_AXES, EDITOR_SOURCE_KINDS
@@ -33,11 +34,13 @@ class SourcesPanel(QWidget):
 
     def __init__(
         self,
+        localization: LocalizationService,
         model_editor_service: ModelEditorService,
         validation_service: ValidationService,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
+        self._localization = localization
         self._model_editor_service = model_editor_service
         self._validation_service = validation_service
         self._loading = False
@@ -45,24 +48,23 @@ class SourcesPanel(QWidget):
         self._list = QListWidget()
         self._list.currentRowChanged.connect(self._load_current_source)
 
-        add_button = QPushButton("Add")
-        add_button.clicked.connect(self._add_source)
-        duplicate_button = QPushButton("Duplicate")
-        duplicate_button.clicked.connect(self._duplicate_source)
-        delete_button = QPushButton("Delete")
-        delete_button.clicked.connect(self._delete_source)
-        self._duplicate_button = duplicate_button
-        self._delete_button = delete_button
+        self._add_button = QPushButton()
+        self._add_button.clicked.connect(self._add_source)
+        self._duplicate_button = QPushButton()
+        self._duplicate_button.clicked.connect(self._duplicate_source)
+        self._delete_button = QPushButton()
+        self._delete_button.clicked.connect(self._delete_source)
 
         list_panel = QWidget()
         list_layout = QVBoxLayout(list_panel)
         list_layout.setContentsMargins(0, 0, 0, 0)
-        list_layout.addWidget(QLabel("Sources / transmitters"))
+        self._list_title = QLabel()
+        list_layout.addWidget(self._list_title)
         list_layout.addWidget(self._list, 1)
         buttons = QHBoxLayout()
-        buttons.addWidget(add_button)
-        buttons.addWidget(duplicate_button)
-        buttons.addWidget(delete_button)
+        buttons.addWidget(self._add_button)
+        buttons.addWidget(self._duplicate_button)
+        buttons.addWidget(self._delete_button)
         buttons.addStretch(1)
         list_layout.addLayout(buttons)
 
@@ -84,29 +86,38 @@ class SourcesPanel(QWidget):
             step=1e-10,
         )
         self._resistance_edit = QLineEdit()
-        self._resistance_edit.setPlaceholderText(
-            "Optional; defaults to 50 ohm for voltage source"
-        )
+        self._resistance_edit.setPlaceholderText("")
         self._notes_edit = QPlainTextEdit()
         self._notes_edit.setFixedHeight(90)
         self._tags_edit = QLineEdit()
-        self._status_label = build_status_label("Select a source to edit it.")
+        self._status_label = build_status_label("")
 
         detail_panel = QWidget()
         detail_layout = QVBoxLayout(detail_panel)
         detail_layout.setContentsMargins(0, 0, 0, 0)
         form = QFormLayout()
-        form.addRow("Identifier", self._identifier_edit)
-        form.addRow("Kind", self._kind_combo)
-        form.addRow("Axis", self._axis_combo)
-        form.addRow("Waveform", self._waveform_combo)
-        form.addRow("Position X (m)", self._position_x)
-        form.addRow("Position Y (m)", self._position_y)
-        form.addRow("Position Z (m)", self._position_z)
-        form.addRow("Delay (s)", self._delay)
-        form.addRow("Resistance (ohm)", self._resistance_edit)
-        form.addRow("Notes", self._notes_edit)
-        form.addRow("Tags", self._tags_edit)
+        self._identifier_label = QLabel()
+        self._kind_label = QLabel()
+        self._axis_label = QLabel()
+        self._waveform_label = QLabel()
+        self._position_x_label = QLabel()
+        self._position_y_label = QLabel()
+        self._position_z_label = QLabel()
+        self._delay_label = QLabel()
+        self._resistance_label = QLabel()
+        self._notes_label = QLabel()
+        self._tags_label = QLabel()
+        form.addRow(self._identifier_label, self._identifier_edit)
+        form.addRow(self._kind_label, self._kind_combo)
+        form.addRow(self._axis_label, self._axis_combo)
+        form.addRow(self._waveform_label, self._waveform_combo)
+        form.addRow(self._position_x_label, self._position_x)
+        form.addRow(self._position_y_label, self._position_y)
+        form.addRow(self._position_z_label, self._position_z)
+        form.addRow(self._delay_label, self._delay)
+        form.addRow(self._resistance_label, self._resistance_edit)
+        form.addRow(self._notes_label, self._notes_edit)
+        form.addRow(self._tags_label, self._tags_edit)
         detail_layout.addLayout(form)
         detail_layout.addWidget(self._status_label)
         detail_layout.addStretch(1)
@@ -138,6 +149,7 @@ class SourcesPanel(QWidget):
         ):
             widget.valueChanged.connect(self._apply_changes)
 
+        self.retranslate_ui()
         self.set_project(None)
 
     def set_project(self, project: Project | None) -> None:
@@ -160,7 +172,10 @@ class SourcesPanel(QWidget):
         current_value = self._waveform_combo.currentData()
         self._loading = True
         self._waveform_combo.clear()
-        self._waveform_combo.addItem("<none>", "")
+        self._waveform_combo.addItem(
+            self._localization.text("editor.sources.no_waveform"),
+            "",
+        )
         if project is not None:
             for waveform_id in self._model_editor_service.available_waveform_ids():
                 self._waveform_combo.addItem(waveform_id, waveform_id)
@@ -177,7 +192,7 @@ class SourcesPanel(QWidget):
         self._status_label.setText(
             join_messages(
                 self._validation_service.messages_for_prefixes(*prefixes),
-                "No source-specific validation issues.",
+                self._localization.text("editor.sources.valid"),
             )
         )
 
@@ -304,7 +319,10 @@ class SourcesPanel(QWidget):
 
     def _item_text(self, source: SourceDefinition) -> str:
         name = source.identifier or source.kind
-        return f"{name} | {source.kind} | {source.waveform_id or 'no waveform'}"
+        return (
+            f"{name} | {source.kind} | "
+            f"{source.waveform_id or self._localization.text('editor.sources.no_waveform_item')}"
+        )
 
     def _update_buttons(self) -> None:
         enabled = self._list.currentRow() >= 0
@@ -316,3 +334,28 @@ class SourcesPanel(QWidget):
             self._kind_combo.currentText() == "voltage_source"
             and self._list.currentRow() >= 0
         )
+
+    def retranslate_ui(self) -> None:
+        self._list_title.setText(self._localization.text("editor.sources.list_title"))
+        self._add_button.setText(self._localization.text("common.add"))
+        self._duplicate_button.setText(self._localization.text("common.duplicate"))
+        self._delete_button.setText(self._localization.text("common.delete"))
+        self._identifier_label.setText(self._localization.text("editor.sources.identifier"))
+        self._kind_label.setText(self._localization.text("editor.sources.kind"))
+        self._axis_label.setText(self._localization.text("editor.sources.axis"))
+        self._waveform_label.setText(self._localization.text("editor.sources.waveform"))
+        self._position_x_label.setText(self._localization.text("editor.sources.position_x"))
+        self._position_y_label.setText(self._localization.text("editor.sources.position_y"))
+        self._position_z_label.setText(self._localization.text("editor.sources.position_z"))
+        self._delay_label.setText(self._localization.text("editor.sources.delay"))
+        self._resistance_label.setText(self._localization.text("editor.sources.resistance"))
+        self._notes_label.setText(self._localization.text("editor.sources.notes"))
+        self._tags_label.setText(self._localization.text("editor.sources.tags"))
+        self._resistance_edit.setPlaceholderText(
+            self._localization.text("editor.sources.resistance_placeholder")
+        )
+        self.refresh_waveform_choices()
+        if self._list.currentRow() < 0:
+            self._status_label.setText(self._localization.text("editor.sources.select"))
+        else:
+            self.refresh_validation()

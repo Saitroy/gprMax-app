@@ -4,12 +4,18 @@ from datetime import datetime
 
 from PySide6.QtWidgets import QFormLayout, QLabel, QVBoxLayout, QWidget
 
+from ....application.services.localization_service import LocalizationService
 from ....domain.results import ResultMetadata, RunResultSummary
 
 
 class ResultSummaryPanel(QWidget):
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        localization: LocalizationService,
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
+        self._localization = localization
 
         self._run_id = QLabel("-")
         self._status = QLabel("-")
@@ -27,23 +33,39 @@ class ResultSummaryPanel(QWidget):
         self._issues.setWordWrap(True)
 
         form = QFormLayout()
-        form.addRow("Run ID", self._run_id)
-        form.addRow("Status", self._status)
-        form.addRow("Created", self._created)
-        form.addRow("Finished", self._finished)
-        form.addRow("Duration", self._duration)
-        form.addRow("Input file", self._input_file)
-        form.addRow("Output file", self._output_file)
-        form.addRow("Model title", self._model_title)
-        form.addRow("Receivers", self._receivers)
-        form.addRow("Components", self._components)
-        form.addRow("Grid", self._grid)
-        form.addRow("dt", self._dt)
-        form.addRow("Notes", self._issues)
+        self._labels = {
+            "run_id": QLabel(),
+            "status": QLabel(),
+            "created": QLabel(),
+            "finished": QLabel(),
+            "duration": QLabel(),
+            "input_file": QLabel(),
+            "output_file": QLabel(),
+            "model_title": QLabel(),
+            "receivers": QLabel(),
+            "components": QLabel(),
+            "grid": QLabel(),
+            "dt": QLabel(),
+            "notes": QLabel(),
+        }
+        form.addRow(self._labels["run_id"], self._run_id)
+        form.addRow(self._labels["status"], self._status)
+        form.addRow(self._labels["created"], self._created)
+        form.addRow(self._labels["finished"], self._finished)
+        form.addRow(self._labels["duration"], self._duration)
+        form.addRow(self._labels["input_file"], self._input_file)
+        form.addRow(self._labels["output_file"], self._output_file)
+        form.addRow(self._labels["model_title"], self._model_title)
+        form.addRow(self._labels["receivers"], self._receivers)
+        form.addRow(self._labels["components"], self._components)
+        form.addRow(self._labels["grid"], self._grid)
+        form.addRow(self._labels["dt"], self._dt)
+        form.addRow(self._labels["notes"], self._issues)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addLayout(form)
+        self.retranslate_ui()
 
     def set_summary(
         self,
@@ -66,12 +88,14 @@ class ResultSummaryPanel(QWidget):
                 self._dt,
             ):
                 label.setText("-")
-            self._issues.setText("Select a completed run to inspect results.")
+            self._issues.setText(self._localization.text("results.summary.select_run"))
             return
 
         record = run_summary.run_record
         self._run_id.setText(record.run_id)
-        self._status.setText(record.status.value)
+        self._status.setText(
+            self._localization.simulation_status_text(record.status.value)
+        )
         self._created.setText(_format_dt(record.created_at))
         self._finished.setText(_format_dt(record.finished_at))
         self._duration.setText(
@@ -92,7 +116,18 @@ class ResultSummaryPanel(QWidget):
             " x ".join(str(item) for item in metadata.grid_shape) if metadata else "-"
         )
         self._dt.setText(f"{metadata.dt_s:.6g} s" if metadata else "-")
-        self._issues.setText("\n".join(run_summary.issues) if run_summary.issues else "No result issues detected.")
+        self._issues.setText(
+            "\n".join(
+                self._localization.translate_message(issue)
+                for issue in run_summary.issues
+            )
+            if run_summary.issues
+            else self._localization.text("results.summary.no_issues")
+        )
+
+    def retranslate_ui(self) -> None:
+        for key, label in self._labels.items():
+            label.setText(self._localization.text(f"results.summary.{key}"))
 
 
 def _format_dt(value: datetime | None) -> str:

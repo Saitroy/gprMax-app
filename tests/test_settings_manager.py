@@ -30,6 +30,7 @@ class SettingsManagerTests(unittest.TestCase):
                 ],
                 advanced_mode=True,
                 gprmax_python_executable="python",
+                language="en",
             )
 
             manager.save(settings)
@@ -39,6 +40,7 @@ class SettingsManagerTests(unittest.TestCase):
             self.assertEqual(loaded.recent_projects[0].name, "Project A")
             self.assertTrue(loaded.advanced_mode)
             self.assertEqual(loaded.gprmax_python_executable, "python")
+            self.assertEqual(loaded.language, "en")
 
 
 if __name__ == "__main__":

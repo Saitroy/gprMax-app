@@ -5,15 +5,19 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
+from ....application.services.localization_service import LocalizationService
 from ....domain.traces import BscanLoadResult
 
 
 class BscanImageWidget(QWidget):
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        localization: LocalizationService,
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
-        self._message = QLabel(
-            "B-scan preview will appear here when the selected run supports it."
-        )
+        self._localization = localization
+        self._message = QLabel()
         self._message.setWordWrap(True)
         self._message.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._image = QLabel()
@@ -24,9 +28,10 @@ class BscanImageWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self._image, 1)
         layout.addWidget(self._message)
+        self.retranslate_ui()
 
     def set_result(self, result: BscanLoadResult) -> None:
-        self._message.setText(result.message)
+        self._message.setText(self._localization.translate_message(result.message))
         if not result.available or result.dataset is None:
             self._image.clear()
             return
@@ -34,7 +39,7 @@ class BscanImageWidget(QWidget):
         array = np.asarray(result.dataset.amplitudes, dtype=float)
         if array.size == 0:
             self._image.clear()
-            self._message.setText("B-scan dataset is empty.")
+            self._message.setText(self._localization.text("results.plot.bscan_empty"))
             return
 
         image_array = self._to_image_array(array)
@@ -65,6 +70,11 @@ class BscanImageWidget(QWidget):
                 Qt.TransformationMode.SmoothTransformation,
             )
         )
+
+    def retranslate_ui(self) -> None:
+        pixmap = self._image.pixmap()
+        if pixmap is None or pixmap.isNull():
+            self._message.setText(self._localization.text("results.plot.bscan_placeholder"))
 
     def _to_image_array(self, amplitudes: np.ndarray) -> np.ndarray:
         matrix = amplitudes.T

@@ -39,18 +39,21 @@ class SettingsService:
         *,
         advanced_mode: bool,
         gprmax_python_executable: str | None,
+        language: str,
     ) -> AppSettings:
         runtime = (gprmax_python_executable or "").strip() or None
         self._settings.advanced_mode = advanced_mode
         self._settings.gprmax_python_executable = runtime
+        self._settings.language = language
         self._settings_manager.save(self._settings)
         return self._settings
 
     def runtime_summary(self) -> dict[str, str]:
         return {
-            "Settings file": str(self._settings_manager.settings_path),
-            "Logs directory": str(self._settings_manager.logs_dir),
-            "gprMax runtime": self._settings.gprmax_python_executable or "python",
-            "Advanced mode": "Enabled" if self._settings.advanced_mode else "Disabled",
-            "Recent projects": str(len(self._settings.recent_projects)),
+            "settings_file": str(self._settings_manager.settings_path),
+            "logs_directory": str(self._settings_manager.logs_dir),
+            "gprmax_runtime": self._settings.gprmax_python_executable or "python",
+            "advanced_mode": "true" if self._settings.advanced_mode else "false",
+            "recent_projects": str(len(self._settings.recent_projects)),
+            "interface_language": self._settings.language,
         }

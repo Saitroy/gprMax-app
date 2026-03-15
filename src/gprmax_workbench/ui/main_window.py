@@ -42,8 +42,8 @@ LOGGER = logging.getLogger(__name__)
 
 @dataclass(frozen=True, slots=True)
 class PageSpec:
-    title: str
-    description: str
+    title_key: str
+    description_key: str
     widget: QWidget
 
 
@@ -51,65 +51,75 @@ class MainWindow(QMainWindow):
     def __init__(self, context: ApplicationContext) -> None:
         super().__init__()
         self._context = context
+        self._localization = context.localization_service
         self._navigation = QListWidget()
         self._stack = QStackedWidget()
         self._simulation_refresh_timer = QTimer(self)
         self._simulation_refresh_timer.setInterval(400)
         self._simulation_refresh_timer.timeout.connect(self._refresh_simulation_runtime_state)
 
-        self._welcome_view = WelcomeView()
+        self._welcome_view = WelcomeView(self._localization)
         self._project_view = ProjectView(
+            localization=self._localization,
             model_editor_service=context.model_editor_service,
             validation_service=context.validation_service,
             input_preview_service=context.input_preview_service,
         )
         self._simulation_view = SimulationView(
-            runtime_label=context.simulation_service.runtime_label()
+            localization=self._localization,
+            runtime_label=context.simulation_service.runtime_label(),
         )
         self._results_view = ResultsView(
+            localization=self._localization,
             results_service=context.results_service,
             trace_service=context.trace_service,
             bscan_service=context.bscan_service,
         )
-        self._settings_view = SettingsView()
+        self._settings_view = SettingsView(self._localization)
         self._pages = self._build_pages()
 
-        self._save_project_action = QAction("Save Project", self)
+        self._new_project_action = QAction(self)
+        self._open_project_action = QAction(self)
+        self._save_project_action = QAction(self)
+        self._about_action = QAction(self)
+        self._file_menu = self.menuBar().addMenu("")
+        self._help_menu = self.menuBar().addMenu("")
 
-        self.setWindowTitle("GPRMax Workbench")
+        self.setWindowTitle(self._localization.text("window.title.base"))
         self.resize(1440, 920)
 
         self._connect_signals()
         self._create_actions()
         self._build_ui()
+        self.retranslate_ui()
         self.refresh_views()
         self._simulation_refresh_timer.start()
 
     def _build_pages(self) -> list[PageSpec]:
         return [
             PageSpec(
-                title="Welcome",
-                description="Project manager and onboarding entrypoint.",
+                title_key="page.welcome.title",
+                description_key="page.welcome.description",
                 widget=self._welcome_view,
             ),
             PageSpec(
-                title="Model Editor",
-                description="Form-based MVP editor for model setup, materials, entities, and input preview.",
+                title_key="page.project.title",
+                description_key="page.project.description",
                 widget=self._project_view,
             ),
             PageSpec(
-                title="Simulation",
-                description="Input generation, execution, logs, and run history.",
+                title_key="page.simulation.title",
+                description_key="page.simulation.description",
                 widget=self._simulation_view,
             ),
             PageSpec(
-                title="Results",
-                description="Run-centric results browser with metadata, A-scan plots, and bounded B-scan previews.",
+                title_key="page.results.title",
+                description_key="page.results.description",
                 widget=self._results_view,
             ),
             PageSpec(
-                title="Settings",
-                description="Application and runtime settings.",
+                title_key="page.settings.title",
+                description_key="page.settings.description",
                 widget=self._settings_view,
             ),
         ]
@@ -133,24 +143,15 @@ class MainWindow(QMainWindow):
         )
 
     def _create_actions(self) -> None:
-        new_project_action = QAction("New Project", self)
-        new_project_action.triggered.connect(self._on_new_project)
-
-        open_project_action = QAction("Open Project", self)
-        open_project_action.triggered.connect(self._on_open_project)
-
+        self._new_project_action.triggered.connect(self._on_new_project)
+        self._open_project_action.triggered.connect(self._on_open_project)
         self._save_project_action.triggered.connect(self._on_save_project)
+        self._about_action.triggered.connect(self._show_about_dialog)
 
-        about_action = QAction("About", self)
-        about_action.triggered.connect(self._show_about_dialog)
-
-        file_menu = self.menuBar().addMenu("File")
-        file_menu.addAction(new_project_action)
-        file_menu.addAction(open_project_action)
-        file_menu.addAction(self._save_project_action)
-
-        help_menu = self.menuBar().addMenu("Help")
-        help_menu.addAction(about_action)
+        self._file_menu.addAction(self._new_project_action)
+        self._file_menu.addAction(self._open_project_action)
+        self._file_menu.addAction(self._save_project_action)
+        self._help_menu.addAction(self._about_action)
 
     def _build_ui(self) -> None:
         central = QWidget()
@@ -165,9 +166,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(content, 1)
 
         self.setCentralWidget(central)
-        self.statusBar().showMessage(
-            "Stage 5 foundation ready for model editing, execution, and result inspection."
-        )
+        self.statusBar().showMessage(self._localization.text("status.stage_ready"))
 
     def refresh_views(self) -> None:
         workspace = self._context.workspace_service
@@ -207,6 +206,31 @@ class MainWindow(QMainWindow):
         self._update_window_title()
         self._refresh_simulation_runtime_state()
 
+    def retranslate_ui(self) -> None:
+        self._file_menu.setTitle(self._localization.text("menu.file"))
+        self._help_menu.setTitle(self._localization.text("menu.help"))
+        self._new_project_action.setText(self._localization.text("action.new_project"))
+        self._open_project_action.setText(self._localization.text("action.open_project"))
+        self._save_project_action.setText(self._localization.text("action.save_project"))
+        self._about_action.setText(self._localization.text("action.about"))
+        self._sidebar_title.setText(self._localization.text("sidebar.title"))
+        self._sidebar_subtitle.setText(self._localization.text("sidebar.subtitle"))
+        self._retranslate_navigation()
+        self._welcome_view.retranslate_ui()
+        self._project_view.retranslate_ui()
+        self._simulation_view.retranslate_ui()
+        self._results_view.retranslate_ui()
+        self._settings_view.retranslate_ui()
+        self._update_window_title()
+
+    def _retranslate_navigation(self) -> None:
+        for index, page in enumerate(self._pages):
+            item = self._navigation.item(index)
+            if item is None:
+                continue
+            item.setText(self._localization.text(page.title_key))
+            item.setToolTip(self._localization.text(page.description_key))
+
     def _refresh_shell_state(self) -> None:
         workspace = self._context.workspace_service
         project = workspace.state.current_project
@@ -228,15 +252,15 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(14)
 
-        title = QLabel("GPRMax\nWorkbench")
-        title.setObjectName("AppTitle")
-        title.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-
-        subtitle = QLabel(
-            "Desktop orchestration layer for guided modelling and simulation runs."
+        self._sidebar_title = QLabel()
+        self._sidebar_title.setObjectName("AppTitle")
+        self._sidebar_title.setAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
         )
-        subtitle.setObjectName("AppSubtitle")
-        subtitle.setWordWrap(True)
+
+        self._sidebar_subtitle = QLabel()
+        self._sidebar_subtitle.setObjectName("AppSubtitle")
+        self._sidebar_subtitle.setWordWrap(True)
 
         self._navigation.setObjectName("Navigation")
         self._navigation.setSpacing(4)
@@ -245,18 +269,18 @@ class MainWindow(QMainWindow):
         )
 
         for page in self._pages:
-            item = QListWidgetItem(page.title)
-            item.setToolTip(page.description)
+            item = QListWidgetItem()
             self._navigation.addItem(item)
 
         self._navigation.currentRowChanged.connect(self._stack.setCurrentIndex)
         self._navigation.currentRowChanged.connect(self._update_status)
 
-        layout.addWidget(title)
-        layout.addWidget(subtitle)
+        layout.addWidget(self._sidebar_title)
+        layout.addWidget(self._sidebar_subtitle)
         layout.addSpacing(8)
         layout.addWidget(self._navigation)
 
+        self._retranslate_navigation()
         return frame
 
     def _build_content_stack(self) -> QWidget:
@@ -268,25 +292,36 @@ class MainWindow(QMainWindow):
     def _update_status(self, index: int) -> None:
         if index < 0 or index >= len(self._pages):
             return
-        self.statusBar().showMessage(self._pages[index].description)
+        self.statusBar().showMessage(
+            self._localization.text(self._pages[index].description_key)
+        )
 
     def _update_window_title(self) -> None:
         current_project = self._context.workspace_service.state.current_project
         active_run = self._context.workspace_service.state.active_run
         if current_project is None:
-            self.setWindowTitle("GPRMax Workbench")
+            self.setWindowTitle(self._localization.text("window.title.base"))
             return
 
         dirty_marker = "*" if self._context.workspace_service.state.current_project_dirty else ""
         run_suffix = ""
         if active_run is not None and active_run.status.value in {"preparing", "running"}:
-            run_suffix = f" [{active_run.status.value}: {active_run.run_id}]"
+            run_suffix = self._localization.text(
+                "window.run_suffix",
+                status=self._localization.simulation_status_text(active_run.status.value),
+                run_id=active_run.run_id,
+            )
         self.setWindowTitle(
-            f"GPRMax Workbench - {current_project.metadata.name}{dirty_marker}{run_suffix}"
+            self._localization.text(
+                "window.title.project",
+                project_name=current_project.metadata.name,
+                dirty_marker=dirty_marker,
+                run_suffix=run_suffix,
+            )
         )
 
     def _on_new_project(self) -> None:
-        dialog = NewProjectDialog(self)
+        dialog = NewProjectDialog(self._localization, self)
         if dialog.exec() == 0:
             return
 
@@ -297,20 +332,28 @@ class MainWindow(QMainWindow):
             )
         except Exception as exc:
             LOGGER.exception("Failed to create project")
-            QMessageBox.critical(self, "New Project", str(exc))
+            QMessageBox.critical(
+                self,
+                self._localization.text("message.new_project.title"),
+                self._localization.translate_message(str(exc)),
+            )
             return
 
         self.refresh_views()
         self._navigation.setCurrentRow(1)
         self.statusBar().showMessage(
-            f"Created project '{project.metadata.name}' at {project.root}",
+            self._localization.text(
+                "status.created_project",
+                name=project.metadata.name,
+                root=project.root,
+            ),
             6000,
         )
 
     def _on_open_project(self) -> None:
         project_dir = QFileDialog.getExistingDirectory(
             self,
-            "Open Project Directory",
+            self._localization.text("dialog.open_project_directory"),
             str(Path.home()),
         )
         if not project_dir:
@@ -326,13 +369,20 @@ class MainWindow(QMainWindow):
             project = self._context.workspace_service.open_project(path)
         except Exception as exc:
             LOGGER.exception("Failed to open project at %s", path)
-            QMessageBox.critical(self, "Open Project", str(exc))
+            QMessageBox.critical(
+                self,
+                self._localization.text("message.open_project.title"),
+                self._localization.translate_message(str(exc)),
+            )
             return
 
         self.refresh_views()
         self._navigation.setCurrentRow(1)
         self.statusBar().showMessage(
-            f"Opened project '{project.metadata.name}'",
+            self._localization.text(
+                "status.opened_project",
+                name=project.metadata.name,
+            ),
             6000,
         )
 
@@ -340,8 +390,8 @@ class MainWindow(QMainWindow):
         if self._context.workspace_service.state.current_project is None:
             QMessageBox.information(
                 self,
-                "Save Project",
-                "Create or open a project before saving.",
+                self._localization.text("message.save_project.title"),
+                self._localization.text("message.save_project.no_project"),
             )
             return
 
@@ -350,9 +400,9 @@ class MainWindow(QMainWindow):
         except ProjectValidationError as exc:
             QMessageBox.warning(
                 self,
-                "Save Project",
+                self._localization.text("message.save_project.title"),
                 "\n".join(
-                    f"{issue.path}: {issue.message}"
+                    f"{issue.path}: {self._localization.translate_message(issue.message)}"
                     for issue in exc.validation.errors
                 ),
             )
@@ -362,13 +412,19 @@ class MainWindow(QMainWindow):
 
         warning_text = ""
         if validation.warnings:
-            warning_text = (
-                " Saved with warnings: "
-                + "; ".join(issue.message for issue in validation.warnings)
+            warning_text = self._localization.text(
+                "status.project_saved_warnings",
+                warnings="; ".join(
+                    self._localization.translate_message(issue.message)
+                    for issue in validation.warnings
+                ),
             )
 
         self.statusBar().showMessage(
-            f"Project saved successfully.{warning_text}",
+            self._localization.text(
+                "status.project_saved",
+                warning_text=warning_text,
+            ),
             8000,
         )
 
@@ -379,12 +435,18 @@ class MainWindow(QMainWindow):
         settings = self._context.settings_service.update_preferences(
             advanced_mode=self._settings_view.advanced_mode_enabled(),
             gprmax_python_executable=self._settings_view.runtime_executable(),
+            language=self._settings_view.selected_language(),
         )
+        self._localization.set_language(settings.language)
         self._context.gprmax_adapter.configure_runtime(
             settings.gprmax_python_executable
         )
+        self.retranslate_ui()
         self.refresh_views()
-        self.statusBar().showMessage("Settings saved.", 5000)
+        self.statusBar().showMessage(
+            self._localization.text("status.settings_saved"),
+            5000,
+        )
 
     def _on_preview_input(self) -> None:
         project = self._current_project_or_warn()
@@ -397,7 +459,8 @@ class MainWindow(QMainWindow):
             configuration,
         )
         messages = [
-            f"{issue.severity.value}: {issue.path} - {issue.message}"
+            f"{self._localization.severity_text(issue.severity.value)}: "
+            f"{issue.path} - {self._localization.translate_message(issue.message)}"
             for issue in validation.issues
         ]
 
@@ -408,14 +471,25 @@ class MainWindow(QMainWindow):
             )
         except Exception as exc:
             LOGGER.exception("Failed to build input preview")
-            QMessageBox.warning(self, "Input Preview", str(exc))
+            QMessageBox.warning(
+                self,
+                self._localization.text("message.input_preview.title"),
+                self._localization.translate_message(str(exc)),
+            )
             return
 
         self._simulation_view.set_input_preview(prepared.preview_text)
         self._simulation_view.set_validation_messages(
-            messages + prepared.validation_messages
+            messages
+            + [
+                self._localization.translate_message(message)
+                for message in prepared.validation_messages
+            ]
         )
-        self.statusBar().showMessage("Input preview rebuilt.", 5000)
+        self.statusBar().showMessage(
+            self._localization.text("status.preview_rebuilt"),
+            5000,
+        )
 
     def _on_export_input(self) -> None:
         project = self._current_project_or_warn()
@@ -424,9 +498,9 @@ class MainWindow(QMainWindow):
 
         filename, _ = QFileDialog.getSaveFileName(
             self,
-            "Export gprMax Input",
+            self._localization.text("dialog.export_input"),
             str(project.root / "generated" / "exported.in"),
-            "gprMax input (*.in);;All files (*)",
+            self._localization.text("dialog.export_input_filter"),
         )
         if not filename:
             return
@@ -439,10 +513,20 @@ class MainWindow(QMainWindow):
             )
         except Exception as exc:
             LOGGER.exception("Failed to export input")
-            QMessageBox.warning(self, "Export Input", str(exc))
+            QMessageBox.warning(
+                self,
+                self._localization.text("message.export_input.title"),
+                self._localization.translate_message(str(exc)),
+            )
             return
 
-        self.statusBar().showMessage(f"Exported input to {destination}", 6000)
+        self.statusBar().showMessage(
+            self._localization.text(
+                "status.input_exported",
+                destination=destination,
+            ),
+            6000,
+        )
 
     def _on_start_run(self) -> None:
         project = self._current_project_or_warn()
@@ -458,32 +542,47 @@ class MainWindow(QMainWindow):
         except SimulationPreparationError as exc:
             self._simulation_view.set_validation_messages(
                 [
-                    f"{issue.severity.value}: {issue.path} - {issue.message}"
+                    f"{self._localization.severity_text(issue.severity.value)}: "
+                    f"{issue.path} - {self._localization.translate_message(issue.message)}"
                     for issue in exc.validation.issues
                 ]
             )
-            QMessageBox.warning(self, "Start Run", str(exc))
+            QMessageBox.warning(
+                self,
+                self._localization.text("message.start_run.title"),
+                "\n".join(
+                    f"{issue.path}: {self._localization.translate_message(issue.message)}"
+                    for issue in exc.validation.errors
+                ),
+            )
             return
         except Exception as exc:
             LOGGER.exception("Failed to start simulation")
-            QMessageBox.warning(self, "Start Run", str(exc))
+            QMessageBox.warning(
+                self,
+                self._localization.text("message.start_run.title"),
+                self._localization.translate_message(str(exc)),
+            )
             return
 
         self.refresh_views()
         self.statusBar().showMessage(
-            f"Started run {run_record.run_id}",
+            self._localization.text("status.run_started", run_id=run_record.run_id),
             6000,
         )
 
     def _on_cancel_run(self) -> None:
         cancelled = self._context.simulation_service.cancel_simulation()
         if cancelled:
-            self.statusBar().showMessage("Cancellation requested.", 5000)
+            self.statusBar().showMessage(
+                self._localization.text("status.cancellation_requested"),
+                5000,
+            )
         else:
             QMessageBox.information(
                 self,
-                "Cancel Run",
-                "There is no active run to cancel.",
+                self._localization.text("message.cancel_run.title"),
+                self._localization.text("message.cancel_run.none"),
             )
 
     def _on_open_run_directory(self) -> None:
@@ -491,8 +590,8 @@ class MainWindow(QMainWindow):
         if run_record is None:
             QMessageBox.information(
                 self,
-                "Open Run Folder",
-                "Select a run from the history or start a run first.",
+                self._localization.text("message.open_run_folder.title"),
+                self._localization.text("message.open_run_folder.none"),
             )
             return
         path = self._context.simulation_service.open_run_directory(run_record)
@@ -504,8 +603,8 @@ class MainWindow(QMainWindow):
         if run_record is None:
             QMessageBox.information(
                 self,
-                "Open Output Folder",
-                "Select a run from the history or start a run first.",
+                self._localization.text("message.open_output_folder.title"),
+                self._localization.text("message.open_output_folder.none"),
             )
             return
         path = self._context.simulation_service.open_output_directory(run_record)
@@ -556,14 +655,14 @@ class MainWindow(QMainWindow):
             return project
         QMessageBox.information(
             self,
-            "Simulation",
-            "Create or open a project before using the simulation runner.",
+            self._localization.text("message.simulation.title"),
+            self._localization.text("message.simulation.no_project"),
         )
         return None
 
     def _show_about_dialog(self) -> None:
         QMessageBox.information(
             self,
-            "About GPRMax Workbench",
-            "Stage 5 foundation: model editor MVP, subprocess execution, run artifacts, and results inspection with A-scan/B-scan previews.",
+            self._localization.text("about.title"),
+            self._localization.text("about.body"),
         )

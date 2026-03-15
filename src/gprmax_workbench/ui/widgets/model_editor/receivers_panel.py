@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ....application.services.localization_service import LocalizationService
 from ....application.services.model_editor_service import ModelEditorService
 from ....application.services.validation_service import ValidationService
 from ....domain.models import Project, ReceiverDefinition, Vector3
@@ -32,11 +33,13 @@ class ReceiversPanel(QWidget):
 
     def __init__(
         self,
+        localization: LocalizationService,
         model_editor_service: ModelEditorService,
         validation_service: ValidationService,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
+        self._localization = localization
         self._model_editor_service = model_editor_service
         self._validation_service = validation_service
         self._loading = False
@@ -44,24 +47,23 @@ class ReceiversPanel(QWidget):
         self._list = QListWidget()
         self._list.currentRowChanged.connect(self._load_current_receiver)
 
-        add_button = QPushButton("Add")
-        add_button.clicked.connect(self._add_receiver)
-        duplicate_button = QPushButton("Duplicate")
-        duplicate_button.clicked.connect(self._duplicate_receiver)
-        delete_button = QPushButton("Delete")
-        delete_button.clicked.connect(self._delete_receiver)
-        self._duplicate_button = duplicate_button
-        self._delete_button = delete_button
+        self._add_button = QPushButton()
+        self._add_button.clicked.connect(self._add_receiver)
+        self._duplicate_button = QPushButton()
+        self._duplicate_button.clicked.connect(self._duplicate_receiver)
+        self._delete_button = QPushButton()
+        self._delete_button.clicked.connect(self._delete_receiver)
 
         list_panel = QWidget()
         list_layout = QVBoxLayout(list_panel)
         list_layout.setContentsMargins(0, 0, 0, 0)
-        list_layout.addWidget(QLabel("Receivers"))
+        self._list_title = QLabel()
+        list_layout.addWidget(self._list_title)
         list_layout.addWidget(self._list, 1)
         buttons = QHBoxLayout()
-        buttons.addWidget(add_button)
-        buttons.addWidget(duplicate_button)
-        buttons.addWidget(delete_button)
+        buttons.addWidget(self._add_button)
+        buttons.addWidget(self._duplicate_button)
+        buttons.addWidget(self._delete_button)
         buttons.addStretch(1)
         list_layout.addLayout(buttons)
 
@@ -70,23 +72,30 @@ class ReceiversPanel(QWidget):
         self._position_y = build_float_spinbox()
         self._position_z = build_float_spinbox()
         self._outputs_edit = QLineEdit()
-        self._outputs_edit.setPlaceholderText("Comma-separated components, e.g. Ez, Ex")
+        self._outputs_edit.setPlaceholderText("")
         self._notes_edit = QPlainTextEdit()
         self._notes_edit.setFixedHeight(90)
         self._tags_edit = QLineEdit()
-        self._status_label = build_status_label("Select a receiver to edit it.")
+        self._status_label = build_status_label("")
 
         detail_panel = QWidget()
         detail_layout = QVBoxLayout(detail_panel)
         detail_layout.setContentsMargins(0, 0, 0, 0)
         form = QFormLayout()
-        form.addRow("Identifier", self._identifier_edit)
-        form.addRow("Position X (m)", self._position_x)
-        form.addRow("Position Y (m)", self._position_y)
-        form.addRow("Position Z (m)", self._position_z)
-        form.addRow("Outputs", self._outputs_edit)
-        form.addRow("Notes", self._notes_edit)
-        form.addRow("Tags", self._tags_edit)
+        self._identifier_label = QLabel()
+        self._position_x_label = QLabel()
+        self._position_y_label = QLabel()
+        self._position_z_label = QLabel()
+        self._outputs_label = QLabel()
+        self._notes_label = QLabel()
+        self._tags_label = QLabel()
+        form.addRow(self._identifier_label, self._identifier_edit)
+        form.addRow(self._position_x_label, self._position_x)
+        form.addRow(self._position_y_label, self._position_y)
+        form.addRow(self._position_z_label, self._position_z)
+        form.addRow(self._outputs_label, self._outputs_edit)
+        form.addRow(self._notes_label, self._notes_edit)
+        form.addRow(self._tags_label, self._tags_edit)
         detail_layout.addLayout(form)
         detail_layout.addWidget(self._status_label)
         detail_layout.addStretch(1)
@@ -114,6 +123,7 @@ class ReceiversPanel(QWidget):
         ):
             widget.valueChanged.connect(self._apply_changes)
 
+        self.retranslate_ui()
         self.set_project(None)
 
     def set_project(self, project: Project | None) -> None:
@@ -138,7 +148,7 @@ class ReceiversPanel(QWidget):
         self._status_label.setText(
             join_messages(
                 self._validation_service.messages_for_prefixes(*prefixes),
-                "No receiver-specific validation issues.",
+                self._localization.text("editor.receivers.valid"),
             )
         )
 
@@ -234,7 +244,7 @@ class ReceiversPanel(QWidget):
         self.model_changed.emit()
 
     def _item_text(self, receiver: ReceiverDefinition) -> str:
-        name = receiver.identifier or "receiver"
+        name = receiver.identifier or self._localization.text("editor.receivers.default_name")
         return (
             f"{name} | "
             f"({receiver.position_m.x:.3g}, {receiver.position_m.y:.3g}, {receiver.position_m.z:.3g})"
@@ -244,3 +254,23 @@ class ReceiversPanel(QWidget):
         enabled = self._list.currentRow() >= 0
         self._duplicate_button.setEnabled(enabled)
         self._delete_button.setEnabled(enabled)
+
+    def retranslate_ui(self) -> None:
+        self._list_title.setText(self._localization.text("editor.receivers.list_title"))
+        self._add_button.setText(self._localization.text("common.add"))
+        self._duplicate_button.setText(self._localization.text("common.duplicate"))
+        self._delete_button.setText(self._localization.text("common.delete"))
+        self._identifier_label.setText(self._localization.text("editor.receivers.identifier"))
+        self._position_x_label.setText(self._localization.text("editor.receivers.position_x"))
+        self._position_y_label.setText(self._localization.text("editor.receivers.position_y"))
+        self._position_z_label.setText(self._localization.text("editor.receivers.position_z"))
+        self._outputs_label.setText(self._localization.text("editor.receivers.outputs"))
+        self._notes_label.setText(self._localization.text("editor.receivers.notes"))
+        self._tags_label.setText(self._localization.text("editor.receivers.tags"))
+        self._outputs_edit.setPlaceholderText(
+            self._localization.text("editor.receivers.outputs_placeholder")
+        )
+        if self._list.currentRow() < 0:
+            self._status_label.setText(self._localization.text("editor.receivers.select"))
+        else:
+            self.refresh_validation()

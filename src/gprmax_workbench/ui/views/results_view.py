@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from ...application.services.bscan_service import BscanService
+from ...application.services.localization_service import LocalizationService
 from ...application.services.results_service import ResultsService
 from ...application.services.trace_service import TraceService
 from ...domain.results import ResultMetadata, RunResultSummary
@@ -33,12 +34,14 @@ class ResultsView(QWidget):
     def __init__(
         self,
         *,
+        localization: LocalizationService,
         results_service: ResultsService,
         trace_service: TraceService,
         bscan_service: BscanService,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
+        self._localization = localization
         self._results_service = results_service
         self._trace_service = trace_service
         self._bscan_service = bscan_service
@@ -47,16 +50,15 @@ class ResultsView(QWidget):
         self._metadata_cache: dict[str, ResultMetadata] = {}
         self._refresh_key: tuple[object, ...] | None = None
         self._loading = False
+        self._card_headings: dict[str, QLabel] = {}
 
-        title = QLabel("Results Viewer")
-        title.setObjectName("ViewTitle")
-        subtitle = QLabel(
-            "Stage 5 focuses on run-centric result discovery, metadata, A-scan viewing, and a bounded B-scan preview workflow."
-        )
-        subtitle.setObjectName("ViewSubtitle")
-        subtitle.setWordWrap(True)
+        self._title = QLabel()
+        self._title.setObjectName("ViewTitle")
+        self._subtitle = QLabel()
+        self._subtitle.setObjectName("ViewSubtitle")
+        self._subtitle.setWordWrap(True)
 
-        self._status_label = QLabel("Open a project and select a completed run to inspect results.")
+        self._status_label = QLabel()
         self._status_label.setWordWrap(True)
 
         self._run_list = QListWidget()
@@ -70,27 +72,27 @@ class ResultsView(QWidget):
         self._component_combo = QComboBox()
         self._component_combo.currentIndexChanged.connect(self._on_component_changed)
 
-        refresh_button = QPushButton("Refresh Results")
-        refresh_button.clicked.connect(self.refresh_current_project)
-        open_output_dir_button = QPushButton("Open Output Folder")
-        open_output_dir_button.clicked.connect(self._open_output_directory)
-        open_selected_file_button = QPushButton("Open Selected File")
-        open_selected_file_button.clicked.connect(self._open_selected_file)
+        self._refresh_button = QPushButton()
+        self._refresh_button.clicked.connect(self.refresh_current_project)
+        self._open_output_dir_button = QPushButton()
+        self._open_output_dir_button.clicked.connect(self._open_output_directory)
+        self._open_selected_file_button = QPushButton()
+        self._open_selected_file_button.clicked.connect(self._open_selected_file)
 
         toolbar = QHBoxLayout()
-        toolbar.addWidget(refresh_button)
-        toolbar.addWidget(open_output_dir_button)
-        toolbar.addWidget(open_selected_file_button)
+        toolbar.addWidget(self._refresh_button)
+        toolbar.addWidget(self._open_output_dir_button)
+        toolbar.addWidget(self._open_selected_file_button)
         toolbar.addStretch(1)
 
-        left_panel = self._build_card("Runs", self._run_list)
+        left_panel = self._build_card("results.card.runs", self._run_list)
         left_panel.setMinimumWidth(300)
 
-        self._summary_panel = ResultSummaryPanel()
-        summary_card = self._build_card("Summary", self._summary_panel)
+        self._summary_panel = ResultSummaryPanel(localization)
+        summary_card = self._build_card("results.card.summary", self._summary_panel)
 
-        output_card = self._build_card("Output files", self._output_list)
-        artifact_card = self._build_card("Other artifacts", self._artifact_list)
+        output_card = self._build_card("results.card.output_files", self._output_list)
+        artifact_card = self._build_card("results.card.other_artifacts", self._artifact_list)
         artifact_row = QHBoxLayout()
         artifact_row.addWidget(output_card, 1)
         artifact_row.addWidget(artifact_card, 1)
@@ -98,14 +100,17 @@ class ResultsView(QWidget):
         selectors = QWidget()
         selectors_layout = QFormLayout(selectors)
         selectors_layout.setContentsMargins(0, 0, 0, 0)
-        selectors_layout.addRow("Receiver", self._receiver_combo)
-        selectors_layout.addRow("Component", self._component_combo)
+        self._receiver_label = QLabel()
+        self._component_label = QLabel()
+        selectors_layout.addRow(self._receiver_label, self._receiver_combo)
+        selectors_layout.addRow(self._component_label, self._component_combo)
 
-        self._trace_plot = TracePlotWidget()
-        self._bscan_view = BscanImageWidget()
+        self._trace_plot = TracePlotWidget(localization)
+        self._bscan_view = BscanImageWidget(localization)
         tabs = QTabWidget()
-        tabs.addTab(self._trace_plot, "A-scan")
-        tabs.addTab(self._bscan_view, "B-scan")
+        tabs.addTab(self._trace_plot, "")
+        tabs.addTab(self._bscan_view, "")
+        self._tabs = tabs
 
         right_content = QWidget()
         right_layout = QVBoxLayout(right_content)
@@ -127,19 +132,20 @@ class ResultsView(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(18)
-        layout.addWidget(title)
-        layout.addWidget(subtitle)
+        layout.addWidget(self._title)
+        layout.addWidget(self._subtitle)
         layout.addLayout(toolbar)
         layout.addWidget(splitter, 1)
 
-        self._clear_results("Open a project and select a completed run to inspect results.")
+        self.retranslate_ui()
+        self._clear_results(self._localization.text("results.status.open_project"))
 
     def refresh_project(self, project_root: Path | None) -> None:
         if project_root is None:
             self._project_root = None
             self._refresh_key = None
             self._loading = False
-            self._clear_results("Open a project and select a completed run to inspect results.")
+            self._clear_results(self._localization.text("results.status.open_project"))
             return
 
         summaries = self._results_service.refresh_results(project_root)
@@ -157,7 +163,13 @@ class ResultsView(QWidget):
         }
         for summary in summaries:
             item = QListWidgetItem(
-                f"{summary.run_record.run_id} | {summary.run_record.status.value}"
+                self._localization.text(
+                    "results.run_item",
+                    run_id=summary.run_record.run_id,
+                    status=self._localization.simulation_status_text(
+                        summary.run_record.status.value
+                    ),
+                )
             )
             item.setToolTip(str(summary.run_record.output_directory))
             item.setData(Qt.ItemDataRole.UserRole, summary.run_record.run_id)
@@ -174,7 +186,7 @@ class ResultsView(QWidget):
 
         self._loading = False
         if self._run_list.count() == 0:
-            self._clear_results("No run results were found for this project yet.")
+            self._clear_results(self._localization.text("results.status.no_results"))
             return
 
         self._run_list.setCurrentRow(target_row)
@@ -200,13 +212,13 @@ class ResultsView(QWidget):
         self._receiver_combo.clear()
         self._component_combo.clear()
         self._summary_panel.set_summary(summary, None)
-        self._trace_plot.clear("Select an output file, receiver, and component.")
+        self._trace_plot.clear(self._localization.text("results.status.select_trace"))
         self._bscan_view.set_result(
-            _empty_bscan_result("Select an output file, receiver, and component.")
+            _empty_bscan_result(self._localization.text("results.status.select_trace"))
         )
 
         if summary is None:
-            self._status_label.setText("Select a run to inspect results.")
+            self._status_label.setText(self._localization.text("results.status.select_run"))
             self._loading = False
             return
 
@@ -234,7 +246,14 @@ class ResultsView(QWidget):
 
         self._loading = False
         if self._output_list.count() == 0:
-            self._status_label.setText("\n".join(summary.issues) if summary.issues else "No output files are available for this run.")
+            self._status_label.setText(
+                "\n".join(
+                    self._localization.translate_message(issue)
+                    for issue in summary.issues
+                )
+                if summary.issues
+                else self._localization.text("results.status.no_output_files")
+            )
             return
 
         self._output_list.setCurrentRow(target_row)
@@ -251,7 +270,7 @@ class ResultsView(QWidget):
 
         if summary is None or output_path is None:
             self._summary_panel.set_summary(summary, None)
-            self._status_label.setText("Select an output file to inspect it.")
+            self._status_label.setText(self._localization.text("results.status.select_output"))
             return
 
         try:
@@ -260,9 +279,10 @@ class ResultsView(QWidget):
             self._summary_panel.set_summary(summary, None)
             self._receiver_combo.clear()
             self._component_combo.clear()
-            self._trace_plot.clear(str(exc))
-            self._bscan_view.set_result(_empty_bscan_result(str(exc)))
-            self._status_label.setText(str(exc))
+            message = self._localization.translate_message(str(exc))
+            self._trace_plot.clear(message)
+            self._bscan_view.set_result(_empty_bscan_result(message))
+            self._status_label.setText(message)
             return
 
         self._summary_panel.set_summary(summary, metadata)
@@ -270,7 +290,11 @@ class ResultsView(QWidget):
         self._receiver_combo.clear()
         for receiver in metadata.receivers:
             self._receiver_combo.addItem(
-                f"{receiver.receiver_id} | {receiver.name}",
+                self._localization.text(
+                    "results.receiver_item",
+                    receiver_id=receiver.receiver_id,
+                    name=receiver.name,
+                ),
                 receiver.receiver_id,
             )
         selected_receiver_id = self._results_service.viewer_state.selected_receiver_id
@@ -281,9 +305,10 @@ class ResultsView(QWidget):
         self._loading = False
 
         if self._receiver_combo.count() == 0:
-            self._status_label.setText("No receivers were found in the selected output file.")
-            self._trace_plot.clear("No receivers were found in the selected output file.")
-            self._bscan_view.set_result(_empty_bscan_result("No receivers were found in the selected output file."))
+            message = self._localization.text("results.status.no_receivers")
+            self._status_label.setText(message)
+            self._trace_plot.clear(message)
+            self._bscan_view.set_result(_empty_bscan_result(message))
             return
 
         self._receiver_combo.setCurrentIndex(target_index)
@@ -314,9 +339,10 @@ class ResultsView(QWidget):
         self._loading = False
 
         if self._component_combo.count() == 0:
-            self._trace_plot.clear("The selected receiver does not expose any output components.")
-            self._bscan_view.set_result(_empty_bscan_result("The selected receiver does not expose any output components."))
-            self._status_label.setText("The selected receiver does not expose any output components.")
+            message = self._localization.text("results.status.no_components")
+            self._trace_plot.clear(message)
+            self._bscan_view.set_result(_empty_bscan_result(message))
+            self._status_label.setText(message)
             return
 
         self._component_combo.setCurrentIndex(target_index)
@@ -333,20 +359,26 @@ class ResultsView(QWidget):
         self._results_service.select_component(component_text)
 
         if summary is None or output_path is None or receiver_id is None or component_text is None:
-            self._trace_plot.clear("Select an output file, receiver, and component.")
-            self._bscan_view.set_result(_empty_bscan_result("Select an output file, receiver, and component."))
+            message = self._localization.text("results.status.select_trace")
+            self._trace_plot.clear(message)
+            self._bscan_view.set_result(_empty_bscan_result(message))
             return
 
         status_messages: list[str] = []
         try:
             trace = self._trace_service.load_ascan(output_path, receiver_id, component_text)
         except ResultsReadError as exc:
-            self._trace_plot.clear(str(exc))
-            status_messages.append(str(exc))
+            message = self._localization.translate_message(str(exc))
+            self._trace_plot.clear(message)
+            status_messages.append(message)
         else:
             self._trace_plot.set_trace(trace)
             status_messages.append(
-                f"A-scan loaded: {len(trace.values)} samples, dt={trace.metadata.dt_s:.6g} s."
+                self._localization.text(
+                    "results.ascan_loaded",
+                    samples=len(trace.values),
+                    dt=trace.metadata.dt_s,
+                )
             )
 
         bscan_result = self._bscan_service.load_bscan_if_available(
@@ -355,7 +387,7 @@ class ResultsView(QWidget):
             component_text,
         )
         self._bscan_view.set_result(bscan_result)
-        status_messages.append(bscan_result.message)
+        status_messages.append(self._localization.translate_message(bscan_result.message))
         self._status_label.setText("\n".join(status_messages))
 
     def _open_output_directory(self) -> None:
@@ -426,18 +458,39 @@ class ResultsView(QWidget):
             )
         return tuple(items)
 
-    def _build_card(self, title: str, content: QWidget) -> QFrame:
+    def _build_card(self, title_key: str, content: QWidget) -> QFrame:
         card = QFrame()
         card.setObjectName("ViewCard")
         layout = QVBoxLayout(card)
         layout.setContentsMargins(20, 18, 20, 18)
         layout.setSpacing(10)
 
-        heading = QLabel(title)
+        heading = QLabel()
         heading.setObjectName("SectionTitle")
+        self._card_headings[title_key] = heading
         layout.addWidget(heading)
         layout.addWidget(content)
         return card
+
+    def retranslate_ui(self) -> None:
+        self._title.setText(self._localization.text("results.title"))
+        self._subtitle.setText(self._localization.text("results.subtitle"))
+        self._refresh_button.setText(self._localization.text("results.action.refresh"))
+        self._open_output_dir_button.setText(
+            self._localization.text("results.action.open_output")
+        )
+        self._open_selected_file_button.setText(
+            self._localization.text("results.action.open_selected")
+        )
+        self._receiver_label.setText(self._localization.text("results.receiver"))
+        self._component_label.setText(self._localization.text("results.component"))
+        self._tabs.setTabText(0, self._localization.text("results.tab.ascan"))
+        self._tabs.setTabText(1, self._localization.text("results.tab.bscan"))
+        self._summary_panel.retranslate_ui()
+        self._trace_plot.retranslate_ui()
+        self._bscan_view.retranslate_ui()
+        for key, heading in self._card_headings.items():
+            heading.setText(self._localization.text(key))
 
 
 def _empty_bscan_result(message: str):

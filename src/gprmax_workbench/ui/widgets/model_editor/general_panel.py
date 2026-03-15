@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ....application.services.localization_service import LocalizationService
 from ....application.services.model_editor_service import ModelEditorService
 from ....application.services.validation_service import ValidationService
 from ....domain.models import Project, Vector3
@@ -30,14 +31,17 @@ class GeneralPanel(QWidget):
 
     def __init__(
         self,
+        localization: LocalizationService,
         model_editor_service: ModelEditorService,
         validation_service: ValidationService,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
+        self._localization = localization
         self._model_editor_service = model_editor_service
         self._validation_service = validation_service
         self._loading = False
+        self._current_project: Project | None = None
 
         self._project_name_edit = QLineEdit()
         self._description_edit = QPlainTextEdit()
@@ -46,7 +50,7 @@ class GeneralPanel(QWidget):
         self._model_notes_edit = QPlainTextEdit()
         self._model_notes_edit.setFixedHeight(100)
         self._tags_edit = QLineEdit()
-        self._tags_edit.setPlaceholderText("Comma-separated tags")
+        self._tags_edit.setPlaceholderText("")
 
         self._size_x = build_float_spinbox()
         self._size_y = build_float_spinbox()
@@ -55,29 +59,35 @@ class GeneralPanel(QWidget):
         self._resolution_y = build_float_spinbox(decimals=6, step=0.0001)
         self._resolution_z = build_float_spinbox(decimals=6, step=0.0001)
         self._time_window = build_float_spinbox(decimals=12, maximum=1.0, step=1e-10)
-        self._status_label = build_status_label(
-            "General settings validation will appear here."
-        )
+        self._status_label = build_status_label("")
 
-        metadata_group = QGroupBox("Project and model")
-        metadata_layout = QFormLayout(metadata_group)
-        metadata_layout.addRow("Project name", self._project_name_edit)
-        metadata_layout.addRow("Description", self._description_edit)
-        metadata_layout.addRow("Model title", self._model_title_edit)
-        metadata_layout.addRow("Model notes", self._model_notes_edit)
-        metadata_layout.addRow("Tags", self._tags_edit)
+        self._metadata_group = QGroupBox()
+        metadata_layout = QFormLayout(self._metadata_group)
+        self._project_name_label = QLabel()
+        self._description_label = QLabel()
+        self._model_title_label = QLabel()
+        self._model_notes_label = QLabel()
+        self._tags_label = QLabel()
+        metadata_layout.addRow(self._project_name_label, self._project_name_edit)
+        metadata_layout.addRow(self._description_label, self._description_edit)
+        metadata_layout.addRow(self._model_title_label, self._model_title_edit)
+        metadata_layout.addRow(self._model_notes_label, self._model_notes_edit)
+        metadata_layout.addRow(self._tags_label, self._tags_edit)
 
-        domain_group = QGroupBox("Essential gprMax setup")
-        domain_layout = QGridLayout(domain_group)
-        domain_layout.addWidget(QLabel("Domain size (m)"), 0, 0)
+        self._domain_group = QGroupBox()
+        domain_layout = QGridLayout(self._domain_group)
+        self._domain_size_label = QLabel()
+        self._resolution_label = QLabel()
+        self._time_window_label = QLabel()
+        domain_layout.addWidget(self._domain_size_label, 0, 0)
         domain_layout.addWidget(self._size_x, 0, 1)
         domain_layout.addWidget(self._size_y, 0, 2)
         domain_layout.addWidget(self._size_z, 0, 3)
-        domain_layout.addWidget(QLabel("Resolution (m)"), 1, 0)
+        domain_layout.addWidget(self._resolution_label, 1, 0)
         domain_layout.addWidget(self._resolution_x, 1, 1)
         domain_layout.addWidget(self._resolution_y, 1, 2)
         domain_layout.addWidget(self._resolution_z, 1, 3)
-        domain_layout.addWidget(QLabel("Time window (s)"), 2, 0)
+        domain_layout.addWidget(self._time_window_label, 2, 0)
         domain_layout.addWidget(self._time_window, 2, 1)
 
         axis_hint = QHBoxLayout()
@@ -90,8 +100,8 @@ class GeneralPanel(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(12)
-        layout.addWidget(metadata_group)
-        layout.addWidget(domain_group)
+        layout.addWidget(self._metadata_group)
+        layout.addWidget(self._domain_group)
         layout.addWidget(self._status_label)
         layout.addStretch(1)
 
@@ -114,9 +124,11 @@ class GeneralPanel(QWidget):
         ):
             widget.valueChanged.connect(self._apply_changes)
 
+        self.retranslate_ui()
         self.set_project(None)
 
     def set_project(self, project: Project | None) -> None:
+        self._current_project = project
         self._loading = True
         enabled = project is not None
         for widget in (
@@ -149,7 +161,7 @@ class GeneralPanel(QWidget):
             self._resolution_z.setValue(0.01)
             self._time_window.setValue(3e-9)
             self._status_label.setText(
-                "Open or create a project to edit general settings."
+                self._localization.text("editor.general.open_project")
             )
             self._loading = False
             return
@@ -176,7 +188,7 @@ class GeneralPanel(QWidget):
             "model.domain",
         )
         self._status_label.setText(
-            join_messages(messages, "General settings look consistent.")
+            join_messages(messages, self._localization.text("editor.general.valid"))
         )
 
     def _apply_changes(self) -> None:
@@ -203,3 +215,42 @@ class GeneralPanel(QWidget):
         )
         self.refresh_validation()
         self.model_changed.emit()
+
+    def retranslate_ui(self) -> None:
+        self._tags_edit.setPlaceholderText(
+            self._localization.text("editor.general.tags_placeholder")
+        )
+        self._metadata_group.setTitle(
+            self._localization.text("editor.general.metadata_group")
+        )
+        self._project_name_label.setText(
+            self._localization.text("editor.general.project_name")
+        )
+        self._description_label.setText(
+            self._localization.text("editor.general.description")
+        )
+        self._model_title_label.setText(
+            self._localization.text("editor.general.model_title")
+        )
+        self._model_notes_label.setText(
+            self._localization.text("editor.general.model_notes")
+        )
+        self._tags_label.setText(self._localization.text("editor.general.tags"))
+        self._domain_group.setTitle(
+            self._localization.text("editor.general.domain_group")
+        )
+        self._domain_size_label.setText(
+            self._localization.text("editor.general.domain_size")
+        )
+        self._resolution_label.setText(
+            self._localization.text("editor.general.resolution")
+        )
+        self._time_window_label.setText(
+            self._localization.text("editor.general.time_window")
+        )
+        if self._current_project is None:
+            self._status_label.setText(
+                self._localization.text("editor.general.open_project")
+            )
+        else:
+            self.refresh_validation()

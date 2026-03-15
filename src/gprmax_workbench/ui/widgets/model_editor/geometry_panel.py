@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ....application.services.localization_service import LocalizationService
 from ....application.services.model_editor_service import ModelEditorService
 from ....application.services.validation_service import ValidationService
 from ....domain.model_entities import EDITOR_GEOMETRY_KINDS, default_geometry
@@ -35,11 +36,13 @@ class GeometryPanel(QWidget):
 
     def __init__(
         self,
+        localization: LocalizationService,
         model_editor_service: ModelEditorService,
         validation_service: ValidationService,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
+        self._localization = localization
         self._model_editor_service = model_editor_service
         self._validation_service = validation_service
         self._loading = False
@@ -47,24 +50,23 @@ class GeometryPanel(QWidget):
         self._list = QListWidget()
         self._list.currentRowChanged.connect(self._load_current_geometry)
 
-        add_button = QPushButton("Add")
-        add_button.clicked.connect(self._add_geometry)
-        duplicate_button = QPushButton("Duplicate")
-        duplicate_button.clicked.connect(self._duplicate_geometry)
-        delete_button = QPushButton("Delete")
-        delete_button.clicked.connect(self._delete_geometry)
-        self._duplicate_button = duplicate_button
-        self._delete_button = delete_button
+        self._add_button = QPushButton()
+        self._add_button.clicked.connect(self._add_geometry)
+        self._duplicate_button = QPushButton()
+        self._duplicate_button.clicked.connect(self._duplicate_geometry)
+        self._delete_button = QPushButton()
+        self._delete_button.clicked.connect(self._delete_geometry)
 
         list_panel = QWidget()
         list_layout = QVBoxLayout(list_panel)
         list_layout.setContentsMargins(0, 0, 0, 0)
-        list_layout.addWidget(QLabel("Geometry objects"))
+        self._list_title = QLabel()
+        list_layout.addWidget(self._list_title)
         list_layout.addWidget(self._list, 1)
         buttons = QHBoxLayout()
-        buttons.addWidget(add_button)
-        buttons.addWidget(duplicate_button)
-        buttons.addWidget(delete_button)
+        buttons.addWidget(self._add_button)
+        buttons.addWidget(self._duplicate_button)
+        buttons.addWidget(self._delete_button)
         buttons.addStretch(1)
         list_layout.addLayout(buttons)
 
@@ -73,11 +75,11 @@ class GeometryPanel(QWidget):
         for kind in EDITOR_GEOMETRY_KINDS:
             self._kind_combo.addItem(kind, kind)
         self._material_combo = QComboBox()
-        self._dielectric_smoothing = QCheckBox("Use dielectric smoothing")
+        self._dielectric_smoothing = QCheckBox()
         self._notes_edit = QPlainTextEdit()
         self._notes_edit.setFixedHeight(90)
         self._tags_edit = QLineEdit()
-        self._status_label = build_status_label("Select a geometry object to edit it.")
+        self._status_label = build_status_label("")
 
         self._params_stack = QStackedWidget()
         self._box_fields = self._build_box_widget()
@@ -88,13 +90,19 @@ class GeometryPanel(QWidget):
         detail_layout = QVBoxLayout(detail_panel)
         detail_layout.setContentsMargins(0, 0, 0, 0)
         form = QFormLayout()
-        form.addRow("Label", self._label_edit)
-        form.addRow("Kind", self._kind_combo)
-        form.addRow("Material", self._material_combo)
+        self._label_label = QLabel()
+        self._kind_label = QLabel()
+        self._material_label = QLabel()
+        self._parameters_label = QLabel()
+        self._notes_label = QLabel()
+        self._tags_label = QLabel()
+        form.addRow(self._label_label, self._label_edit)
+        form.addRow(self._kind_label, self._kind_combo)
+        form.addRow(self._material_label, self._material_combo)
         form.addRow("", self._dielectric_smoothing)
-        form.addRow("Parameters", self._params_stack)
-        form.addRow("Notes", self._notes_edit)
-        form.addRow("Tags", self._tags_edit)
+        form.addRow(self._parameters_label, self._params_stack)
+        form.addRow(self._notes_label, self._notes_edit)
+        form.addRow(self._tags_label, self._tags_edit)
         detail_layout.addLayout(form)
         detail_layout.addWidget(self._status_label)
         detail_layout.addStretch(1)
@@ -117,6 +125,7 @@ class GeometryPanel(QWidget):
         for widget in self._all_parameter_spinboxes():
             widget.valueChanged.connect(self._apply_changes)
 
+        self.retranslate_ui()
         self.set_project(None)
 
     def set_project(self, project: Project | None) -> None:
@@ -157,7 +166,7 @@ class GeometryPanel(QWidget):
         self._status_label.setText(
             join_messages(
                 self._validation_service.messages_for_prefixes(*prefixes),
-                "No geometry-specific validation issues.",
+                self._localization.text("editor.geometry.valid"),
             )
         )
 
@@ -170,12 +179,18 @@ class GeometryPanel(QWidget):
         self._box_max_x = build_float_spinbox()
         self._box_max_y = build_float_spinbox()
         self._box_max_z = build_float_spinbox()
-        form.addRow("Lower-left X", self._box_min_x)
-        form.addRow("Lower-left Y", self._box_min_y)
-        form.addRow("Lower-left Z", self._box_min_z)
-        form.addRow("Upper-right X", self._box_max_x)
-        form.addRow("Upper-right Y", self._box_max_y)
-        form.addRow("Upper-right Z", self._box_max_z)
+        self._box_min_x_label = QLabel()
+        self._box_min_y_label = QLabel()
+        self._box_min_z_label = QLabel()
+        self._box_max_x_label = QLabel()
+        self._box_max_y_label = QLabel()
+        self._box_max_z_label = QLabel()
+        form.addRow(self._box_min_x_label, self._box_min_x)
+        form.addRow(self._box_min_y_label, self._box_min_y)
+        form.addRow(self._box_min_z_label, self._box_min_z)
+        form.addRow(self._box_max_x_label, self._box_max_x)
+        form.addRow(self._box_max_y_label, self._box_max_y)
+        form.addRow(self._box_max_z_label, self._box_max_z)
         self._params_stack.addWidget(widget)
         return widget
 
@@ -186,10 +201,14 @@ class GeometryPanel(QWidget):
         self._sphere_center_y = build_float_spinbox()
         self._sphere_center_z = build_float_spinbox()
         self._sphere_radius = build_float_spinbox()
-        form.addRow("Center X", self._sphere_center_x)
-        form.addRow("Center Y", self._sphere_center_y)
-        form.addRow("Center Z", self._sphere_center_z)
-        form.addRow("Radius", self._sphere_radius)
+        self._sphere_center_x_label = QLabel()
+        self._sphere_center_y_label = QLabel()
+        self._sphere_center_z_label = QLabel()
+        self._sphere_radius_label = QLabel()
+        form.addRow(self._sphere_center_x_label, self._sphere_center_x)
+        form.addRow(self._sphere_center_y_label, self._sphere_center_y)
+        form.addRow(self._sphere_center_z_label, self._sphere_center_z)
+        form.addRow(self._sphere_radius_label, self._sphere_radius)
         self._params_stack.addWidget(widget)
         return widget
 
@@ -203,13 +222,20 @@ class GeometryPanel(QWidget):
         self._cyl_end_y = build_float_spinbox()
         self._cyl_end_z = build_float_spinbox()
         self._cyl_radius = build_float_spinbox()
-        form.addRow("Start X", self._cyl_start_x)
-        form.addRow("Start Y", self._cyl_start_y)
-        form.addRow("Start Z", self._cyl_start_z)
-        form.addRow("End X", self._cyl_end_x)
-        form.addRow("End Y", self._cyl_end_y)
-        form.addRow("End Z", self._cyl_end_z)
-        form.addRow("Radius", self._cyl_radius)
+        self._cyl_start_x_label = QLabel()
+        self._cyl_start_y_label = QLabel()
+        self._cyl_start_z_label = QLabel()
+        self._cyl_end_x_label = QLabel()
+        self._cyl_end_y_label = QLabel()
+        self._cyl_end_z_label = QLabel()
+        self._cyl_radius_label = QLabel()
+        form.addRow(self._cyl_start_x_label, self._cyl_start_x)
+        form.addRow(self._cyl_start_y_label, self._cyl_start_y)
+        form.addRow(self._cyl_start_z_label, self._cyl_start_z)
+        form.addRow(self._cyl_end_x_label, self._cyl_end_x)
+        form.addRow(self._cyl_end_y_label, self._cyl_end_y)
+        form.addRow(self._cyl_end_z_label, self._cyl_end_z)
+        form.addRow(self._cyl_radius_label, self._cyl_radius)
         self._params_stack.addWidget(widget)
         return widget
 
@@ -412,10 +438,52 @@ class GeometryPanel(QWidget):
         self.model_changed.emit()
 
     def _item_text(self, geometry: GeometryPrimitive) -> str:
-        material = geometry.material_ids[0] if geometry.material_ids else "no material"
+        material = (
+            geometry.material_ids[0]
+            if geometry.material_ids
+            else self._localization.text("editor.geometry.no_material")
+        )
         return f"{geometry.label or geometry.kind} | {geometry.kind} | {material}"
 
     def _update_buttons(self) -> None:
         enabled = self._list.currentRow() >= 0
         self._duplicate_button.setEnabled(enabled)
         self._delete_button.setEnabled(enabled)
+
+    def retranslate_ui(self) -> None:
+        self._list_title.setText(self._localization.text("editor.geometry.list_title"))
+        self._add_button.setText(self._localization.text("common.add"))
+        self._duplicate_button.setText(self._localization.text("common.duplicate"))
+        self._delete_button.setText(self._localization.text("common.delete"))
+        self._label_label.setText(self._localization.text("editor.geometry.label"))
+        self._kind_label.setText(self._localization.text("editor.geometry.kind"))
+        self._material_label.setText(self._localization.text("editor.geometry.material"))
+        self._dielectric_smoothing.setText(
+            self._localization.text("editor.geometry.smoothing")
+        )
+        self._parameters_label.setText(
+            self._localization.text("editor.geometry.parameters")
+        )
+        self._notes_label.setText(self._localization.text("editor.geometry.notes"))
+        self._tags_label.setText(self._localization.text("editor.geometry.tags"))
+        self._box_min_x_label.setText(self._localization.text("editor.geometry.box.lower_left_x"))
+        self._box_min_y_label.setText(self._localization.text("editor.geometry.box.lower_left_y"))
+        self._box_min_z_label.setText(self._localization.text("editor.geometry.box.lower_left_z"))
+        self._box_max_x_label.setText(self._localization.text("editor.geometry.box.upper_right_x"))
+        self._box_max_y_label.setText(self._localization.text("editor.geometry.box.upper_right_y"))
+        self._box_max_z_label.setText(self._localization.text("editor.geometry.box.upper_right_z"))
+        self._sphere_center_x_label.setText(self._localization.text("editor.geometry.sphere.center_x"))
+        self._sphere_center_y_label.setText(self._localization.text("editor.geometry.sphere.center_y"))
+        self._sphere_center_z_label.setText(self._localization.text("editor.geometry.sphere.center_z"))
+        self._sphere_radius_label.setText(self._localization.text("editor.geometry.radius"))
+        self._cyl_start_x_label.setText(self._localization.text("editor.geometry.cylinder.start_x"))
+        self._cyl_start_y_label.setText(self._localization.text("editor.geometry.cylinder.start_y"))
+        self._cyl_start_z_label.setText(self._localization.text("editor.geometry.cylinder.start_z"))
+        self._cyl_end_x_label.setText(self._localization.text("editor.geometry.cylinder.end_x"))
+        self._cyl_end_y_label.setText(self._localization.text("editor.geometry.cylinder.end_y"))
+        self._cyl_end_z_label.setText(self._localization.text("editor.geometry.cylinder.end_z"))
+        self._cyl_radius_label.setText(self._localization.text("editor.geometry.radius"))
+        if self._list.currentRow() < 0:
+            self._status_label.setText(self._localization.text("editor.geometry.select"))
+        else:
+            self.refresh_validation()
