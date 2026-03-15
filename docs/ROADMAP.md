@@ -32,11 +32,13 @@ Exit criteria:
 
 Deliverables:
 
-- project manifest format;
-- create/open/save flows;
-- recent projects;
+- versioned project manifest format;
+- create/open/save flows connected to the UI;
+- recent projects with persisted metadata;
 - project directory scaffolding;
-- settings persistence.
+- typed essential project model aligned with `gprMax` docs;
+- project validation for persistence-stage rules;
+- application settings persistence.
 
 Exit criteria:
 

@@ -140,6 +140,61 @@ Notes:
 - `runs/` stores immutable execution artifacts and logs;
 - `results/` can contain indexed or curated outputs exposed by viewers.
 
+## Stage 2 project model
+
+The persisted project manifest is intentionally aligned to `gprMax` command families from the official documentation instead of arbitrary GUI-only groupings.
+
+Current typed sections:
+
+- `metadata`: project identity and timestamps;
+- `model.domain`: domain size, spatial resolution, time window, PML cells;
+- `model.materials`: material definitions;
+- `model.waveforms`: waveform definitions;
+- `model.sources`: source definitions with waveform references;
+- `model.receivers`: receiver definitions;
+- `model.geometry`: ordered geometry command placeholders with parameters and material references;
+- `model.geometry_views`: geometry-view requests;
+- `advanced.raw_input_overrides`: raw text hooks for later advanced mode.
+
+This gives us a stable persistence contract now without pretending that Stage 2 already supports the full `gprMax` editor surface.
+
+## Project file format
+
+Project manifest file: `project.gprwb.json`
+
+Format shape:
+
+```json
+{
+  "schema": {
+    "name": "gprmax-workbench-project",
+    "version": 1
+  },
+  "metadata": {},
+  "model": {
+    "title": "",
+    "domain": {},
+    "materials": [],
+    "waveforms": [],
+    "sources": [],
+    "receivers": [],
+    "geometry": [],
+    "geometry_views": [],
+    "python_blocks": []
+  },
+  "advanced": {
+    "raw_input_overrides": []
+  }
+}
+```
+
+Rationale:
+
+- human-readable and diff-friendly for open-source work;
+- versioned schema from the start;
+- clear separation between editable project state and generated/run artifacts;
+- enough structure to drive Stage 3 generation and validation without locking us into a fake full editor too early.
+
 ## UI shell
 
 The Stage 1 shell is organized around five top-level workspaces:

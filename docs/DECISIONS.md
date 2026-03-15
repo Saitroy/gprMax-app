@@ -54,3 +54,14 @@ Rationale:
 - users need both clean editable project data and reproducible run history;
 - generated `.in` files and run logs should be inspectable and preserved;
 - this supports transparency for both novice and advanced users.
+
+## 2026-03-15: Use a versioned JSON project manifest aligned with `gprMax` command families
+
+Status: accepted
+
+Rationale:
+
+- Stage 2 needs stable persistence before a full editor exists;
+- the data model should reflect `gprMax` concepts such as domain, materials, waveforms, sources, receivers, and geometry;
+- JSON keeps the file easy to diff, inspect, and test;
+- ordered geometry entries preserve future command-generation order without forcing premature GUI abstractions.

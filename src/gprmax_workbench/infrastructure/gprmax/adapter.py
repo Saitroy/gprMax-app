@@ -51,6 +51,9 @@ class SubprocessGprMaxAdapter:
     def describe_runtime(self) -> str:
         return f"{self._python_executable} -m {self._module_name}"
 
+    def configure_runtime(self, python_executable: str | None) -> None:
+        self._python_executable = python_executable or sys.executable
+
     def launch(self, request: GprMaxRunRequest) -> GprMaxProcessHandle:
         command = self.build_command(request)
         process = subprocess.Popen(

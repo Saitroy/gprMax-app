@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from pathlib import Path
+from datetime import UTC, datetime
 
+from ...domain.models import Project, RecentProject
 from ...infrastructure.settings import AppSettings, SettingsManager
 
 
@@ -16,17 +17,34 @@ class SettingsService:
     def settings(self) -> AppSettings:
         return self._settings
 
-    def recent_projects(self) -> list[Path]:
+    def recent_projects(self) -> list[RecentProject]:
         return list(self._settings.recent_projects)
 
-    def remember_project(self, project_root: Path) -> None:
-        normalized = project_root.expanduser().resolve()
-        recent_projects = [normalized]
+    def remember_project(self, project: Project) -> None:
+        normalized = project.root.expanduser().resolve()
+        entry = RecentProject(
+            path=normalized,
+            name=project.metadata.name,
+            last_opened_at=datetime.now(tz=UTC),
+        )
+        recent_projects = [entry]
         recent_projects.extend(
-            path for path in self._settings.recent_projects if path != normalized
+            item for item in self._settings.recent_projects if item.path != normalized
         )
         self._settings.recent_projects = recent_projects[:10]
         self._settings_manager.save(self._settings)
+
+    def update_preferences(
+        self,
+        *,
+        advanced_mode: bool,
+        gprmax_python_executable: str | None,
+    ) -> AppSettings:
+        runtime = (gprmax_python_executable or "").strip() or None
+        self._settings.advanced_mode = advanced_mode
+        self._settings.gprmax_python_executable = runtime
+        self._settings_manager.save(self._settings)
+        return self._settings
 
     def runtime_summary(self) -> dict[str, str]:
         return {
@@ -34,4 +52,5 @@ class SettingsService:
             "Logs directory": str(self._settings_manager.logs_dir),
             "gprMax runtime": self._settings.gprmax_python_executable or "python",
             "Advanced mode": "Enabled" if self._settings.advanced_mode else "Disabled",
+            "Recent projects": str(len(self._settings.recent_projects)),
         }

@@ -4,12 +4,18 @@ import json
 import os
 import platform
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
+
+from ..domain.models import RecentProject
+
+SETTINGS_SCHEMA_NAME = "gprmax-workbench-settings"
+SETTINGS_SCHEMA_VERSION = 1
 
 
 @dataclass(slots=True)
 class AppSettings:
-    recent_projects: list[Path] = field(default_factory=list)
+    recent_projects: list[RecentProject] = field(default_factory=list)
     advanced_mode: bool = False
     gprmax_python_executable: str | None = None
 
@@ -40,9 +46,9 @@ class SettingsManager:
 
         payload = json.loads(self.settings_path.read_text(encoding="utf-8"))
         recent_projects = [
-            Path(item).expanduser()
+            _recent_project_from_payload(item)
             for item in payload.get("recent_projects", [])
-            if isinstance(item, str)
+            if isinstance(item, dict)
         ]
         return AppSettings(
             recent_projects=recent_projects,
@@ -52,7 +58,13 @@ class SettingsManager:
 
     def save(self, settings: AppSettings) -> None:
         payload = {
-            "recent_projects": [str(path) for path in settings.recent_projects],
+            "schema": {
+                "name": SETTINGS_SCHEMA_NAME,
+                "version": SETTINGS_SCHEMA_VERSION,
+            },
+            "recent_projects": [
+                _recent_project_to_payload(item) for item in settings.recent_projects
+            ],
             "advanced_mode": settings.advanced_mode,
             "gprmax_python_executable": settings.gprmax_python_executable,
         }
@@ -70,3 +82,19 @@ def default_settings_dir(app_name: str) -> Path:
     if system == "Darwin":
         return Path.home() / "Library" / "Application Support" / app_name
     return Path(os.getenv("XDG_CONFIG_HOME", Path.home() / ".config")) / app_name
+
+
+def _recent_project_to_payload(project: RecentProject) -> dict[str, str]:
+    return {
+        "path": str(project.path),
+        "name": project.name,
+        "last_opened_at": project.last_opened_at.isoformat(),
+    }
+
+
+def _recent_project_from_payload(payload: dict[str, str]) -> RecentProject:
+    return RecentProject(
+        path=Path(payload["path"]).expanduser(),
+        name=payload.get("name", ""),
+        last_opened_at=datetime.fromisoformat(payload["last_opened_at"]),
+    )

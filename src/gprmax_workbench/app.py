@@ -11,6 +11,7 @@ from .application.services.project_service import ProjectService
 from .application.services.results_service import ResultsService
 from .application.services.settings_service import SettingsService
 from .application.services.simulation_service import SimulationService
+from .application.services.workspace_service import WorkspaceService
 from .application.state import AppState
 from .infrastructure.gprmax.adapter import SubprocessGprMaxAdapter
 from .infrastructure.logging import setup_logging
@@ -34,6 +35,7 @@ class ApplicationContext:
     simulation_service: SimulationService
     results_service: ResultsService
     state: AppState
+    workspace_service: WorkspaceService
 
 
 def build_context() -> ApplicationContext:
@@ -52,6 +54,11 @@ def build_context() -> ApplicationContext:
     simulation_service = SimulationService(adapter=gprmax_adapter)
     results_service = ResultsService()
     state = AppState(recent_projects=settings_service.recent_projects())
+    workspace_service = WorkspaceService(
+        project_service=project_service,
+        settings_service=settings_service,
+        state=state,
+    )
 
     LOGGER.debug("Application context created")
 
@@ -64,6 +71,7 @@ def build_context() -> ApplicationContext:
         simulation_service=simulation_service,
         results_service=results_service,
         state=state,
+        workspace_service=workspace_service,
     )
 
 
@@ -77,12 +85,20 @@ def create_application() -> QApplication:
 
 def run(initial_project: str | None = None) -> int:
     context = build_context()
-    app = create_application()
-    main_window = MainWindow(context=context)
 
     if initial_project:
         context.state.startup_project = Path(initial_project).expanduser().resolve()
         LOGGER.info("Startup project requested: %s", context.state.startup_project)
+        try:
+            context.workspace_service.open_project(context.state.startup_project)
+        except Exception:
+            LOGGER.exception(
+                "Failed to open startup project at %s",
+                context.state.startup_project,
+            )
+
+    app = create_application()
+    main_window = MainWindow(context=context)
 
     main_window.show()
     return app.exec()
