@@ -1,5 +1,336 @@
 # Architecture
 
+## Русский
+
+## Продуктовая рамка
+
+`GPRMax Workbench` — desktop-приложение, которое оборачивает `gprMax` в guided UI, project system, run management и results access. Это не форк `gprMax` и не переписывание `gprMax-Designer`.
+
+Desktop-приложение владеет:
+
+- жизненным циклом проекта;
+- пользовательскими формами и workflow;
+- validation и defaults;
+- генерацией `gprMax` input artifacts;
+- orchestration симуляций и logging;
+- discovery и viewing результатов.
+
+`gprMax` остаётся вычислительным ядром и функциональным источником правды.
+
+## Архитектурные принципы
+
+- многослойная структура с явными границами;
+- UI зависит от application services, а не от внутренних модулей `gprMax`;
+- интеграция с `gprMax` изолирована за adapters;
+- project metadata хранится отдельно от generated/executed artifacts;
+- длинные операции представлены как jobs и не выполняются в UI thread;
+- сгенерированный `gprMax` input file является прозрачным артефактом, а не скрытой внутренней деталью.
+
+## Слои
+
+### `ui/`
+
+Ответственность:
+
+- окна, dialogs, views, композиция интерфейса;
+- navigation, actions, empty/error/loading states;
+- presentation models для widgets и forms.
+
+Правила:
+
+- слой не должен напрямую запускать `gprMax`;
+- слой не должен знать process arguments и filesystem layouts за пределами данных, предоставленных services.
+
+### `application/`
+
+Ответственность:
+
+- orchestration use cases;
+- application/session state;
+- coordination жизненного цикла проекта;
+- preparation симуляций и coordination результатов.
+
+Правила:
+
+- может координировать несколько infrastructure services;
+- должен выражать product workflows через стабильные интерфейсы, которые потребляет UI.
+
+### `domain/`
+
+Ответственность:
+
+- core entities, например project, run record и result set;
+- validation rules и business constraints;
+- стабильные концепции, не завязанные на Qt или process execution.
+
+### `infrastructure/`
+
+Ответственность:
+
+- persistence проекта;
+- storage настроек;
+- bootstrap logging;
+- filesystem interactions;
+- реализации adapters для `gprMax`.
+
+### `jobs/`
+
+Ответственность:
+
+- background job contracts и job state;
+- cancellation primitives;
+- интеграция с будущей execution queue.
+
+## Поток данных
+
+1. Пользователь редактирует project/model data в GUI.
+2. UI отправляет команды в application services.
+3. Application services валидируют данные и сохраняют project state.
+4. Input-generation service сериализует project state в `gprMax` input artifact.
+5. Simulation service создаёт typed run configuration и передаёт её в `gprMax` adapter.
+6. Subprocess runner запускает `gprMax`, стримит stdout/stderr и пишет run artifacts.
+7. Run repository сохраняет metadata/history и возвращает их обратно в UI.
+8. Results services индексируют outputs и отдают их в UI.
+
+## Foundation Stage 4: Model Editor
+
+Текущий model editor намеренно использует form-first architecture, а не canvas/CAD scene builder.
+
+Почему:
+
+- это лучше соответствует зрелости current project model и input generation;
+- такой интерфейс понятнее для непограммистов;
+- он даёт стабильный путь к validation, persistence и preview;
+- это не заставляет нас слишком рано фиксировать слабую visual scene model в долгосрочной архитектуре.
+
+Верхнеуровневая композиция editor'а:
+
+- summary/header card с project location и validation state;
+- вкладки для general settings, materials, waveforms, sources, receivers, geometry и input preview;
+- list-detail editors внутри entity tabs;
+- application-layer mutation services, которые обновляют `AppState` и validation state.
+
+Editor сам не генерирует input lines и не строит subprocess commands. Он только редактирует typed project model и обращается к dedicated services за validation и preview.
+
+## Foundation Stage 5: Results Viewer
+
+Results layer организован вокруг трёх явных обязанностей:
+
+- discovery artifacts из run folders;
+- чтение HDF5 results через выделенную reader abstraction;
+- UI-facing services для summaries, A-scan access и bounded B-scan building.
+
+Текущие модули:
+
+- `ResultArtifactLocator`: находит `.out` files и другие visualisation artifacts внутри run;
+- `Hdf5ResultsReader`: читает HDF5 result files `gprMax` и отдаёт typed metadata/traces;
+- `ResultRepository`: read-oriented repository, объединяющий run history и HDF5 access;
+- `ResultsService`: владеет run/result selection state внутри viewer;
+- `TraceService`: грузит metadata, receivers, components и A-scans;
+- `BscanService`: строит bounded B-scan previews из merged или stacked trace files.
+
+UI никогда не работает с HDF5 internals и filesystem details напрямую.
+
+## Стратегия интеграции с `gprMax`
+
+### Рекомендуемый дефолт: subprocess-first
+
+Предпочтительный режим интеграции — запуск `gprMax` как внешнего процесса, обычно так:
+
+```text
+python -m gprMax <input-file> [options]
+```
+
+Почему это базовый вариант:
+
+- он соответствует публичному CLI-контракту `gprMax`;
+- он слабее связан с внутренней модульной структурой;
+- он естественно отдаёт stdout/stderr для логов;
+- он оставляет GPU/MPI/runtime concerns вне GUI process;
+- он проще для поддержки на будущих версиях `gprMax`.
+
+### Вторичный режим: optional hybrid integration
+
+Некоторые будущие функции могут выиграть от аккуратных direct imports публичного Python API `gprMax`, но только за тем же adapter boundary и только там, где import path достаточно стабилен.
+
+UI не должен знать, пришёл run из subprocess mode или из будущей in-process реализации.
+
+## Foundation Stage 3: execution layer
+
+Текущий runner намеренно ограничен minimum viable, но расширяемым subset.
+
+Сейчас поддерживается напрямую:
+
+- essential domain commands;
+- materials;
+- waveforms;
+- receivers;
+- source subset: `hertzian_dipole`, `magnetic_dipole`, `voltage_source`;
+- geometry subset: `box`, `sphere`, `cylinder`;
+- `geometry_view`;
+- geometry-only execution mode;
+- wiring GPU flags;
+- future hooks для `-mpi`, `--mpi-no-spawn`, `-n`, `-restart`, `--write-processed`.
+
+Сознательно отложено:
+
+- широкий coverage object commands;
+- полноценная HPC orchestration;
+- structured results parsing;
+- advanced recovery/retry policies;
+- polished expert run configuration UX.
+
+## Концепции результатов Stage 5
+
+Results viewer MVP построен вокруг узкого, но полезного subset result concepts `gprMax`:
+
+- `.out` HDF5 files как основной result artifact;
+- receiver-centric output components;
+- A-scan как default embedded viewing workflow;
+- B-scan как merged-output view или controlled stacked-trace preview;
+- non-HDF5 visualisation artifacts, например geometry/snapshot files, пока только как external-open artifacts.
+
+Сознательно отложено:
+
+- полноценные signal-processing suites;
+- embedded 3D geometry/snapshot viewers;
+- сложные multi-run dashboards;
+- прямая интеграция со всеми plotting/post-processing utilities `gprMax`.
+
+## Структура run artifacts
+
+Stage 3 использует такую структуру run folders:
+
+```text
+project/
+  runs/
+    20260315-153000-ab12cd34/
+      input/
+        simulation.in
+      logs/
+        stdout.log
+        stderr.log
+        combined.log
+      output/
+      metadata.json
+```
+
+Обоснование:
+
+- одна неизменяемая папка на каждый run;
+- явное разделение input snapshot, logs и outputs;
+- metadata остаётся человекочитаемой и тестируемой;
+- будущие results viewers могут работать с `runs/<run-id>/output` без догадок.
+
+## Layout проекта на диске
+
+Рекомендуемый project folder layout:
+
+```text
+MyProject/
+  project.gprwb.json
+  generated/
+    current.in
+  runs/
+    20260315-153000/
+      command.json
+      stdout.log
+      stderr.log
+      generated.in
+      output/
+  results/
+  assets/
+```
+
+Примечания:
+
+- `project.gprwb.json` хранит editor-facing project state;
+- `generated/` хранит reproducible generated input files;
+- `runs/` хранит immutable execution artifacts и logs;
+- `results/` может хранить indexed/curated outputs, доступные viewer'ам.
+
+## Project model Stage 2
+
+Persisted project manifest намеренно выровнен по command families `gprMax` из официальной документации, а не по произвольным GUI-only groupings.
+
+Текущие typed sections:
+
+- `metadata`: identity проекта и timestamps;
+- `model.domain`: domain size, spatial resolution, time window, PML cells;
+- `model.notes` и `model.tags`: editor-facing metadata для guided workflows;
+- `model.materials`: material definitions;
+- `model.waveforms`: waveform definitions;
+- `model.sources`: source definitions с waveform references;
+- `model.receivers`: receiver definitions;
+- `model.geometry`: ordered geometry primitives с parameters, material references, labels, notes, tags и dielectric-smoothing flag;
+- `model.geometry_views`: requests на geometry view;
+- `advanced.raw_input_overrides`: raw text hooks для будущего advanced mode.
+
+Это даёт стабильный persistence contract уже сейчас, не притворяясь, что Stage 2 уже покрывает полный editor surface `gprMax`.
+
+## Формат project file
+
+Project manifest file: `project.gprwb.json`
+
+Форма формата:
+
+```json
+{
+  "schema": {
+    "name": "gprmax-workbench-project",
+    "version": 1
+  },
+  "metadata": {},
+  "model": {
+    "title": "",
+    "notes": "",
+    "tags": [],
+    "domain": {},
+    "materials": [],
+    "waveforms": [],
+    "sources": [],
+    "receivers": [],
+    "geometry": [],
+    "geometry_views": [],
+    "python_blocks": []
+  },
+  "advanced": {
+    "raw_input_overrides": []
+  }
+}
+```
+
+Обоснование:
+
+- формат человекочитаемый и удобный для diff в open-source работе;
+- schema versioned с самого начала;
+- есть явное разделение между editable project state и generated/run artifacts;
+- структуры достаточно, чтобы питать Stage 3 generation и validation, не загоняя проект в fake full editor слишком рано.
+
+## Editor services Stage 4
+
+Stage 4 добавляет три application-level service:
+
+- `ModelEditorService`: владеет in-memory CRUD operations для model entities и помечает current project как dirty;
+- `ValidationService`: отдаёт filtered validation results для editor sections и summary banners;
+- `InputPreviewService`: строит/export'ит previews из current project, не трогая run lifecycle.
+
+Это делает UI достаточно тонким и заменяемым, но при этом даёт editor'у быстрый feedback.
+
+## UI shell
+
+Stage 1 shell организован вокруг пяти top-level workspaces:
+
+- Welcome / Project Manager
+- Model Editor
+- Simulation Runner
+- Results Viewer
+- Settings
+
+Это даёт стабильную navigation model, не фиксируя внутреннюю architecture editor'а слишком рано.
+
+## English
+
 ## Product framing
 
 `GPRMax Workbench` is a desktop application that wraps `gprMax` with a guided UI, project system, run management, and results access. It is not a fork of `gprMax` and not a rewrite of `gprMax-Designer`.
@@ -110,6 +441,25 @@ Top-level editor composition:
 
 The editor does not generate input lines or subprocess commands itself. It only edits the typed project model and asks dedicated services for validation and preview.
 
+## Stage 5 results viewer foundation
+
+The results layer is organized around three explicit responsibilities:
+
+- artifact discovery from run folders;
+- HDF5-backed result reading behind a dedicated reader abstraction;
+- UI-facing services for summaries, A-scan access, and bounded B-scan building.
+
+Current modules:
+
+- `ResultArtifactLocator`: finds `.out` files and other visualisation artifacts in a run;
+- `Hdf5ResultsReader`: reads `gprMax` HDF5 result files and exposes typed metadata/traces;
+- `ResultRepository`: a read-oriented repository that combines run history and HDF5 access;
+- `ResultsService`: owns run/result selection state for the viewer;
+- `TraceService`: loads metadata, receivers, components, and A-scans;
+- `BscanService`: builds bounded B-scan previews from merged or stacked trace files.
+
+The UI never talks to HDF5 or filesystem internals directly.
+
 ## `gprMax` integration strategy
 
 ### Recommended default: subprocess-first
@@ -158,6 +508,23 @@ Deferred deliberately:
 - structured results parsing;
 - advanced recovery/retry policies;
 - a polished expert run configuration UX.
+
+## Stage 5 result concepts
+
+The results viewer MVP is built around a narrow but high-value subset of `gprMax` result concepts:
+
+- `.out` HDF5 files as the primary result artifact;
+- receiver-centric output components;
+- A-scan as the default embedded viewing workflow;
+- B-scan as either a merged-output view or a controlled stacked-trace preview;
+- non-HDF5 visualisation artifacts such as geometry/snapshot files exposed as external-open artifacts for now.
+
+Deferred deliberately:
+
+- full signal-processing suites;
+- embedded 3D geometry/snapshot viewers;
+- complex multi-run dashboards;
+- direct integration with every `gprMax` plotting/post-processing utility.
 
 ## Run artifact layout
 

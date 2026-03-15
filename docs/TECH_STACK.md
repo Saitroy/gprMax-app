@@ -1,5 +1,77 @@
 # Tech Stack
 
+## Русский
+
+## Core stack
+
+- Python
+- PySide6
+- Qt6 ecosystem
+
+Этот стек является базовым для первой release line.
+
+## Почему PySide6
+
+- native desktop capability с mature widget toolkit;
+- сильная поддержка Windows, которая является initial priority platform;
+- хороший долгосрочный fit для multi-panel scientific tooling;
+- Qt threading, models и dockable UI patterns хорошо подходят продукту;
+- позволяет избежать packaging/runtime complexity web-shell stack'ов.
+
+## Почему не строить поверх `gprMax-Designer`
+
+`gprMax-Designer` полезен как historical UX reference, но не должен быть архитектурной базой нового проекта. Новому приложению нужны:
+
+- layered architecture;
+- typed Python modules с более ясными boundaries;
+- modern packaging и maintainability;
+- стабильный adapter boundary вокруг `gprMax`.
+
+## Интеграция с `gprMax`
+
+### Базовая стратегия
+
+Использовать `subprocess-first` adapter, который запускает `gprMax` через его CLI contract.
+
+Типовая точка запуска:
+
+```text
+python -m gprMax <input-file> [options]
+```
+
+### Почему это предпочтительно
+
+- слабее coupling с internal package structure;
+- проще и прозрачнее capture logs и exit codes;
+- лучше изолированы heavy runtime concerns;
+- проще story совместимости между релизами `gprMax`.
+
+### Hybrid path позже
+
+Если некоторым возможностям реально поможет stable Python API, их можно добавить за тем же adapter interface. UI и application layers при этом должны продолжать говорить с абстрактным `GprMaxAdapter`.
+
+## Background work
+
+На Stage 1 job primitives намеренно простые. По мере роста run orchestration background execution должен опираться на Qt-friendly workers для UI integration, но при этом job specifications должны оставаться независимыми от view layer.
+
+## Persistence
+
+- project manifest: JSON в корне проекта;
+- application settings: JSON в user application data;
+- run artifacts: отдельные per-run folders с logs и generated input snapshots.
+
+## Packaging strategy
+
+Начальная рекомендация:
+
+- application bundling: `PyInstaller`;
+- Windows installer: `Inno Setup` или `WiX`, при этом `Inno Setup` предпочтителен первым ради более быстрой итерации;
+- release focus: сначала Windows, затем cross-platform.
+
+Это прагматичный путь для MVP. Если startup time или binary size станут серьёзной проблемой, позже можно переоценить `Nuitka` на основе реальных profiling data.
+
+## English
+
 ## Core stack
 
 - Python

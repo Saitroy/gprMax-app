@@ -66,7 +66,11 @@ class MainWindow(QMainWindow):
         self._simulation_view = SimulationView(
             runtime_label=context.simulation_service.runtime_label()
         )
-        self._results_view = ResultsView()
+        self._results_view = ResultsView(
+            results_service=context.results_service,
+            trace_service=context.trace_service,
+            bscan_service=context.bscan_service,
+        )
         self._settings_view = SettingsView()
         self._pages = self._build_pages()
 
@@ -100,7 +104,7 @@ class MainWindow(QMainWindow):
             ),
             PageSpec(
                 title="Results",
-                description="Run outputs and viewer entrypoints.",
+                description="Run-centric results browser with metadata, A-scan plots, and bounded B-scan previews.",
                 widget=self._results_view,
             ),
             PageSpec(
@@ -162,7 +166,7 @@ class MainWindow(QMainWindow):
 
         self.setCentralWidget(central)
         self.statusBar().showMessage(
-            "Stage 4 foundation ready for guided model editing and Stage 3 execution flow."
+            "Stage 5 foundation ready for model editing, execution, and result inspection."
         )
 
     def refresh_views(self) -> None:
@@ -195,6 +199,7 @@ class MainWindow(QMainWindow):
             settings=settings_service.settings,
             summary=settings_service.runtime_summary(),
         )
+        self._results_view.refresh_project(project.root if project is not None else None)
         self._simulation_view.set_runtime_label(
             self._context.simulation_service.runtime_label()
         )
@@ -512,6 +517,7 @@ class MainWindow(QMainWindow):
         if project is None:
             self._simulation_view.set_run_state(None, [])
             self._simulation_view.set_log_output("")
+            self._results_view.refresh_project(None)
             return
 
         state = self._context.workspace_service.state
@@ -522,6 +528,7 @@ class MainWindow(QMainWindow):
 
         self._simulation_view.set_run_state(active_run, history)
         self._simulation_view.set_log_output(log_snapshot.combined_text)
+        self._results_view.refresh_project(project.root)
         self._update_window_title()
 
     def _resolve_target_run(
@@ -558,5 +565,5 @@ class MainWindow(QMainWindow):
         QMessageBox.information(
             self,
             "About GPRMax Workbench",
-            "Stage 4 foundation: form-based model editor MVP on top of Stage 3 input generation and subprocess execution.",
+            "Stage 5 foundation: model editor MVP, subprocess execution, run artifacts, and results inspection with A-scan/B-scan previews.",
         )

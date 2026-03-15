@@ -1,5 +1,135 @@
 # Roadmap
 
+## Русский
+
+## Stage 0: Discovery и архитектура
+
+Поставки:
+
+- проанализировать `gprMax` и исторический `gprMax-Designer`;
+- определить архитектуру, структуру проекта и начальные technical decisions;
+- задокументировать product direction и engineering direction.
+
+Критерии выхода:
+
+- архитектура и integration strategy задокументированы;
+- initial decisions сформулированы явно и доступны для review.
+
+## Stage 1: Skeleton и app shell
+
+Поставки:
+
+- layout репозитория и packaging metadata;
+- запускаемая PySide6 application shell;
+- главное окно со стабильной top-level navigation;
+- placeholder views для welcome, model editor, runs, results и settings;
+- application context, logging bootstrap и service skeletons.
+
+Критерии выхода:
+
+- desktop app открывается и позволяет переключаться между screens;
+- codebase имеет чистую baseline для итеративной разработки.
+
+## Stage 2: Project model, persistence и settings
+
+Поставки:
+
+- versioned project manifest format;
+- flows create/open/save, подключённые к UI;
+- recent projects с persisted metadata;
+- scaffolding структуры директорий проекта;
+- typed essential project model, выровненная с docs `gprMax`;
+- validation правил уровня persistence;
+- persistence application settings.
+
+Критерии выхода:
+
+- пользователь может создавать и повторно открывать проекты без ручной работы с raw files.
+
+## Stage 3: `gprMax` integration layer и runner
+
+Поставки:
+
+- subprocess adapter для `gprMax`;
+- input generation service и writer;
+- run configuration model;
+- stdout/stderr capture с live UI updates;
+- run history и per-run metadata manifests;
+- validation перед запуском;
+- failure reporting и cancellation.
+
+Критерии выхода:
+
+- проект может запускать реальный `gprMax` run из GUI и сохранять artifacts.
+
+## Stage 4: Model Editor MVP
+
+Поставки:
+
+- guided forms для core model parameters;
+- materials, waveforms, sources, receivers и focused geometry subset;
+- validation и sensible defaults;
+- generated input preview;
+- wiring с project state, persistence и existing simulation runner.
+
+Критерии выхода:
+
+- непограммист может собрать базовую модель без ручного написания input-файла.
+
+## Stage 5: Results Viewer MVP
+
+Поставки:
+
+- run-centric results browser по проекту и run;
+- HDF5 result reader layer;
+- metadata summary и visibility artifacts;
+- A-scan plotting;
+- bounded B-scan preview flow;
+- открытие result folder и artifacts из UI.
+
+Критерии выхода:
+
+- пользователь может inspect run outputs и понять, где именно записаны artifacts.
+
+## Stage 6: Advanced mode
+
+Поставки:
+
+- raw input editor и diff/preview с generated input;
+- advanced run options;
+- более глубокие post-processing и power-user results workflows;
+- expert settings без деградации guided flow.
+
+Критерии выхода:
+
+- power users сохраняют широкий контроль над возможностями `gprMax`.
+
+## Stage 7: Packaging и installer
+
+Поставки:
+
+- standalone build pipeline;
+- Windows installer;
+- первая стратегия bundling/runtime management для `gprMax`.
+
+Критерии выхода:
+
+- новый пользователь может установить и открыть приложение без ручной настройки Python.
+
+## Stage 8: Documentation, tests и release preparation
+
+Поставки:
+
+- developer docs и contributor guidance;
+- расширенные unit/integration tests;
+- release checklist и baseline CI.
+
+Критерии выхода:
+
+- проект готов к внешним контрибьюторам и early adopters.
+
+## English
+
 ## Stage 0: Discovery and architecture
 
 Deliverables:
@@ -78,9 +208,12 @@ Exit criteria:
 
 Deliverables:
 
-- results browser by project and run;
-- open result folder from UI;
-- initial plots/metadata views for the most common outputs.
+- run-centric results browser by project and run;
+- HDF5 result reader layer;
+- metadata summary and artifact visibility;
+- A-scan plotting;
+- bounded B-scan preview flow;
+- open result folder and artifacts from UI.
 
 Exit criteria:
 
@@ -92,6 +225,7 @@ Deliverables:
 
 - raw input editor and diff/preview with generated input;
 - advanced run options;
+- deeper post-processing and power-user results workflows;
 - expert settings without degrading the guided flow.
 
 Exit criteria:

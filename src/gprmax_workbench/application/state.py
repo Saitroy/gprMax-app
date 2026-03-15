@@ -6,6 +6,7 @@ from pathlib import Path
 from ..domain.models import Project, RecentProject
 from ..domain.simulation import SimulationRunRecord
 from ..domain.validation import ValidationResult
+from ..domain.viewer_state import ResultsViewerState
 
 
 @dataclass(slots=True)
@@ -17,3 +18,4 @@ class AppState:
     run_history: list[SimulationRunRecord] = field(default_factory=list)
     active_run: SimulationRunRecord | None = None
     startup_project: Path | None = None
+    results_viewer: ResultsViewerState = field(default_factory=ResultsViewerState)

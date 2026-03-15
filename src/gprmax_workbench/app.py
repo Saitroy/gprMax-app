@@ -9,12 +9,14 @@ from PySide6.QtWidgets import QApplication
 
 from .application.services.input_preview_service import InputPreviewService
 from .application.services.input_generation_service import InputGenerationService
+from .application.services.bscan_service import BscanService
 from .application.services.model_editor_service import ModelEditorService
 from .application.services.project_service import ProjectService
 from .application.services.results_service import ResultsService
 from .application.services.run_service import RunService
 from .application.services.settings_service import SettingsService
 from .application.services.simulation_service import SimulationService
+from .application.services.trace_service import TraceService
 from .application.services.validation_service import ValidationService
 from .application.services.workspace_service import WorkspaceService
 from .application.state import AppState
@@ -25,6 +27,10 @@ from .infrastructure.logging import setup_logging
 from .infrastructure.persistence.artifact_store import RunArtifactStore
 from .infrastructure.persistence.run_repository import RunRepository
 from .infrastructure.project_store import JsonProjectStore
+from .infrastructure.results.artifact_locator import ResultArtifactLocator
+from .infrastructure.results.bscan_builder import BscanBuilder
+from .infrastructure.results.hdf5_reader import Hdf5ResultsReader
+from .infrastructure.results.result_repository import ResultRepository
 from .infrastructure.settings import SettingsManager
 from .ui.main_window import MainWindow
 from .ui.theme import apply_theme
@@ -48,6 +54,8 @@ class ApplicationContext:
     simulation_service: SimulationService
     run_service: RunService
     results_service: ResultsService
+    trace_service: TraceService
+    bscan_service: BscanService
     state: AppState
     workspace_service: WorkspaceService
 
@@ -60,6 +68,11 @@ def build_context() -> ApplicationContext:
     project_store = JsonProjectStore()
     artifact_store = RunArtifactStore()
     run_repository = RunRepository()
+    results_repository = ResultRepository(
+        run_repository=run_repository,
+        artifact_locator=ResultArtifactLocator(),
+        reader=Hdf5ResultsReader(),
+    )
     gprmax_adapter = SubprocessGprMaxAdapter(
         python_executable=settings_service.settings.gprmax_python_executable
     )
@@ -92,7 +105,12 @@ def build_context() -> ApplicationContext:
         state=state,
     )
     run_service = RunService(run_repository)
-    results_service = ResultsService()
+    results_service = ResultsService(
+        result_repository=results_repository,
+        state=state,
+    )
+    trace_service = TraceService(results_repository)
+    bscan_service = BscanService(BscanBuilder(Hdf5ResultsReader()))
 
     LOGGER.debug("Application context created")
 
@@ -109,6 +127,8 @@ def build_context() -> ApplicationContext:
         simulation_service=simulation_service,
         run_service=run_service,
         results_service=results_service,
+        trace_service=trace_service,
+        bscan_service=bscan_service,
         state=state,
         workspace_service=workspace_service,
     )
