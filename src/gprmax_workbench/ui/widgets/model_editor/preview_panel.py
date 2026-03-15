@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 from ....application.services.input_preview_service import InputPreviewService
 from ....application.services.localization_service import LocalizationService
 from ....application.services.model_editor_service import ModelEditorService
+from ...layouts.flow_layout import FlowLayout
 
 
 class PreviewPanel(QWidget):
@@ -49,10 +50,9 @@ class PreviewPanel(QWidget):
         self._export_button = QPushButton()
         self._export_button.clicked.connect(self._export_preview)
 
-        buttons = QHBoxLayout()
+        buttons = FlowLayout(horizontal_spacing=10, vertical_spacing=10)
         buttons.addWidget(self._rebuild_button)
         buttons.addWidget(self._export_button)
-        buttons.addStretch(1)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)

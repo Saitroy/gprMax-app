@@ -25,6 +25,7 @@ from ...application.services.results_service import ResultsService
 from ...application.services.trace_service import TraceService
 from ...domain.results import ResultMetadata, RunResultSummary
 from ...infrastructure.results.hdf5_reader import ResultsReadError
+from ..layouts.flow_layout import FlowLayout
 from ..widgets.results.bscan_image_widget import BscanImageWidget
 from ..widgets.results.summary_panel import ResultSummaryPanel
 from ..widgets.results.trace_plot_widget import TracePlotWidget
@@ -79,14 +80,13 @@ class ResultsView(QWidget):
         self._open_selected_file_button = QPushButton()
         self._open_selected_file_button.clicked.connect(self._open_selected_file)
 
-        toolbar = QHBoxLayout()
+        toolbar = FlowLayout(horizontal_spacing=10, vertical_spacing=10)
         toolbar.addWidget(self._refresh_button)
         toolbar.addWidget(self._open_output_dir_button)
         toolbar.addWidget(self._open_selected_file_button)
-        toolbar.addStretch(1)
 
         left_panel = self._build_card("results.card.runs", self._run_list)
-        left_panel.setMinimumWidth(300)
+        left_panel.setMinimumWidth(240)
 
         self._summary_panel = ResultSummaryPanel(localization)
         summary_card = self._build_card("results.card.summary", self._summary_panel)
@@ -127,7 +127,7 @@ class ResultsView(QWidget):
         splitter.addWidget(right_content)
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
-        splitter.setSizes([320, 1000])
+        splitter.setSizes([280, 920])
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)

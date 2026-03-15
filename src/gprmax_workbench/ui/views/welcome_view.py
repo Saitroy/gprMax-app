@@ -5,7 +5,6 @@ from typing import Sequence
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QFrame,
-    QHBoxLayout,
     QLabel,
     QListWidget,
     QListWidgetItem,
@@ -16,6 +15,7 @@ from PySide6.QtWidgets import (
 
 from ...application.services.localization_service import LocalizationService
 from ...domain.models import Project, RecentProject
+from ..layouts.flow_layout import FlowLayout
 
 
 class WelcomeView(QWidget):
@@ -50,10 +50,9 @@ class WelcomeView(QWidget):
         self._open_button = QPushButton()
         self._open_button.clicked.connect(self.open_project_requested.emit)
 
-        button_row = QHBoxLayout()
+        button_row = FlowLayout(horizontal_spacing=10, vertical_spacing=10)
         button_row.addWidget(self._new_button)
         button_row.addWidget(self._open_button)
-        button_row.addStretch(1)
 
         self._current_card_heading = QLabel()
         self._current_card_heading.setObjectName("SectionTitle")

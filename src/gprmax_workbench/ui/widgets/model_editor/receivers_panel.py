@@ -18,6 +18,7 @@ from ....application.services.localization_service import LocalizationService
 from ....application.services.model_editor_service import ModelEditorService
 from ....application.services.validation_service import ValidationService
 from ....domain.models import Project, ReceiverDefinition, Vector3
+from ...layouts.flow_layout import FlowLayout
 from .helpers import (
     build_float_spinbox,
     build_status_label,
@@ -60,11 +61,10 @@ class ReceiversPanel(QWidget):
         self._list_title = QLabel()
         list_layout.addWidget(self._list_title)
         list_layout.addWidget(self._list, 1)
-        buttons = QHBoxLayout()
+        buttons = FlowLayout(horizontal_spacing=8, vertical_spacing=8)
         buttons.addWidget(self._add_button)
         buttons.addWidget(self._duplicate_button)
         buttons.addWidget(self._delete_button)
-        buttons.addStretch(1)
         list_layout.addLayout(buttons)
 
         self._identifier_edit = QLineEdit()

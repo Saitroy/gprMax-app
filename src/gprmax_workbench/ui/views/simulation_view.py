@@ -25,6 +25,7 @@ from ...application.services.localization_service import LocalizationService
 from ...domain.execution_status import SimulationMode
 from ...domain.gprmax_config import SimulationRunConfig
 from ...domain.simulation import SimulationRunRecord
+from ..layouts.flow_layout import FlowLayout
 
 
 class SimulationView(QWidget):
@@ -114,14 +115,13 @@ class SimulationView(QWidget):
         self._open_output_button = QPushButton()
         self._open_output_button.clicked.connect(self.open_output_directory_requested.emit)
 
-        buttons = QHBoxLayout()
+        buttons = FlowLayout(horizontal_spacing=10, vertical_spacing=10)
         buttons.addWidget(self._preview_button)
         buttons.addWidget(self._export_button)
         buttons.addWidget(self._start_button)
         buttons.addWidget(self._cancel_button)
         buttons.addWidget(self._open_run_button)
         buttons.addWidget(self._open_output_button)
-        buttons.addStretch(1)
 
         runtime_card = self._build_card(
             "simulation.runtime_card",

@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFormLayout,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QPushButton,
@@ -42,6 +43,7 @@ class SettingsView(QWidget):
         self._summary_label = QLabel()
         self._summary_label.setWordWrap(True)
         self._save_button = QPushButton()
+        self._save_button.setObjectName("PrimaryButton")
 
         form = QFormLayout()
         self._language_label = QLabel()
@@ -52,13 +54,18 @@ class SettingsView(QWidget):
 
         self._save_button.clicked.connect(self.save_requested.emit)
 
+        actions = QHBoxLayout()
+        actions.setContentsMargins(0, 0, 0, 0)
+        actions.addWidget(self._save_button, 0)
+        actions.addStretch(1)
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(18)
         layout.addWidget(self._title)
         layout.addWidget(self._subtitle)
+        layout.addLayout(actions)
         layout.addLayout(form)
-        layout.addWidget(self._save_button)
         layout.addWidget(self._summary_label)
         layout.addStretch(1)
 

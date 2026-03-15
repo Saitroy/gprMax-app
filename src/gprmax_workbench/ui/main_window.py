@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt, QTimer, QUrl
-from PySide6.QtGui import QAction, QDesktopServices
+from PySide6.QtGui import QAction, QDesktopServices, QGuiApplication
 from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMainWindow,
     QMessageBox,
+    QScrollArea,
     QSizePolicy,
     QStackedWidget,
     QVBoxLayout,
@@ -91,6 +92,7 @@ class MainWindow(QMainWindow):
         self._connect_signals()
         self._create_actions()
         self._build_ui()
+        self._apply_screen_adaptive_geometry()
         self.retranslate_ui()
         self.refresh_views()
         self._simulation_refresh_timer.start()
@@ -245,8 +247,8 @@ class MainWindow(QMainWindow):
     def _build_sidebar(self) -> QWidget:
         frame = QFrame()
         frame.setObjectName("Sidebar")
-        frame.setMinimumWidth(260)
-        frame.setMaximumWidth(300)
+        self._sidebar = frame
+        frame.setFixedWidth(self._sidebar_width_for_window(self.width() or 1440))
 
         layout = QVBoxLayout(frame)
         layout.setContentsMargins(18, 18, 18, 18)
@@ -283,9 +285,41 @@ class MainWindow(QMainWindow):
         self._retranslate_navigation()
         return frame
 
+    def _apply_screen_adaptive_geometry(self) -> None:
+        screen = self.screen() or QGuiApplication.primaryScreen()
+        if screen is None:
+            return
+
+        available = screen.availableGeometry()
+        target_width = min(1440, max(960, available.width() - 80))
+        target_height = min(920, max(700, available.height() - 96))
+        target_width = min(target_width, available.width())
+        target_height = min(target_height, available.height())
+        self.resize(target_width, target_height)
+        self._sidebar.setFixedWidth(self._sidebar_width_for_window(target_width))
+
+        centered_x = available.x() + max(0, (available.width() - target_width) // 2)
+        centered_y = available.y() + max(0, (available.height() - target_height) // 2)
+        self.move(centered_x, centered_y)
+
+    def _sidebar_width_for_window(self, window_width: int) -> int:
+        return max(220, min(300, int(window_width * 0.19)))
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        if hasattr(self, "_sidebar"):
+            self._sidebar.setFixedWidth(self._sidebar_width_for_window(self.width()))
+
     def _build_content_stack(self) -> QWidget:
         for page in self._pages:
-            self._stack.addWidget(page.widget)
+            scroll_area = QScrollArea()
+            scroll_area.setObjectName("PageScrollArea")
+            scroll_area.setWidgetResizable(True)
+            scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+            scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            scroll_area.setWidget(page.widget)
+            self._stack.addWidget(scroll_area)
         self._navigation.setCurrentRow(0)
         return self._stack
 
