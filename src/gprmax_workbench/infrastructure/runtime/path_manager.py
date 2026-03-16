@@ -58,6 +58,7 @@ class PathManager:
     def bundled_python_candidates(self) -> list[Path]:
         engine_root = self.bundled_engine_root
         return [
+            engine_root / "python" / "Scripts" / "python.exe",
             engine_root / "python" / "python.exe",
             engine_root / "python" / "python",
             engine_root / "python" / "bin" / "python",
@@ -76,4 +77,3 @@ class PathManager:
         if getattr(sys, "frozen", False):
             return Path(sys.executable).resolve().parent
         return Path(__file__).resolve().parents[4]
-

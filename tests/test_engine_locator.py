@@ -25,6 +25,7 @@ class EngineLocatorTests(unittest.TestCase):
             bundled_python = install_root / "engine" / "python" / "python.exe"
             bundled_python.parent.mkdir(parents=True)
             bundled_python.write_text("", encoding="utf-8")
+            (install_root / "engine" / "manifest.json").write_text("{}", encoding="utf-8")
 
             settings_manager = SettingsManager(
                 app_name="gprmax_workbench_test",
@@ -81,7 +82,38 @@ class EngineLocatorTests(unittest.TestCase):
             self.assertEqual(resolution.engine.python_executable, external_python)
             self.assertIn("Bundled engine was not found", resolution.notes[0])
 
+    def test_ignores_partial_bundled_runtime_without_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as install_dir, tempfile.TemporaryDirectory() as settings_dir:
+            install_root = Path(install_dir)
+            bundled_python = install_root / "engine" / "python" / "Scripts" / "python.exe"
+            bundled_python.parent.mkdir(parents=True)
+            bundled_python.write_text("", encoding="utf-8")
+            dev_python = install_root / "dev" / "python.exe"
+            dev_python.parent.mkdir(parents=True)
+            dev_python.write_text("", encoding="utf-8")
+
+            settings_manager = SettingsManager(
+                app_name="gprmax_workbench_test",
+                base_dir=Path(settings_dir),
+            )
+            locator = EngineLocator(
+                bundled_provider=BundledRuntimeProvider(
+                    PathManager(
+                        settings_manager=settings_manager,
+                        installation_root=install_root,
+                    )
+                ),
+                external_provider=ExternalRuntimeProvider(
+                    development_python=dev_python
+                ),
+            )
+
+            resolution = locator.resolve(AppSettings())
+
+            self.assertEqual(resolution.engine.mode.value, "external")
+            self.assertEqual(resolution.engine.python_executable, dev_python)
+            self.assertIn("Bundled engine manifest is missing", resolution.notes[0])
+
 
 if __name__ == "__main__":
     unittest.main()
-

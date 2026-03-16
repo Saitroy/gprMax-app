@@ -321,3 +321,52 @@ Consequence:
 
 - Stage 5 delivers embedded plotting without committing the project to a heavyweight plotting abstraction too early;
 - future advanced analysis tools can still add richer plotting backends behind separate widgets/services if justified.
+
+## 2026-03-16: Build the bundled engine on the release machine, not on the user machine
+
+Status: accepted
+
+Rationale:
+
+- `gprMax` on Windows requires Cython extension compilation with MSVC/OpenMP;
+- end users must not install Visual Studio Build Tools or compile anything manually;
+- a prebuilt managed runtime is the shortest path to a working bundled product.
+
+Consequence:
+
+- the release/build machine owns the `gprMax` source checkout and MSVC toolchain;
+- it creates a managed `engine/python` virtual environment and installs the compiled `gprMax` package there;
+- the installer ships the resulting `engine/` directory as-is;
+- the runtime resolver prefers `engine/python/Scripts/python.exe`.
+
+## 2026-03-16: Keep GPU and MPI out of the bundled baseline build
+
+Status: accepted
+
+Rationale:
+
+- the product needs a reliable CPU-first baseline that works immediately after install;
+- GPU and MPI add environment-specific complexity and should not block the first bundled release;
+- `gprMax` documents GPU and MPI as optional execution paths.
+
+Consequence:
+
+- the first bundled engine target is CPU-ready only;
+- runtime diagnostics expose GPU and MPI as optional capabilities;
+- future GPU/MPI distributions can be added as validated variants rather than stretching the baseline bundle.
+
+## 2026-03-16: Treat GPL compatibility review as a release gate for bundled distributions
+
+Status: accepted
+
+Rationale:
+
+- `gprMax` is distributed under GPLv3+;
+- shipping it inside the desktop installer changes the release obligations compared with a loose external dependency;
+- this must be made explicit before the first bundled public build.
+
+Consequence:
+
+- release artifacts must include `gprMax` license texts and notices;
+- app and distribution licensing need a dedicated review before public bundled release;
+- architecture and packaging scripts already assume bundled notices and manifest metadata, but this is not a substitute for license review.

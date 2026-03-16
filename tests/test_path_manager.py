@@ -34,9 +34,9 @@ class PathManagerTests(unittest.TestCase):
     def test_prefers_existing_bundled_python_candidate(self) -> None:
         with tempfile.TemporaryDirectory() as install_dir, tempfile.TemporaryDirectory() as settings_dir:
             install_root = Path(install_dir)
-            python_dir = install_root / "engine" / "python" / "bin"
+            python_dir = install_root / "engine" / "python" / "Scripts"
             python_dir.mkdir(parents=True)
-            expected = python_dir / "python3"
+            expected = python_dir / "python.exe"
             expected.write_text("", encoding="utf-8")
 
             manager = SettingsManager(
@@ -53,4 +53,3 @@ class PathManagerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

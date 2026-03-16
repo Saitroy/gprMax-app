@@ -21,13 +21,23 @@ class EngineLocator:
     def resolve(self, settings: AppSettings) -> EngineResolution:
         notes: list[str] = []
         bundled = self._bundled_provider.candidate()
-        if bundled.python_executable.exists():
+        manifest_path = (
+            bundled.engine_root / "manifest.json"
+            if bundled.engine_root is not None
+            else None
+        )
+        if bundled.python_executable.exists() and manifest_path is not None and manifest_path.exists():
             notes.append("Using bundled engine from the installation directory.")
             return EngineResolution(engine=bundled, notes=notes)
 
-        notes.append(
-            f"Bundled engine was not found at expected path: {bundled.python_executable}"
-        )
+        if not bundled.python_executable.exists():
+            notes.append(
+                f"Bundled engine was not found at expected path: {bundled.python_executable}"
+            )
+        elif manifest_path is not None and not manifest_path.exists():
+            notes.append(
+                f"Bundled engine manifest is missing: {manifest_path}"
+            )
 
         if settings.advanced_mode:
             external = self._external_provider.configured_candidate(
@@ -42,4 +52,3 @@ class EngineLocator:
             engine=self._external_provider.development_candidate(),
             notes=notes,
         )
-

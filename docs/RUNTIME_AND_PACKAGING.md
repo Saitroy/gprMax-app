@@ -34,10 +34,12 @@ Windows-first layout для installer/portable bundle:
   engine/
     manifest.json
     python/
-      python.exe
+      Scripts/
+        python.exe
       Lib/
-      DLLs/
-      site-packages/
+      Include/
+      pyvenv.cfg
+      Lib/site-packages/
         gprMax/
     licenses/
 ```
@@ -70,6 +72,20 @@ Windows-first layout для installer/portable bundle:
 1. встроенный `engine/python/...`;
 2. если встроенный runtime отсутствует и включён advanced mode, используется явно заданный внешний fallback Python;
 3. если и он не задан, development-сборка может использовать текущий интерпретатор как fallback, но это не считается production baseline.
+
+## Build-time vs user-time requirements
+
+Требования `gprMax` к C compiler/OpenMP/MSVC относятся к build/release-машине, а не к машине пользователя.
+
+Для первого Windows рабочего билда это означает:
+
+- build-агент или release workstation устанавливает CPython 3.11 x64;
+- там же стоят Microsoft Build Tools и Windows SDK;
+- там создаётся `engine/python` venv;
+- там компилируются Cython extensions `gprMax`;
+- в installer попадает уже готовый `engine/` bundle.
+
+Пользователь получает только результат этой сборки.
 
 ## Capability Model
 
@@ -155,10 +171,12 @@ Windows-first layout for installer/portable distribution:
   engine/
     manifest.json
     python/
-      python.exe
+      Scripts/
+        python.exe
       Lib/
-      DLLs/
-      site-packages/
+      Include/
+      pyvenv.cfg
+      Lib/site-packages/
         gprMax/
     licenses/
 ```
@@ -191,6 +209,20 @@ Runtime selection order:
 1. bundled `engine/python/...`;
 2. if the bundled runtime is missing and advanced mode is enabled, use the configured external fallback Python;
 3. if neither is available, development builds may use the current interpreter as a fallback, but this is not a production baseline.
+
+## Build-time vs user-time requirements
+
+The `gprMax` requirement for a C compiler, OpenMP, and MSVC applies to the build/release machine, not to the end-user machine.
+
+For the first working Windows build this means:
+
+- the build agent or release workstation installs CPython 3.11 x64;
+- the same machine has Microsoft Build Tools and Windows SDK installed;
+- it creates the `engine/python` venv;
+- it compiles the `gprMax` Cython extensions;
+- the installer ships the finished `engine/` bundle.
+
+The user receives only the build output.
 
 ## Capability Model
 
@@ -241,4 +273,3 @@ Stage 6 creates the foundation, not the entire release engineering pipeline.
 - installation guidance: https://docs.gprmax.com/en/latest/include_readme.html
 - GPU notes: https://docs.gprmax.com/en/latest/gpu.html
 - OpenMP/MPI notes: https://docs.gprmax.com/en/latest/openmp_mpi.html
-

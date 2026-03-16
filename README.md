@@ -146,6 +146,8 @@ This repository currently contains:
 - Stage 3 subprocess-first integration with `gprMax`, input generation, run artifacts, live logs, and run history;
 - Stage 4 model editor MVP with guided forms for essential model setup, materials, waveforms, sources, receivers, geometry, and input preview;
 - Stage 5 results viewer MVP with run-centric browsing, HDF5 result discovery, A-scan plotting, and bounded B-scan previews;
+- Stage 6 bundled-runtime foundation with bundled-first engine resolution, runtime diagnostics, and packaging-aware path management;
+- packaging scripts for building a bundled `gprMax` engine on a Windows release machine;
 - layered package structure for UI, application services, domain, infrastructure, and jobs.
 
 ### Repository structure
@@ -236,8 +238,18 @@ The next engineering steps are:
 1. expand input generation, editor coverage, and advanced-mode support across more `gprMax` commands;
 2. deepen post-processing beyond the Stage 5 MVP with FFT/spectral analysis and richer comparison workflows;
 3. harden cancellation/error handling with real-world `gprMax` runtime testing;
-4. prepare packaging/runtime-discovery decisions for Windows distribution;
+4. turn the new engine bundle scripts into a repeatable release build and installer pipeline;
 5. design geometry/snapshot integrations and richer external-tool handoffs where they add real value.
+
+### Bundled engine note
+
+The product direction is now explicit: end users must not install `gprMax`, Python, Git, Conda, or Visual Studio Build Tools manually.
+
+For Windows builds, `gprMax` is intended to be compiled on the release machine and shipped inside the installer as a bundled `engine/` runtime. The current repository includes the foundation for that approach in [packaging/engine/README.md](packaging/engine/README.md).
+
+### Licensing note
+
+`gprMax` is GPLv3+. Bundling it into the desktop distribution requires a dedicated release/license review before the first public bundled build. This repository already accounts for bundled notices and engine manifests, but that is not a substitute for license review.
 
 ### References
 

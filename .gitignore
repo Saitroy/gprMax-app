@@ -15,6 +15,10 @@ build/
 dist/
 *.egg-info/
 *.spec
+engine/python/
+engine/licenses/
+engine/manifest.json
+vendor/gprMax-source/
 
 # Qt / desktop artifacts
 *.h5
