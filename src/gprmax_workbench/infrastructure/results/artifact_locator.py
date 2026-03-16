@@ -35,9 +35,9 @@ class ResultArtifactLocator:
         self,
         run_record: SimulationRunRecord,
     ) -> list[OutputFileDescriptor]:
-        candidates = list(run_record.output_directory.glob("*.out"))
-        if run_record.working_directory != run_record.output_directory:
-            candidates.extend(run_record.working_directory.glob("*.out"))
+        candidates: list[Path] = []
+        for directory in self._output_directories(run_record):
+            candidates.extend(directory.glob("*.out"))
 
         unique_paths = sorted({path.resolve() for path in candidates}, key=_natural_sort_key)
         descriptors: list[OutputFileDescriptor] = []
@@ -58,11 +58,24 @@ class ResultArtifactLocator:
     ) -> list[Path]:
         patterns = ("*.vti", "*.vtp", "*.vtk", "*.png", "*.jpg")
         found: list[Path] = []
+        directories = {
+            run_record.output_directory,
+            run_record.working_directory,
+            run_record.input_file.parent,
+            run_record.input_file.parent / "output",
+        }
         for pattern in patterns:
-            found.extend(run_record.output_directory.glob(pattern))
-            if run_record.working_directory != run_record.output_directory:
-                found.extend(run_record.working_directory.glob(pattern))
+            for directory in directories:
+                if directory.exists():
+                    found.extend(directory.glob(pattern))
         return sorted({path.resolve() for path in found}, key=_natural_sort_key)
+
+    def _output_directories(self, run_record: SimulationRunRecord) -> set[Path]:
+        return {
+            run_record.output_directory,
+            run_record.working_directory,
+            run_record.input_file.parent / "output",
+        }
 
     def _classify_output_file(self, path: Path) -> OutputFileKind:
         stem = path.stem.lower()

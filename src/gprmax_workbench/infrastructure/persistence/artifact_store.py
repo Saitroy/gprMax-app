@@ -54,11 +54,22 @@ class RunArtifactStore:
         self._append_text(artifacts.combined_log_path, f"[stderr] {chunk}")
 
     def list_output_files(self, artifacts: RunArtifacts) -> list[str]:
-        if not artifacts.output_directory.exists():
-            return []
+        candidate_directories = [
+            artifacts.output_directory,
+            artifacts.input_directory / "output",
+        ]
         output_files: list[str] = []
-        for path in sorted(artifacts.output_directory.rglob("*")):
-            if path.is_file():
+        seen_paths: set[Path] = set()
+        for directory in candidate_directories:
+            if not directory.exists():
+                continue
+            for path in sorted(directory.rglob("*")):
+                if not path.is_file():
+                    continue
+                resolved = path.resolve()
+                if resolved in seen_paths:
+                    continue
+                seen_paths.add(resolved)
                 output_files.append(str(path.relative_to(artifacts.run_directory)))
         return output_files
 

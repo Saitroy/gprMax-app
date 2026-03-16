@@ -87,4 +87,4 @@ class BscanImageWidget(QWidget):
         red = (normalized * 255).astype(np.uint8)
         green = (255 - np.abs(normalized - 0.5) * 2 * 255).clip(0, 255).astype(np.uint8)
         blue = ((1.0 - normalized) * 255).astype(np.uint8)
-        return np.dstack((red, green, blue))
+        return np.ascontiguousarray(np.dstack((red, green, blue)))

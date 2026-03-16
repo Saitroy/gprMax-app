@@ -35,3 +35,4 @@ vendor/gprMax-source/
 # OS files
 Thumbs.db
 .DS_Store
+/demo_artifacts
