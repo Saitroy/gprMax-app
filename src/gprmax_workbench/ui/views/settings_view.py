@@ -106,7 +106,11 @@ class SettingsView(QWidget):
             )
         )
         self._capabilities_label.setText(
-            "\n".join(self._format_capability(item) for item in runtime_info.capabilities)
+            "\n".join(
+                self._format_capability(item)
+                for item in runtime_info.capabilities
+                if item.code != "gpu"
+            )
         )
         diagnostics = runtime_info.diagnostics or [
             self._localization.text("settings.diagnostics_placeholder")

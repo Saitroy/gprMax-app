@@ -22,7 +22,6 @@ from PySide6.QtWidgets import (
 )
 
 from ...application.services.localization_service import LocalizationService
-from ...domain.capability_status import CapabilityLevel, CapabilityStatus
 from ...domain.execution_status import SimulationMode
 from ...domain.gprmax_config import SimulationRunConfig
 from ...domain.simulation import SimulationRunRecord
@@ -48,7 +47,6 @@ class SimulationView(QWidget):
         super().__init__(parent)
         self._localization = localization
         self._card_headings: dict[str, QLabel] = {}
-        self._gpu_capability: CapabilityStatus | None = None
 
         self._title = QLabel()
         self._title.setObjectName("ViewTitle")
@@ -75,16 +73,6 @@ class SimulationView(QWidget):
         self._mode_combo.addItem("", SimulationMode.NORMAL.value)
         self._mode_combo.addItem("", SimulationMode.GEOMETRY_ONLY.value)
         self._mode_combo.currentIndexChanged.connect(self._refresh_configuration_summary)
-
-        self._gpu_checkbox = QCheckBox()
-        self._gpu_checkbox.toggled.connect(self._update_gpu_controls_state)
-        self._gpu_checkbox.setObjectName("simulation.gpu_checkbox")
-        self._gpu_status_label = QLabel()
-        self._gpu_status_label.setObjectName("simulation.gpu_status")
-        self._gpu_status_label.setWordWrap(True)
-        self._gpu_devices_edit = QLineEdit()
-        self._gpu_devices_edit.setObjectName("simulation.gpu_devices")
-        self._gpu_devices_edit.setPlaceholderText("")
 
         self._num_runs_spinbox = QSpinBox()
         self._num_runs_spinbox.setRange(1, 1_000_000)
@@ -239,13 +227,11 @@ class SimulationView(QWidget):
         self._section_nav.setCurrentRow(0)
         self.set_run_state(None, [])
         self.set_project_state(project_name=None, is_dirty=False)
-        self.set_gpu_capability(None)
         self._refresh_configuration_summary()
         self._refresh_responsive_layout()
 
     def current_configuration(self) -> SimulationRunConfig:
         mode = SimulationMode(self._mode_combo.currentData())
-        gpu_devices = self._parse_int_list(self._gpu_devices_edit.text())
         restart_from = self._restart_spinbox.value() or None
         mpi_tasks = self._mpi_tasks_spinbox.value() or None
         extra_arguments = (
@@ -256,8 +242,8 @@ class SimulationView(QWidget):
 
         return SimulationRunConfig(
             mode=mode,
-            use_gpu=self._gpu_checkbox.isChecked(),
-            gpu_device_ids=gpu_devices,
+            use_gpu=False,
+            gpu_device_ids=[],
             benchmark=self._benchmark_checkbox.isChecked(),
             geometry_fixed=self._geometry_fixed_checkbox.isChecked(),
             write_processed=self._write_processed_checkbox.isChecked(),
@@ -270,37 +256,6 @@ class SimulationView(QWidget):
 
     def set_runtime_label(self, runtime_label: str) -> None:
         self._runtime_label.setText(runtime_label)
-
-    def set_gpu_capability(self, capability: CapabilityStatus | None) -> None:
-        self._gpu_capability = capability
-        is_ready = capability is not None and capability.level == CapabilityLevel.READY
-        if not is_ready:
-            self._gpu_checkbox.setChecked(False)
-        self._gpu_checkbox.setEnabled(is_ready)
-        self._update_gpu_controls_state()
-
-        if capability is None:
-            self._gpu_status_label.setText(
-                self._localization.text("simulation.gpu_status.unknown")
-            )
-            self._gpu_checkbox.setToolTip("")
-            return
-
-        if capability.level == CapabilityLevel.READY:
-            text = self._localization.text("simulation.gpu_status.ready")
-        else:
-            detail = (
-                self._localization.translate_message(capability.detail)
-                if capability.detail
-                else self._localization.text("simulation.gpu_status.not_available")
-            )
-            text = self._localization.text(
-                "simulation.gpu_status.unavailable",
-                detail=detail,
-            )
-
-        self._gpu_status_label.setText(text)
-        self._gpu_checkbox.setToolTip(text if not is_ready else "")
 
     def set_project_state(self, *, project_name: str | None, is_dirty: bool) -> None:
         if project_name is None:
@@ -404,15 +359,11 @@ class SimulationView(QWidget):
         widget = QWidget()
         layout = QFormLayout(widget)
         self._mode_label = QLabel()
-        self._gpu_devices_label = QLabel()
         self._num_runs_label = QLabel()
         self._restart_label = QLabel()
         self._mpi_tasks_label = QLabel()
         self._extra_args_label = QLabel()
         layout.addRow(self._mode_label, self._mode_combo)
-        layout.addRow("", self._gpu_checkbox)
-        layout.addRow("", self._gpu_status_label)
-        layout.addRow(self._gpu_devices_label, self._gpu_devices_edit)
         layout.addRow(self._num_runs_label, self._num_runs_spinbox)
         layout.addRow(self._restart_label, self._restart_spinbox)
         layout.addRow(self._mpi_tasks_label, self._mpi_tasks_spinbox)
@@ -468,7 +419,6 @@ class SimulationView(QWidget):
                 SimulationMode.GEOMETRY_ONLY.value
             ),
         )
-        self._gpu_checkbox.setText(self._localization.text("simulation.gpu"))
         self._geometry_fixed_checkbox.setText(
             self._localization.text("simulation.geometry_fixed")
         )
@@ -480,9 +430,6 @@ class SimulationView(QWidget):
         )
         self._mpi_no_spawn_checkbox.setText(
             self._localization.text("simulation.mpi_no_spawn")
-        )
-        self._gpu_devices_edit.setPlaceholderText(
-            self._localization.text("simulation.gpu_devices_placeholder")
         )
         self._extra_args_edit.setPlaceholderText(
             self._localization.text("simulation.extra_args_placeholder")
@@ -519,16 +466,12 @@ class SimulationView(QWidget):
             self._localization.text("simulation.messages")
         )
         self._mode_label.setText(self._localization.text("simulation.mode"))
-        self._gpu_devices_label.setText(
-            self._localization.text("simulation.gpu_devices")
-        )
         self._num_runs_label.setText(self._localization.text("simulation.num_runs"))
         self._restart_label.setText(self._localization.text("simulation.restart"))
         self._mpi_tasks_label.setText(self._localization.text("simulation.mpi_tasks"))
         self._extra_args_label.setText(self._localization.text("simulation.extra_args"))
         for key, heading in self._card_headings.items():
             heading.setText(self._localization.text(key))
-        self.set_gpu_capability(self._gpu_capability)
         self._refresh_configuration_summary()
 
     def _refresh_configuration_summary(self) -> None:
@@ -555,11 +498,6 @@ class SimulationView(QWidget):
         self._top_splitter.setOrientation(top_orientation)
         self._content_splitter.setOrientation(
             Qt.Orientation.Horizontal if self.width() >= 1080 else Qt.Orientation.Vertical
-        )
-
-    def _update_gpu_controls_state(self) -> None:
-        self._gpu_devices_edit.setEnabled(
-            self._gpu_checkbox.isEnabled() and self._gpu_checkbox.isChecked()
         )
 
     def _retranslate_sections(self) -> None:

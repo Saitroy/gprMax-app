@@ -221,8 +221,6 @@ class MainWindow(QMainWindow):
             settings=settings_service.settings,
             runtime_info=self._context.runtime_service.runtime_info(),
         )
-        runtime_info = self._context.runtime_service.runtime_info()
-        self._simulation_view.set_gpu_capability(runtime_info.capability("gpu"))
         self._results_view.refresh_project(project.root if project is not None else None)
         self._refresh_welcome_summary()
         self._simulation_view.set_runtime_label(

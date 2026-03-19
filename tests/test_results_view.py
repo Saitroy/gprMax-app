@@ -238,6 +238,92 @@ class ResultsViewTests(unittest.TestCase):
 
         self.assertEqual(view._output_list.count(), 2)
 
+    def test_switching_between_ascan_and_bscan_restores_expected_output_mode(self) -> None:
+        merged_output = Path("D:/demo/output/simulation_merged.out")
+        single_output = Path("D:/demo/output/simulation1.out")
+        summary = _build_run_summary(
+            merged_output,
+            extra_outputs=[
+                OutputFileDescriptor(
+                    path=single_output,
+                    name=single_output.name,
+                    kind=OutputFileKind.ASCAN,
+                    size_bytes=512,
+                )
+            ],
+            output_kind=OutputFileKind.MERGED,
+        )
+        metadata = ResultMetadata(
+            output_file=summary.output_files[0],
+            gprmax_version="3.1.7",
+            model_title="Merged result",
+            iterations=4,
+            grid_shape=(100, 1, 1),
+            resolution_m=(0.01, 0.01, 0.01),
+            dt_s=1e-11,
+            src_steps_m=(0.0, 0.0, 0.0),
+            rx_steps_m=(0.01, 0.0, 0.0),
+            source_count=1,
+            receiver_count=1,
+            receivers=[
+                ReceiverResultSummary(
+                    receiver_id="rx1",
+                    name="Receiver 1",
+                    position_m=Vector3(x=0.1, y=0.0, z=0.0),
+                    components=["Ez"],
+                )
+            ],
+        )
+        trace = AscanTrace(
+            metadata=TraceMetadata(
+                output_file=single_output,
+                receiver_id="rx1",
+                receiver_name="Receiver 1",
+                component="Ez",
+                dt_s=1e-11,
+                iterations=4,
+            ),
+            time_s=[0.0, 1e-11, 2e-11, 3e-11],
+            values=[0.0, 0.1, -0.2, 0.3],
+        )
+        results_service = ResultsService(
+            result_repository=_FakeResultRepository([summary]),
+            state=AppState(),
+        )
+        view = ResultsView(
+            localization=LocalizationService("ru"),
+            results_service=results_service,
+            trace_service=_FakeTraceService(metadata, {"Ez": trace}),
+            bscan_service=_FakeBscanService(),
+        )
+
+        view.refresh_project(Path("D:/demo"))
+
+        self.assertEqual(view._tabs.currentIndex(), 1)
+        self.assertEqual(view._output_list.count(), 1)
+        self.assertEqual(view._output_list.item(0).text(), "simulation_merged.out")
+
+        view._tabs.setCurrentIndex(0)
+
+        self.assertEqual(view._output_list.count(), 2)
+        self.assertEqual(
+            view._output_list.currentItem().data(Qt.ItemDataRole.UserRole),
+            str(single_output),
+        )
+        self.assertEqual(
+            view._output_list.currentItem().data(Qt.ItemDataRole.UserRole + 1),
+            ResultsView._OUTPUT_MODE_FILE,
+        )
+
+        view._tabs.setCurrentIndex(1)
+
+        self.assertEqual(view._output_list.count(), 1)
+        self.assertEqual(
+            view._output_list.currentItem().data(Qt.ItemDataRole.UserRole),
+            str(merged_output),
+        )
+        self.assertEqual(view._output_list.item(0).text(), "simulation_merged.out")
+
     def test_stacked_bscan_entry_is_shown_by_default_for_multiple_single_traces(self) -> None:
         output_one = Path("D:/demo/output/simulation1.out")
         output_two = Path("D:/demo/output/simulation2.out")

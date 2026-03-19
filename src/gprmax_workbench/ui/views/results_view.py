@@ -57,6 +57,10 @@ class ResultsView(QWidget):
         self._refresh_key: tuple[object, ...] | None = None
         self._loading = False
         self._card_headings: dict[str, QLabel] = {}
+        self._preferred_ascan_output_by_run: dict[str, str] = {}
+        self._preferred_bscan_output_by_run: dict[str, str] = {}
+        self._pending_output_mode_preference: str | None = None
+        self._pending_output_path_preference: str | None = None
 
         self._title = QLabel()
         self._title.setObjectName("ViewTitle")
@@ -132,6 +136,7 @@ class ResultsView(QWidget):
         tabs.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         tabs.addTab(self._trace_plot, "")
         tabs.addTab(self._bscan_view, "")
+        tabs.currentChanged.connect(self._on_tab_changed)
         self._tabs = tabs
 
         plot_panel = QWidget()
@@ -294,12 +299,23 @@ class ResultsView(QWidget):
             self._artifact_list.addItem(item)
 
         viewer_state = self._results_service.viewer_state
-        target_output_path = viewer_state.selected_output_file
+        if self._pending_output_path_preference is not None:
+            target_output_path = self._pending_output_path_preference
+        elif self._pending_output_mode_preference is not None:
+            target_output_path = None
+        else:
+            target_output_path = viewer_state.selected_output_file
         target_row = 0
         if target_output_path:
             for row in range(self._output_list.count()):
                 item = self._output_list.item(row)
                 if item.data(Qt.ItemDataRole.UserRole) == target_output_path:
+                    target_row = row
+                    break
+        elif self._pending_output_mode_preference:
+            for row in range(self._output_list.count()):
+                item = self._output_list.item(row)
+                if item.data(Qt.ItemDataRole.UserRole + 1) == self._pending_output_mode_preference:
                     target_row = row
                     break
 
@@ -317,6 +333,8 @@ class ResultsView(QWidget):
 
         with QSignalBlocker(self._output_list):
             self._output_list.setCurrentRow(target_row)
+        self._pending_output_mode_preference = None
+        self._pending_output_path_preference = None
         self._on_output_changed(target_row)
 
     def _on_output_changed(self, row: int) -> None:
@@ -328,11 +346,17 @@ class ResultsView(QWidget):
         raw_path = item.data(Qt.ItemDataRole.UserRole) if item is not None else None
         output_path = Path(raw_path) if isinstance(raw_path, str) else None
         self._results_service.select_output_file(output_path)
+        output_mode = self._selected_output_mode()
 
         if summary is None or output_path is None:
             self._summary_panel.set_summary(summary, None)
             self._status_label.setText(self._localization.text("results.status.select_output"))
             return
+
+        if output_mode == self._OUTPUT_MODE_FILE:
+            self._preferred_ascan_output_by_run[summary.run_record.run_id] = str(output_path)
+        elif output_mode in {self._OUTPUT_MODE_MERGED, self._OUTPUT_MODE_STACKED}:
+            self._preferred_bscan_output_by_run[summary.run_record.run_id] = str(output_path)
 
         try:
             metadata = self._load_metadata(output_path)
@@ -374,7 +398,6 @@ class ResultsView(QWidget):
             self._bscan_view.set_result(_empty_bscan_result(message))
             return
 
-        output_mode = self._selected_output_mode()
         if output_mode in {self._OUTPUT_MODE_MERGED, self._OUTPUT_MODE_STACKED}:
             self._tabs.setCurrentIndex(1)
         else:
@@ -724,6 +747,41 @@ class ResultsView(QWidget):
                 self._run_list.setCurrentRow(row)
             self._on_run_changed(row)
             return
+
+    def _on_tab_changed(self, index: int) -> None:
+        if self._loading:
+            return
+
+        summary = self._current_summary()
+        if summary is None or self._output_list.count() == 0:
+            return
+
+        self._set_pending_output_preference_for_tab(summary, index)
+        self._populate_run_details(summary)
+
+    def _set_pending_output_preference_for_tab(
+        self,
+        summary: RunResultSummary,
+        tab_index: int,
+    ) -> None:
+        run_id = summary.run_record.run_id
+        if tab_index == 0:
+            if self._can_toggle_unmerged(summary):
+                with QSignalBlocker(self._show_unmerged_checkbox):
+                    self._show_unmerged_checkbox.setChecked(True)
+            self._pending_output_mode_preference = self._OUTPUT_MODE_FILE
+            self._pending_output_path_preference = self._preferred_ascan_output_by_run.get(
+                run_id
+            )
+            return
+
+        if self._can_toggle_unmerged(summary):
+            with QSignalBlocker(self._show_unmerged_checkbox):
+                self._show_unmerged_checkbox.setChecked(False)
+        self._pending_output_mode_preference = self._OUTPUT_MODE_MERGED
+        self._pending_output_path_preference = self._preferred_bscan_output_by_run.get(
+            run_id
+        )
 
 
 def _empty_bscan_result(message: str):
