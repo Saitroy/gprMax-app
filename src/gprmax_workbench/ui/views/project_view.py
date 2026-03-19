@@ -103,8 +103,6 @@ class ProjectView(QWidget):
         project_layout = QVBoxLayout(project_card)
         project_layout.setContentsMargins(20, 18, 20, 18)
         project_layout.setSpacing(8)
-        self._project_workspace_label = QLabel()
-        project_layout.addWidget(self._project_workspace_label)
         project_layout.addWidget(self._project_root_label)
         project_layout.addWidget(self._project_file_label)
         project_layout.addWidget(self._summary_label)
@@ -243,7 +241,6 @@ class ProjectView(QWidget):
     def retranslate_ui(self) -> None:
         self._header.setText(self._localization.text("project.title"))
         self._subtitle.setText(self._localization.text("project.subtitle"))
-        self._project_workspace_label.setText(self._localization.text("project.workspace"))
         self._save_button.setText(self._localization.text("action.save_project"))
         self._refresh_metrics(self._current_project)
         self._tabs.setTabText(0, self._localization.text("project.tab.general"))

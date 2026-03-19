@@ -132,7 +132,6 @@ class ResultsView(QWidget):
         tabs.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         tabs.addTab(self._trace_plot, "")
         tabs.addTab(self._bscan_view, "")
-        tabs.currentChanged.connect(self._on_tab_changed)
         self._tabs = tabs
 
         plot_panel = QWidget()
@@ -246,20 +245,6 @@ class ResultsView(QWidget):
         if self._loading:
             return
         self._populate_run_details(self._current_summary())
-
-    def _on_tab_changed(self, index: int) -> None:
-        if index != 1 or self._loading:
-            return
-        summary = self._current_summary()
-        if summary is not None and self._supports_bscan(summary):
-            return
-
-        target_row = self._latest_bscan_capable_row()
-        if target_row is None:
-            return
-        with QSignalBlocker(self._run_list):
-            self._run_list.setCurrentRow(target_row)
-        self._on_run_changed(target_row)
 
     def _on_run_changed(self, row: int) -> None:
         if self._loading:
@@ -623,19 +608,6 @@ class ResultsView(QWidget):
         if any(item.is_merged for item in summary.output_files):
             return True
         return sum(1 for item in summary.output_files if not item.is_merged) >= 2
-
-    def _latest_bscan_capable_row(self) -> int | None:
-        for row in range(self._run_list.count()):
-            item = self._run_list.item(row)
-            if item is None:
-                continue
-            run_id = item.data(Qt.ItemDataRole.UserRole)
-            if not isinstance(run_id, str):
-                continue
-            summary = self._run_summaries.get(run_id)
-            if summary is not None and self._supports_bscan(summary):
-                return row
-        return None
 
     def _selected_output_mode(self) -> str | None:
         item = self._output_list.currentItem()

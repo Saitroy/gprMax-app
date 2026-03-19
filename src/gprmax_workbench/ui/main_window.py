@@ -29,12 +29,12 @@ from ..application.services.simulation_service import (
     SimulationPreparationError,
 )
 from .dialogs.new_project_dialog import NewProjectDialog
+from .dialogs.settings_dialog import SettingsDialog
 from .views.project_view import ProjectView
 from .views.results_view import ResultsView
 from .views.settings_view import SettingsView
 from .views.simulation_view import SimulationView
 from .views.welcome_view import ExampleProjectItem, WelcomeView
-from .widgets.workspace_banner import WorkspaceBanner
 
 if TYPE_CHECKING:
     from ..app import ApplicationContext
@@ -62,7 +62,6 @@ class MainWindow(QMainWindow):
         self._simulation_refresh_timer.timeout.connect(self._refresh_simulation_runtime_state)
 
         self._welcome_view = WelcomeView(self._localization)
-        self._workspace_banner = WorkspaceBanner(self._localization)
         self._project_view = ProjectView(
             localization=self._localization,
             model_editor_service=context.model_editor_service,
@@ -80,15 +79,12 @@ class MainWindow(QMainWindow):
             bscan_service=context.bscan_service,
         )
         self._settings_view = SettingsView(self._localization)
+        self._settings_dialog = SettingsDialog(self._settings_view, self)
         self._pages = self._build_pages()
         self._page_index_by_title_key = {
             page.title_key: index for index, page in enumerate(self._pages)
         }
-        self._navigation_page_indexes = [
-            index
-            for index, page in enumerate(self._pages)
-            if page.title_key != "page.settings.title"
-        ]
+        self._navigation_page_indexes = list(range(len(self._pages)))
         self._last_polled_run_state: tuple[str, str] | None = None
 
         self._new_project_action = QAction(self)
@@ -133,11 +129,6 @@ class MainWindow(QMainWindow):
                 title_key="page.results.title",
                 description_key="page.results.description",
                 widget=self._results_view,
-            ),
-            PageSpec(
-                title_key="page.settings.title",
-                description_key="page.settings.description",
-                widget=self._settings_view,
             ),
         ]
 
@@ -220,7 +211,7 @@ class MainWindow(QMainWindow):
             runtime_info=self._context.runtime_service.runtime_info(),
         )
         self._results_view.refresh_project(project.root if project is not None else None)
-        self._refresh_workspace_banner()
+        self._refresh_welcome_summary()
         self._simulation_view.set_runtime_label(
             self._context.simulation_service.runtime_label()
         )
@@ -241,12 +232,13 @@ class MainWindow(QMainWindow):
         self._sidebar_subtitle.setText(self._localization.text("sidebar.subtitle"))
         self._retranslate_navigation()
         self._welcome_view.retranslate_ui()
-        self._workspace_banner.retranslate_ui()
         self._project_view.retranslate_ui()
         self._simulation_view.retranslate_ui()
         self._results_view.retranslate_ui()
         self._settings_view.retranslate_ui()
+        self._settings_dialog.retranslate_ui(self._localization.text("settings.title"))
         self._welcome_view.set_example_projects(self._discover_example_projects())
+        self._refresh_welcome_summary()
         self._update_window_title()
 
     def _retranslate_navigation(self) -> None:
@@ -267,7 +259,7 @@ class MainWindow(QMainWindow):
             is_dirty=workspace.state.current_project_dirty,
         )
         self._save_project_action.setEnabled(project is not None)
-        self._refresh_workspace_banner()
+        self._refresh_welcome_summary()
         self._update_window_title()
 
     def _build_sidebar(self) -> QWidget:
@@ -353,8 +345,7 @@ class MainWindow(QMainWindow):
         container = QWidget()
         layout = QVBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(16)
-        layout.addWidget(self._workspace_banner)
+        layout.setSpacing(0)
         layout.addWidget(self._build_content_stack(), 1)
         return container
 
@@ -386,8 +377,14 @@ class MainWindow(QMainWindow):
         self._update_status(page_index)
 
     def _open_settings_page(self) -> None:
-        self._show_page(self._page_index_by_title_key["page.settings.title"])
-        self._navigation.setCurrentRow(-1)
+        self._settings_view.set_settings(
+            settings=self._context.settings_service.settings,
+            runtime_info=self._context.runtime_service.runtime_info(),
+        )
+        self._settings_dialog.retranslate_ui(self._localization.text("settings.title"))
+        self._settings_dialog.show()
+        self._settings_dialog.raise_()
+        self._settings_dialog.activateWindow()
 
     def _show_project_page(self) -> None:
         self._show_page(self._page_index_by_title_key["page.project.title"])
@@ -735,7 +732,7 @@ class MainWindow(QMainWindow):
         self._simulation_view.set_run_state(active_run, history)
         self._simulation_view.set_log_output(log_snapshot.combined_text)
         self._results_view.refresh_project(project.root)
-        self._refresh_workspace_banner()
+        self._refresh_welcome_summary()
         self._update_window_title()
         self._last_polled_run_state = current_run_state
 
@@ -787,43 +784,33 @@ class MainWindow(QMainWindow):
             self._localization.text("about.body"),
         )
 
-    def _refresh_workspace_banner(self) -> None:
+    def _refresh_welcome_summary(self) -> None:
         workspace = self._context.workspace_service.state
         project = workspace.current_project
-        runtime_info = self._context.runtime_service.runtime_info()
-
         if project is None:
-            self._workspace_banner.set_empty_state()
+            self._welcome_view.set_current_project(None)
+            self._welcome_view.set_workspace_state(
+                readiness_text=self._localization.text("welcome.status.no_project"),
+                activity_text=self._localization.text("workspace.value.no_run"),
+            )
             return
 
         validation = workspace.current_project_validation
         if validation.errors:
-            validation_state = self._localization.text(
+            readiness_state = self._localization.text(
                 "workspace.value.validation_errors",
                 errors=len(validation.errors),
                 warnings=len(validation.warnings),
             )
+        elif workspace.current_project_dirty:
+            readiness_state = self._localization.text("welcome.status.unsaved")
         elif validation.warnings:
-            validation_state = self._localization.text(
+            readiness_state = self._localization.text(
                 "workspace.value.validation_warnings",
                 warnings=len(validation.warnings),
             )
         else:
-            validation_state = self._localization.text("workspace.value.validation_ready")
-
-        project_state = self._localization.text(
-            "workspace.value.project_dirty"
-            if workspace.current_project_dirty
-            else "workspace.value.project_saved"
-        )
-
-        runtime_state = self._localization.text(
-            "workspace.value.runtime_state",
-            mode=self._localization.text(
-                f"settings.runtime_mode.{runtime_info.engine.mode.value}"
-            ),
-            version=runtime_info.gprmax_version or self._localization.text("common.not_set"),
-        )
+            readiness_state = self._localization.text("workspace.value.validation_ready")
 
         if workspace.active_run is not None and workspace.active_run.status.value in {
             "preparing",
@@ -846,14 +833,10 @@ class MainWindow(QMainWindow):
         else:
             activity_state = self._localization.text("workspace.value.no_run")
 
-        self._workspace_banner.set_workspace_state(
-            project_name=project.metadata.name,
-            model_title=project.model.title or self._localization.text("common.not_set"),
-            project_root=str(project.root),
-            project_state=project_state,
-            validation_state=validation_state,
-            runtime_state=runtime_state,
-            activity_state=activity_state,
+        self._welcome_view.set_current_project(project)
+        self._welcome_view.set_workspace_state(
+            readiness_text=readiness_state,
+            activity_text=activity_state,
         )
 
     def _discover_example_projects(self) -> list[ExampleProjectItem]:

@@ -17,6 +17,7 @@ class BscanImageWidget(QWidget):
     ) -> None:
         super().__init__(parent)
         self._localization = localization
+        self._source_pixmap = QPixmap()
         self._message = QLabel()
         self._message.setWordWrap(True)
         self._message.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -37,11 +38,13 @@ class BscanImageWidget(QWidget):
     def set_result(self, result: BscanLoadResult) -> None:
         self._message.setText(self._localization.translate_message(result.message))
         if not result.available or result.dataset is None:
+            self._source_pixmap = QPixmap()
             self._image.clear()
             return
 
         array = np.asarray(result.dataset.amplitudes, dtype=float)
         if array.size == 0:
+            self._source_pixmap = QPixmap()
             self._image.clear()
             self._message.setText(self._localization.text("results.plot.bscan_empty"))
             return
@@ -55,30 +58,30 @@ class BscanImageWidget(QWidget):
             image_array.strides[0],
             QImage.Format.Format_RGB888,
         ).copy()
-        pixmap = QPixmap.fromImage(qimage).scaled(
-            self._image.size() if self._image.size().isValid() else self._image.minimumSizeHint(),
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation,
-        )
-        self._image.setPixmap(pixmap)
+        self._source_pixmap = QPixmap.fromImage(qimage)
+        self._refresh_pixmap()
 
     def resizeEvent(self, event) -> None:  # noqa: N802
         super().resizeEvent(event)
-        pixmap = self._image.pixmap()
-        if pixmap is None or pixmap.isNull():
-            return
-        self._image.setPixmap(
-            pixmap.scaled(
-                self._image.size(),
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-        )
+        self._refresh_pixmap()
 
     def retranslate_ui(self) -> None:
         pixmap = self._image.pixmap()
         if pixmap is None or pixmap.isNull():
             self._message.setText(self._localization.text("results.plot.bscan_placeholder"))
+
+    def _refresh_pixmap(self) -> None:
+        if self._source_pixmap.isNull():
+            self._image.clear()
+            return
+        target_size = self._image.size() if self._image.size().isValid() else self._image.minimumSizeHint()
+        self._image.setPixmap(
+            self._source_pixmap.scaled(
+                target_size,
+                Qt.AspectRatioMode.IgnoreAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+        )
 
     def _to_image_array(self, amplitudes: np.ndarray) -> np.ndarray:
         matrix = amplitudes.T

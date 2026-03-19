@@ -64,7 +64,6 @@ class SimulationView(QWidget):
 
         self._mode_tile = MetricTile()
         self._runs_tile = MetricTile()
-        self._runtime_tile = MetricTile()
         self._activity_tile = MetricTile()
 
         self._mode_combo = QComboBox()
@@ -136,7 +135,6 @@ class SimulationView(QWidget):
         metrics_row = FlowLayout(horizontal_spacing=12, vertical_spacing=12)
         metrics_row.addWidget(self._mode_tile)
         metrics_row.addWidget(self._runs_tile)
-        metrics_row.addWidget(self._runtime_tile)
         metrics_row.addWidget(self._activity_tile)
 
         runtime_card = self._build_card(
@@ -303,11 +301,9 @@ class SimulationView(QWidget):
     def _build_runtime_widget(self) -> QWidget:
         widget = QWidget()
         layout = QFormLayout(widget)
-        self._runtime_row_label = QLabel()
         self._project_state_row_label = QLabel()
         self._run_state_row_label = QLabel()
         self._messages_row_label = QLabel()
-        layout.addRow(self._runtime_row_label, self._runtime_label)
         layout.addRow(self._project_state_row_label, self._project_state_label)
         layout.addRow(self._run_state_row_label, self._status_label)
         layout.addRow(self._messages_row_label, self._validation_label)
@@ -419,7 +415,6 @@ class SimulationView(QWidget):
         self._open_output_button.setText(
             self._localization.text("simulation.action.open_output")
         )
-        self._runtime_row_label.setText(self._localization.text("simulation.runtime"))
         self._project_state_row_label.setText(
             self._localization.text("simulation.project_state_label")
         )
@@ -452,11 +447,6 @@ class SimulationView(QWidget):
             eyebrow=self._localization.text("simulation.metric.runs"),
             value=str(self._num_runs_spinbox.value()),
         )
-        self._runtime_tile.set_content(
-            eyebrow=self._localization.text("simulation.metric.runtime"),
-            value=self._runtime_label.text() or self._localization.text("common.not_set"),
-        )
-
     def _refresh_responsive_layout(self) -> None:
         wide = self.width() >= 1120
         top_orientation = Qt.Orientation.Horizontal if wide else Qt.Orientation.Vertical

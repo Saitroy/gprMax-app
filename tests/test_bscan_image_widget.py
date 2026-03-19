@@ -47,6 +47,36 @@ class BscanImageWidgetTests(unittest.TestCase):
         self.assertIsNotNone(widget._image.pixmap())
         self.assertFalse(widget._image.pixmap().isNull())
 
+    def test_resize_rescales_from_source_pixmap(self) -> None:
+        widget = BscanImageWidget(LocalizationService("en"))
+        widget.resize(640, 320)
+        widget.show()
+
+        result = BscanLoadResult(
+            available=True,
+            message="ok",
+            dataset=BscanDataset(
+                receiver_id="rx1",
+                receiver_name="Rx 1",
+                component="Ex",
+                time_s=[0.0, 1.0, 2.0],
+                amplitudes=[
+                    [0.0, 1.0, 0.0],
+                    [1.0, 0.0, -1.0],
+                    [0.0, -1.0, 0.0],
+                ],
+            ),
+        )
+
+        widget.set_result(result)
+        first_size = widget._image.pixmap().size()
+
+        widget.resize(480, 480)
+        widget.repaint()
+
+        self.assertFalse(widget._source_pixmap.isNull())
+        self.assertNotEqual(first_size, widget._image.pixmap().size())
+
 
 if __name__ == "__main__":
     unittest.main()
