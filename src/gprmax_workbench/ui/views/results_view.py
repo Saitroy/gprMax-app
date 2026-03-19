@@ -2,17 +2,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QUrl
+from PySide6.QtCore import QSignalBlocker, Qt, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QComboBox,
     QFormLayout,
     QFrame,
-    QHBoxLayout,
     QLabel,
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QSizePolicy,
     QSplitter,
     QTabWidget,
     QVBoxLayout,
@@ -111,23 +111,41 @@ class ResultsView(QWidget):
         self._trace_plot = TracePlotWidget(localization)
         self._bscan_view = BscanImageWidget(localization)
         tabs = QTabWidget()
+        tabs.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         tabs.addTab(self._trace_plot, "")
         tabs.addTab(self._bscan_view, "")
         self._tabs = tabs
 
-        right_content = QWidget()
-        right_layout = QVBoxLayout(right_content)
-        right_layout.setContentsMargins(0, 0, 0, 0)
-        right_layout.setSpacing(12)
-        right_layout.addWidget(summary_card)
-        right_layout.addWidget(self._artifact_splitter)
-        right_layout.addWidget(selectors)
-        right_layout.addWidget(tabs, 1)
-        right_layout.addWidget(self._status_label)
+        plot_panel = QWidget()
+        plot_layout = QVBoxLayout(plot_panel)
+        plot_layout.setContentsMargins(0, 0, 0, 0)
+        plot_layout.setSpacing(10)
+        plot_layout.addWidget(selectors)
+        plot_layout.addWidget(tabs, 1)
+        plot_layout.addWidget(self._status_label)
+
+        plot_card = self._build_card("results.card.plot", plot_panel)
+        plot_card.setMinimumHeight(420)
+        plot_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
+        details_panel = QWidget()
+        details_layout = QVBoxLayout(details_panel)
+        details_layout.setContentsMargins(0, 0, 0, 0)
+        details_layout.setSpacing(12)
+        details_layout.addWidget(summary_card)
+        details_layout.addWidget(self._artifact_splitter, 1)
+
+        self._right_splitter = QSplitter(Qt.Orientation.Vertical)
+        self._right_splitter.addWidget(plot_card)
+        self._right_splitter.addWidget(details_panel)
+        self._right_splitter.setStretchFactor(0, 3)
+        self._right_splitter.setStretchFactor(1, 1)
+        self._right_splitter.setChildrenCollapsible(False)
+        self._right_splitter.setSizes([560, 260])
 
         self._main_splitter = QSplitter()
         self._main_splitter.addWidget(left_panel)
-        self._main_splitter.addWidget(right_content)
+        self._main_splitter.addWidget(self._right_splitter)
         self._main_splitter.setStretchFactor(0, 0)
         self._main_splitter.setStretchFactor(1, 1)
         self._main_splitter.setSizes([280, 920])
@@ -194,7 +212,9 @@ class ResultsView(QWidget):
             self._clear_results(self._localization.text("results.status.no_results"))
             return
 
-        self._run_list.setCurrentRow(target_row)
+        with QSignalBlocker(self._run_list):
+            self._run_list.setCurrentRow(target_row)
+        self._on_run_changed(target_row)
 
     def refresh_current_project(self) -> None:
         self.refresh_project(self._project_root)
@@ -265,7 +285,9 @@ class ResultsView(QWidget):
             )
             return
 
-        self._output_list.setCurrentRow(target_row)
+        with QSignalBlocker(self._output_list):
+            self._output_list.setCurrentRow(target_row)
+        self._on_output_changed(target_row)
 
     def _on_output_changed(self, row: int) -> None:
         if self._loading:
@@ -296,16 +318,17 @@ class ResultsView(QWidget):
 
         self._summary_panel.set_summary(summary, metadata)
         self._loading = True
-        self._receiver_combo.clear()
-        for receiver in metadata.receivers:
-            self._receiver_combo.addItem(
-                self._localization.text(
-                    "results.receiver_item",
-                    receiver_id=receiver.receiver_id,
-                    name=receiver.name,
-                ),
-                receiver.receiver_id,
-            )
+        with QSignalBlocker(self._receiver_combo):
+            self._receiver_combo.clear()
+            for receiver in metadata.receivers:
+                self._receiver_combo.addItem(
+                    self._localization.text(
+                        "results.receiver_item",
+                        receiver_id=receiver.receiver_id,
+                        name=receiver.name,
+                    ),
+                    receiver.receiver_id,
+                )
         selected_receiver_id = self._results_service.viewer_state.selected_receiver_id
         target_index = 0
         if selected_receiver_id:
@@ -320,7 +343,9 @@ class ResultsView(QWidget):
             self._bscan_view.set_result(_empty_bscan_result(message))
             return
 
-        self._receiver_combo.setCurrentIndex(target_index)
+        with QSignalBlocker(self._receiver_combo):
+            self._receiver_combo.setCurrentIndex(target_index)
+        self._on_receiver_changed(target_index)
 
     def _on_receiver_changed(self, index: int) -> None:
         if self._loading:
@@ -337,9 +362,10 @@ class ResultsView(QWidget):
 
         components = self._trace_service.list_output_components(output_path, receiver_id_text)
         self._loading = True
-        self._component_combo.clear()
-        for component in components:
-            self._component_combo.addItem(component, component)
+        with QSignalBlocker(self._component_combo):
+            self._component_combo.clear()
+            for component in components:
+                self._component_combo.addItem(component, component)
         selected_component = self._results_service.viewer_state.selected_component
         target_index = 0
         if selected_component:
@@ -354,7 +380,9 @@ class ResultsView(QWidget):
             self._status_label.setText(message)
             return
 
-        self._component_combo.setCurrentIndex(target_index)
+        with QSignalBlocker(self._component_combo):
+            self._component_combo.setCurrentIndex(target_index)
+        self._on_component_changed(target_index)
 
     def _on_component_changed(self, index: int) -> None:
         if self._loading:

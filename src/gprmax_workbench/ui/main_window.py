@@ -205,6 +205,7 @@ class MainWindow(QMainWindow):
         else:
             self._simulation_view.set_project_state(project_name=None, is_dirty=False)
             workspace.state.run_history = []
+            self._last_polled_run_state = None
 
         self._welcome_view.set_current_project(project)
         self._welcome_view.set_recent_projects(workspace.state.recent_projects)
@@ -716,11 +717,18 @@ class MainWindow(QMainWindow):
             self._simulation_view.set_run_state(None, [])
             self._simulation_view.set_log_output("")
             self._results_view.refresh_project(None)
+            self._last_polled_run_state = None
             return
 
         state = self._context.workspace_service.state
         history = state.run_history
         active_run = self._context.simulation_service.get_run_status()
+        previous_run_state = self._last_polled_run_state
+        current_run_state = (
+            (active_run.run_id, active_run.status.value)
+            if active_run is not None
+            else None
+        )
         target_run = self._resolve_target_run(default_to_active=True)
         log_snapshot = self._context.simulation_service.get_log_snapshot_for_run(target_run)
 
@@ -729,6 +737,18 @@ class MainWindow(QMainWindow):
         self._results_view.refresh_project(project.root)
         self._refresh_workspace_banner()
         self._update_window_title()
+        self._last_polled_run_state = current_run_state
+
+        if (
+            previous_run_state is not None
+            and current_run_state is not None
+            and previous_run_state[0] == current_run_state[0]
+            and previous_run_state[1] in {"preparing", "running"}
+            and current_run_state[1] == "completed"
+        ):
+            self._context.results_service.focus_run(active_run.run_id)
+            self._results_view.refresh_project(project.root)
+            self._show_results_page()
 
     def _resolve_target_run(
         self,
