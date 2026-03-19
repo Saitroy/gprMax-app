@@ -306,6 +306,77 @@ class ResultsViewTests(unittest.TestCase):
 
         self.assertEqual(view._output_list.count(), 2)
 
+    def test_switching_to_bscan_tab_selects_latest_bscan_capable_run(self) -> None:
+        latest_ascan_summary = _build_run_summary(
+            Path("D:/demo/output/latest_ascan.out"),
+        )
+        older_bscan_summary = _build_run_summary(
+            Path("D:/demo/output/simulation1.out"),
+            extra_outputs=[
+                OutputFileDescriptor(
+                    path=Path("D:/demo/output/simulation2.out"),
+                    name="simulation2.out",
+                    kind=OutputFileKind.ASCAN,
+                    size_bytes=512,
+                )
+            ],
+        )
+        latest_ascan_summary.run_record.run_id = "run-latest-ascan"
+        latest_ascan_summary.run_record.created_at = datetime(2026, 3, 19, 12, 0, tzinfo=UTC)
+        older_bscan_summary.run_record.run_id = "run-bscan"
+        older_bscan_summary.run_record.created_at = datetime(2026, 3, 19, 11, 0, tzinfo=UTC)
+
+        metadata = ResultMetadata(
+            output_file=older_bscan_summary.output_files[0],
+            gprmax_version="3.1.7",
+            model_title="Demo result",
+            iterations=4,
+            grid_shape=(100, 1, 1),
+            resolution_m=(0.01, 0.01, 0.01),
+            dt_s=1e-11,
+            src_steps_m=(0.0, 0.0, 0.0),
+            rx_steps_m=(0.01, 0.0, 0.0),
+            source_count=1,
+            receiver_count=1,
+            receivers=[
+                ReceiverResultSummary(
+                    receiver_id="rx1",
+                    name="Receiver 1",
+                    position_m=Vector3(x=0.1, y=0.0, z=0.0),
+                    components=["Ez"],
+                )
+            ],
+        )
+        trace = AscanTrace(
+            metadata=TraceMetadata(
+                output_file=older_bscan_summary.output_files[0].path,
+                receiver_id="rx1",
+                receiver_name="Receiver 1",
+                component="Ez",
+                dt_s=1e-11,
+                iterations=4,
+            ),
+            time_s=[0.0, 1e-11, 2e-11, 3e-11],
+            values=[0.0, 0.1, -0.2, 0.3],
+        )
+        results_service = ResultsService(
+            result_repository=_FakeResultRepository([latest_ascan_summary, older_bscan_summary]),
+            state=AppState(),
+        )
+        view = ResultsView(
+            localization=LocalizationService("ru"),
+            results_service=results_service,
+            trace_service=_FakeTraceService(metadata, {"Ez": trace}),
+            bscan_service=_FakeBscanService(),
+        )
+
+        view.refresh_project(Path("D:/demo"))
+        self.assertEqual(results_service.viewer_state.selected_run_id, "run-latest-ascan")
+
+        view._tabs.setCurrentIndex(1)
+
+        self.assertEqual(results_service.viewer_state.selected_run_id, "run-bscan")
+
 
 def _build_run_summary(
     output_path: Path,
