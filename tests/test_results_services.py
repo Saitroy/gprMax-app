@@ -63,11 +63,13 @@ class ResultsServiceTests(unittest.TestCase):
         )
         state.results_viewer.selected_receiver_id = "rx1"
         state.results_viewer.selected_component = "Ez"
+        state.results_viewer.selected_ascan_components = ["Ez", "Hx"]
 
         service.select_output_file(Path("D:/demo/trace.out"))
 
         self.assertIsNone(state.results_viewer.selected_receiver_id)
         self.assertIsNone(state.results_viewer.selected_component)
+        self.assertEqual(state.results_viewer.selected_ascan_components, [])
 
     def test_focus_run_resets_dependent_viewer_selection(self) -> None:
         state = AppState()
@@ -78,6 +80,7 @@ class ResultsServiceTests(unittest.TestCase):
         state.results_viewer.selected_output_file = "D:/demo/trace.out"
         state.results_viewer.selected_receiver_id = "rx1"
         state.results_viewer.selected_component = "Ez"
+        state.results_viewer.selected_ascan_components = ["Ez", "Hx"]
 
         service.focus_run("run-2")
 
@@ -85,6 +88,7 @@ class ResultsServiceTests(unittest.TestCase):
         self.assertIsNone(state.results_viewer.selected_output_file)
         self.assertIsNone(state.results_viewer.selected_receiver_id)
         self.assertIsNone(state.results_viewer.selected_component)
+        self.assertEqual(state.results_viewer.selected_ascan_components, [])
 
     def test_bscan_service_delegates_to_builder(self) -> None:
         service = BscanService(_FakeBscanBuilder())

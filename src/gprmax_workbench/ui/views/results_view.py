@@ -5,6 +5,7 @@ from pathlib import Path
 from PySide6.QtCore import QSignalBlocker, Qt, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QFormLayout,
     QFrame,
@@ -32,6 +33,10 @@ from ..widgets.results.trace_plot_widget import TracePlotWidget
 
 
 class ResultsView(QWidget):
+    _OUTPUT_MODE_FILE = "file"
+    _OUTPUT_MODE_MERGED = "merged"
+    _OUTPUT_MODE_STACKED = "stacked"
+
     def __init__(
         self,
         *,
@@ -67,11 +72,16 @@ class ResultsView(QWidget):
         self._output_list = QListWidget()
         self._output_list.currentRowChanged.connect(self._on_output_changed)
         self._artifact_list = QListWidget()
+        self._component_list = QListWidget()
+        self._component_list.itemChanged.connect(self._on_ascan_component_item_changed)
 
         self._receiver_combo = QComboBox()
         self._receiver_combo.currentIndexChanged.connect(self._on_receiver_changed)
-        self._component_combo = QComboBox()
-        self._component_combo.currentIndexChanged.connect(self._on_component_changed)
+        self._bscan_component_combo = QComboBox()
+        self._bscan_component_combo.currentIndexChanged.connect(self._on_bscan_component_changed)
+        self._show_unmerged_checkbox = QCheckBox()
+        self._show_unmerged_checkbox.setVisible(False)
+        self._show_unmerged_checkbox.toggled.connect(self._on_output_filter_changed)
 
         self._refresh_button = QPushButton()
         self._refresh_button.clicked.connect(self.refresh_current_project)
@@ -91,7 +101,13 @@ class ResultsView(QWidget):
         self._summary_panel = ResultSummaryPanel(localization)
         summary_card = self._build_card("results.card.summary", self._summary_panel)
 
-        output_card = self._build_card("results.card.output_files", self._output_list)
+        output_panel = QWidget()
+        output_layout = QVBoxLayout(output_panel)
+        output_layout.setContentsMargins(0, 0, 0, 0)
+        output_layout.setSpacing(10)
+        output_layout.addWidget(self._show_unmerged_checkbox)
+        output_layout.addWidget(self._output_list, 1)
+        output_card = self._build_card("results.card.output_files", output_panel)
         artifact_card = self._build_card("results.card.other_artifacts", self._artifact_list)
         self._artifact_splitter = QSplitter()
         self._artifact_splitter.addWidget(output_card)
@@ -104,9 +120,11 @@ class ResultsView(QWidget):
         selectors_layout = QFormLayout(selectors)
         selectors_layout.setContentsMargins(0, 0, 0, 0)
         self._receiver_label = QLabel()
-        self._component_label = QLabel()
+        self._ascan_components_label = QLabel()
+        self._bscan_component_label = QLabel()
         selectors_layout.addRow(self._receiver_label, self._receiver_combo)
-        selectors_layout.addRow(self._component_label, self._component_combo)
+        selectors_layout.addRow(self._ascan_components_label, self._component_list)
+        selectors_layout.addRow(self._bscan_component_label, self._bscan_component_combo)
 
         self._trace_plot = TracePlotWidget(localization)
         self._bscan_view = BscanImageWidget(localization)
@@ -223,6 +241,11 @@ class ResultsView(QWidget):
         super().resizeEvent(event)
         self._refresh_responsive_layout()
 
+    def _on_output_filter_changed(self, _checked: bool) -> None:
+        if self._loading:
+            return
+        self._populate_run_details(self._current_summary())
+
     def _on_run_changed(self, row: int) -> None:
         if self._loading:
             return
@@ -239,7 +262,8 @@ class ResultsView(QWidget):
         self._output_list.clear()
         self._artifact_list.clear()
         self._receiver_combo.clear()
-        self._component_combo.clear()
+        self._component_list.clear()
+        self._bscan_component_combo.clear()
         self._summary_panel.set_summary(summary, None)
         self._trace_plot.clear(self._localization.text("results.status.select_trace"))
         self._bscan_view.set_result(
@@ -251,10 +275,15 @@ class ResultsView(QWidget):
             self._loading = False
             return
 
-        for output_file in summary.output_files:
-            item = QListWidgetItem(output_file.name)
-            item.setToolTip(str(output_file.path))
-            item.setData(Qt.ItemDataRole.UserRole, str(output_file.path))
+        output_entries = self._output_entries(summary)
+        self._show_unmerged_checkbox.setVisible(self._can_toggle_unmerged(summary))
+        self._show_unmerged_checkbox.setEnabled(self._can_toggle_unmerged(summary))
+
+        for label, output_path, output_mode in output_entries:
+            item = QListWidgetItem(label)
+            item.setToolTip(str(output_path))
+            item.setData(Qt.ItemDataRole.UserRole, str(output_path))
+            item.setData(Qt.ItemDataRole.UserRole + 1, output_mode)
             self._output_list.addItem(item)
 
         for artifact in summary.visualisation_artifacts:
@@ -309,7 +338,8 @@ class ResultsView(QWidget):
         except ResultsReadError as exc:
             self._summary_panel.set_summary(summary, None)
             self._receiver_combo.clear()
-            self._component_combo.clear()
+            self._component_list.clear()
+            self._bscan_component_combo.clear()
             message = self._localization.translate_message(str(exc))
             self._trace_plot.clear(message)
             self._bscan_view.set_result(_empty_bscan_result(message))
@@ -343,6 +373,12 @@ class ResultsView(QWidget):
             self._bscan_view.set_result(_empty_bscan_result(message))
             return
 
+        output_mode = self._selected_output_mode()
+        if output_mode in {self._OUTPUT_MODE_MERGED, self._OUTPUT_MODE_STACKED}:
+            self._tabs.setCurrentIndex(1)
+        else:
+            self._tabs.setCurrentIndex(0)
+
         with QSignalBlocker(self._receiver_combo):
             self._receiver_combo.setCurrentIndex(target_index)
         self._on_receiver_changed(target_index)
@@ -357,66 +393,78 @@ class ResultsView(QWidget):
         self._results_service.select_receiver(receiver_id_text)
 
         if output_path is None or receiver_id_text is None:
-            self._component_combo.clear()
+            self._component_list.clear()
+            self._bscan_component_combo.clear()
             return
 
         components = self._trace_service.list_output_components(output_path, receiver_id_text)
         self._loading = True
-        with QSignalBlocker(self._component_combo):
-            self._component_combo.clear()
+        saved_ascan_components = self._results_service.viewer_state.selected_ascan_components
+        selected_ascan_components = [
+            component for component in saved_ascan_components if component in components
+        ] or (components[:1] if components else [])
+        with QSignalBlocker(self._component_list):
+            self._component_list.clear()
             for component in components:
-                self._component_combo.addItem(component, component)
+                item = QListWidgetItem(component)
+                item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                item.setCheckState(
+                    Qt.CheckState.Checked
+                    if component in selected_ascan_components
+                    else Qt.CheckState.Unchecked
+                )
+                self._component_list.addItem(item)
+
         selected_component = self._results_service.viewer_state.selected_component
         target_index = 0
         if selected_component:
-            index = self._component_combo.findData(selected_component)
+            index = self._bscan_component_combo.findData(selected_component)
             target_index = index if index >= 0 else 0
+        with QSignalBlocker(self._bscan_component_combo):
+            self._bscan_component_combo.clear()
+            for component in components:
+                self._bscan_component_combo.addItem(component, component)
+            if components:
+                restored_index = self._bscan_component_combo.findData(selected_component)
+                target_index = restored_index if restored_index >= 0 else 0
         self._loading = False
 
-        if self._component_combo.count() == 0:
+        if self._bscan_component_combo.count() == 0:
             message = self._localization.text("results.status.no_components")
             self._trace_plot.clear(message)
             self._bscan_view.set_result(_empty_bscan_result(message))
             self._status_label.setText(message)
             return
 
-        with QSignalBlocker(self._component_combo):
-            self._component_combo.setCurrentIndex(target_index)
-        self._on_component_changed(target_index)
+        self._results_service.select_ascan_components(selected_ascan_components)
+        self._render_ascan_for_selection()
+        with QSignalBlocker(self._bscan_component_combo):
+            self._bscan_component_combo.setCurrentIndex(target_index)
+        self._on_bscan_component_changed(target_index)
 
-    def _on_component_changed(self, index: int) -> None:
+    def _on_ascan_component_item_changed(self, _item: QListWidgetItem) -> None:
+        if self._loading:
+            return
+        selected_components = self._selected_ascan_components()
+        self._results_service.select_ascan_components(selected_components)
+        self._render_ascan_for_selection()
+
+    def _on_bscan_component_changed(self, index: int) -> None:
         if self._loading:
             return
 
         summary = self._current_summary()
         output_path = self._results_service.selected_output_path()
         receiver_id = self._results_service.viewer_state.selected_receiver_id
-        component = self._component_combo.itemData(index) if index >= 0 else None
+        component = self._bscan_component_combo.itemData(index) if index >= 0 else None
         component_text = component if isinstance(component, str) else None
         self._results_service.select_component(component_text)
 
         if summary is None or output_path is None or receiver_id is None or component_text is None:
-            message = self._localization.text("results.status.select_trace")
-            self._trace_plot.clear(message)
+            message = self._localization.text("results.status.select_bscan_component")
             self._bscan_view.set_result(_empty_bscan_result(message))
+            self._append_status_message(message)
             return
-
-        status_messages: list[str] = []
-        try:
-            trace = self._trace_service.load_ascan(output_path, receiver_id, component_text)
-        except ResultsReadError as exc:
-            message = self._localization.translate_message(str(exc))
-            self._trace_plot.clear(message)
-            status_messages.append(message)
-        else:
-            self._trace_plot.set_trace(trace)
-            status_messages.append(
-                self._localization.text(
-                    "results.ascan_loaded",
-                    samples=len(trace.values),
-                    dt=trace.metadata.dt_s,
-                )
-            )
 
         bscan_result = self._bscan_service.load_bscan_if_available(
             summary,
@@ -424,8 +472,10 @@ class ResultsView(QWidget):
             component_text,
         )
         self._bscan_view.set_result(bscan_result)
-        status_messages.append(self._localization.translate_message(bscan_result.message))
-        self._status_label.setText("\n".join(status_messages))
+        self._append_status_message(
+            self._localization.translate_message(bscan_result.message),
+            replace=False,
+        )
 
     def _open_output_directory(self) -> None:
         summary = self._current_summary()
@@ -466,12 +516,118 @@ class ResultsView(QWidget):
         self._metadata_cache[key] = metadata
         return metadata
 
+    def _render_ascan_for_selection(self) -> None:
+        output_path = self._results_service.selected_output_path()
+        receiver_id = self._results_service.viewer_state.selected_receiver_id
+        selected_components = self._selected_ascan_components()
+        if output_path is None or receiver_id is None:
+            message = self._localization.text("results.status.select_trace")
+            self._trace_plot.clear(message)
+            self._append_status_message(message)
+            return
+
+        output_mode = self._selected_output_mode()
+        if output_mode in {self._OUTPUT_MODE_MERGED, self._OUTPUT_MODE_STACKED}:
+            message = self._localization.text("results.status.ascan_merged_only")
+            self._trace_plot.clear(message)
+            self._append_status_message(message)
+            return
+
+        if not selected_components:
+            message = self._localization.text("results.status.select_ascan_component")
+            self._trace_plot.clear(message)
+            self._append_status_message(message)
+            return
+
+        try:
+            traces = self._trace_service.load_ascans(
+                output_path,
+                receiver_id,
+                selected_components,
+            )
+        except ResultsReadError as exc:
+            message = self._localization.translate_message(str(exc))
+            self._trace_plot.clear(message)
+            self._append_status_message(message)
+            return
+
+        self._trace_plot.set_traces(traces)
+        self._append_status_message(
+            self._localization.text(
+                "results.ascan_multi_loaded",
+                components=", ".join(trace.metadata.component for trace in traces),
+                samples=len(traces[0].values) if traces else 0,
+                dt=traces[0].metadata.dt_s if traces else 0.0,
+            )
+        )
+
+    def _selected_ascan_components(self) -> list[str]:
+        components: list[str] = []
+        for row in range(self._component_list.count()):
+            item = self._component_list.item(row)
+            if item.checkState() == Qt.CheckState.Checked:
+                components.append(item.text())
+        return components
+
+    def _output_entries(self, summary: RunResultSummary) -> list[tuple[str, Path, str]]:
+        merged_files = [item for item in summary.output_files if item.is_merged]
+        single_trace_files = [item for item in summary.output_files if not item.is_merged]
+        if not self._show_unmerged_checkbox.isChecked():
+            if merged_files:
+                return [
+                    (item.name, item.path, self._OUTPUT_MODE_MERGED)
+                    for item in merged_files
+                ]
+            if len(single_trace_files) >= 2:
+                primary = single_trace_files[0]
+                return [
+                    (
+                        self._localization.text(
+                            "results.output.stacked_bscan",
+                            count=len(single_trace_files),
+                        ),
+                        primary.path,
+                        self._OUTPUT_MODE_STACKED,
+                    )
+                ]
+        return [
+            (
+                item.name,
+                item.path,
+                self._OUTPUT_MODE_MERGED if item.is_merged else self._OUTPUT_MODE_FILE,
+            )
+            for item in summary.output_files
+        ]
+
+    def _can_toggle_unmerged(self, summary: RunResultSummary) -> bool:
+        has_merged = any(item.is_merged for item in summary.output_files)
+        single_trace_count = sum(1 for item in summary.output_files if not item.is_merged)
+        return (has_merged and single_trace_count > 0) or single_trace_count >= 2
+
+    def _selected_output_mode(self) -> str | None:
+        item = self._output_list.currentItem()
+        if item is None:
+            return None
+        value = item.data(Qt.ItemDataRole.UserRole + 1)
+        return value if isinstance(value, str) else None
+
+    def _append_status_message(self, message: str, *, replace: bool = True) -> None:
+        if replace or not self._status_label.text().strip():
+            self._status_label.setText(message)
+            return
+        parts = [part for part in self._status_label.text().splitlines() if part.strip()]
+        if message not in parts:
+            parts.append(message)
+        self._status_label.setText("\n".join(parts))
+
     def _clear_results(self, message: str) -> None:
         self._run_list.clear()
         self._output_list.clear()
         self._artifact_list.clear()
         self._receiver_combo.clear()
-        self._component_combo.clear()
+        self._component_list.clear()
+        self._bscan_component_combo.clear()
+        self._show_unmerged_checkbox.setVisible(False)
         self._summary_panel.set_summary(None, None)
         self._trace_plot.clear(message)
         self._bscan_view.set_result(_empty_bscan_result(message))
@@ -520,7 +676,15 @@ class ResultsView(QWidget):
             self._localization.text("results.action.open_selected")
         )
         self._receiver_label.setText(self._localization.text("results.receiver"))
-        self._component_label.setText(self._localization.text("results.component"))
+        self._ascan_components_label.setText(
+            self._localization.text("results.ascan_components")
+        )
+        self._bscan_component_label.setText(
+            self._localization.text("results.bscan_component")
+        )
+        self._show_unmerged_checkbox.setText(
+            self._localization.text("results.show_unmerged")
+        )
         self._tabs.setTabText(0, self._localization.text("results.tab.ascan"))
         self._tabs.setTabText(1, self._localization.text("results.tab.bscan"))
         self._summary_panel.retranslate_ui()

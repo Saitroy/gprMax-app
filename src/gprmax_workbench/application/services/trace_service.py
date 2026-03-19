@@ -33,3 +33,14 @@ class TraceService:
         component: str,
     ) -> AscanTrace:
         return self._result_repository.load_ascan(output_file, receiver_id, component)
+
+    def load_ascans(
+        self,
+        output_file: Path,
+        receiver_id: str,
+        components: list[str],
+    ) -> list[AscanTrace]:
+        traces: list[AscanTrace] = []
+        for component in components:
+            traces.append(self.load_ascan(output_file, receiver_id, component))
+        return traces

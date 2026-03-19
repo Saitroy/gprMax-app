@@ -40,6 +40,7 @@ class ResultsService:
             self._state.results_viewer.selected_output_file = None
             self._state.results_viewer.selected_receiver_id = None
             self._state.results_viewer.selected_component = None
+            self._state.results_viewer.selected_ascan_components = []
         return results
 
     def select_run(self, run_id: str | None) -> None:
@@ -47,6 +48,7 @@ class ResultsService:
         self._state.results_viewer.selected_output_file = None
         self._state.results_viewer.selected_receiver_id = None
         self._state.results_viewer.selected_component = None
+        self._state.results_viewer.selected_ascan_components = []
 
     def focus_run(self, run_id: str | None) -> None:
         """Select a run and reset dependent result selections."""
@@ -58,13 +60,18 @@ class ResultsService:
         )
         self._state.results_viewer.selected_receiver_id = None
         self._state.results_viewer.selected_component = None
+        self._state.results_viewer.selected_ascan_components = []
 
     def select_receiver(self, receiver_id: str | None) -> None:
         self._state.results_viewer.selected_receiver_id = receiver_id
         self._state.results_viewer.selected_component = None
+        self._state.results_viewer.selected_ascan_components = []
 
     def select_component(self, component: str | None) -> None:
         self._state.results_viewer.selected_component = component
+
+    def select_ascan_components(self, components: list[str]) -> None:
+        self._state.results_viewer.selected_ascan_components = list(components)
 
     def selected_output_path(self) -> Path | None:
         raw = self._state.results_viewer.selected_output_file

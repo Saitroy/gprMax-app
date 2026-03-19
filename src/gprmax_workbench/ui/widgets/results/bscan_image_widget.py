@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage, QPixmap
-from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QLabel, QSizePolicy, QVBoxLayout, QWidget
 
 from ....application.services.localization_service import LocalizationService
 from ....domain.traces import BscanLoadResult
@@ -22,7 +22,11 @@ class BscanImageWidget(QWidget):
         self._message.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._image = QLabel()
         self._image.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._image.setMinimumHeight(260)
+        self._image.setMinimumHeight(320)
+        self._image.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding,
+        )
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
