@@ -63,7 +63,7 @@ class Hdf5ResultsReader:
                     self._float_attr(root_attrs, "rxsteps", index=2),
                 ),
                 source_count=self._int_attr(root_attrs, "nsrc"),
-                receiver_count=self._int_attr(root_attrs, "nrx"),
+                receiver_count=self._int_attr(root_attrs, "nrx", default=len(receivers)),
                 receivers=receivers,
             )
 
@@ -214,17 +214,45 @@ class Hdf5ResultsReader:
     def _string_attr(self, attrs: Any, key: str) -> str:
         return self._decode(attrs.get(key, ""))
 
-    def _int_attr(self, attrs: Any, key: str, *, index: int | None = None) -> int:
-        raw = attrs.get(key, 0)
+    def _int_attr(
+        self,
+        attrs: Any,
+        key: str,
+        *,
+        index: int | None = None,
+        default: int = 0,
+    ) -> int:
+        raw = attrs.get(key, None)
+        if raw is None:
+            return default
+        flattened = np.asarray(raw).reshape(-1)
+        if flattened.size == 0:
+            return default
         if index is None:
-            return int(np.asarray(raw).reshape(-1)[0]) if np.asarray(raw).size else 0
-        return int(np.asarray(raw).reshape(-1)[index]) if np.asarray(raw).size else 0
+            return int(flattened[0])
+        if index >= flattened.size:
+            return default
+        return int(flattened[index])
 
-    def _float_attr(self, attrs: Any, key: str, *, index: int | None = None) -> float:
-        raw = attrs.get(key, 0.0)
+    def _float_attr(
+        self,
+        attrs: Any,
+        key: str,
+        *,
+        index: int | None = None,
+        default: float = 0.0,
+    ) -> float:
+        raw = attrs.get(key, None)
+        if raw is None:
+            return default
+        flattened = np.asarray(raw, dtype=float).reshape(-1)
+        if flattened.size == 0:
+            return default
         if index is None:
-            return float(np.asarray(raw).reshape(-1)[0]) if np.asarray(raw).size else 0.0
-        return float(np.asarray(raw).reshape(-1)[index]) if np.asarray(raw).size else 0.0
+            return float(flattened[0])
+        if index >= flattened.size:
+            return default
+        return float(flattened[index])
 
     def _decode(self, value: Any) -> str:
         if isinstance(value, bytes):

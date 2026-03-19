@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 from threading import Lock
@@ -368,17 +369,18 @@ class SimulationService:
 
         record.finished_at = datetime.now(tz=UTC)
         record.exit_code = exit_code
-        record.output_files = self._artifact_store.list_output_files(artifacts)
 
         if cancelled:
             record.status = SimulationStatus.CANCELLED
         elif exit_code == 0:
             record.status = SimulationStatus.COMPLETED
+            self._maybe_merge_batch_outputs(record, artifacts)
         else:
             record.status = SimulationStatus.FAILED
             log_snapshot = self.get_log_snapshot(run_id)
             record.error_summary = self._derive_error_summary(log_snapshot.stderr_text)
 
+        record.output_files = self._artifact_store.list_output_files(artifacts)
         self._run_repository.save(record)
 
         with self._lock:
@@ -393,6 +395,89 @@ class SimulationService:
         if not stripped_lines:
             return "gprMax exited with a non-zero status code."
         return stripped_lines[-1]
+
+    def _maybe_merge_batch_outputs(
+        self,
+        record: SimulationRunRecord,
+        artifacts: RunArtifacts,
+    ) -> None:
+        if record.configuration.num_model_runs <= 1:
+            return
+
+        runtime = self._adapter.runtime_config()
+        if runtime is None or not runtime.python_executable:
+            LOGGER.warning(
+                "Skipping output merge for run %s because runtime configuration is unavailable.",
+                record.run_id,
+            )
+            return
+
+        input_stem = record.input_file.stem
+        candidate_directories = [
+            record.input_file.parent / "output",
+            record.output_directory,
+        ]
+        basefilename: Path | None = None
+        for directory in candidate_directories:
+            first_trace = directory / f"{input_stem}1.out"
+            if first_trace.exists():
+                basefilename = directory / input_stem
+                break
+
+        if basefilename is None:
+            return
+
+        merged_path = basefilename.parent / f"{basefilename.name}_merged.out"
+        if merged_path.exists():
+            return
+
+        command = [
+            runtime.python_executable,
+            "-m",
+            "tools.outputfiles_merge",
+            str(basefilename),
+        ]
+        try:
+            completed = subprocess.run(
+                command,
+                cwd=record.working_directory,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=120,
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+            LOGGER.warning("Failed to merge B-scan outputs for run %s: %s", record.run_id, exc)
+            return
+
+        if completed.stdout:
+            self._append_merge_log(record.run_id, artifacts, "stdout", completed.stdout)
+        if completed.stderr:
+            self._append_merge_log(record.run_id, artifacts, "stderr", completed.stderr)
+
+        if completed.returncode != 0:
+            LOGGER.warning(
+                "Output merge for run %s exited with code %s.",
+                record.run_id,
+                completed.returncode,
+            )
+
+    def _append_merge_log(
+        self,
+        run_id: str,
+        artifacts: RunArtifacts,
+        stream: str,
+        chunk: str,
+    ) -> None:
+        with self._lock:
+            buffers = self._log_buffers.get(run_id)
+        if buffers is not None:
+            buffers[stream].append(chunk)
+            buffers["combined"].append(f"[{stream}] {chunk}")
+        if stream == "stdout":
+            self._artifact_store.append_stdout(artifacts, chunk)
+            return
+        self._artifact_store.append_stderr(artifacts, chunk)
 
     def _merge_history(self, current_record: SimulationRunRecord) -> list[SimulationRunRecord]:
         history = [

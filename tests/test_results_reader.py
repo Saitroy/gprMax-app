@@ -83,6 +83,31 @@ def _build_fake_result_file(dataset_value) -> _FakeFile:
     )
 
 
+def _build_sparse_merged_result_file(dataset_value) -> _FakeFile:
+    return _FakeFile(
+        {
+            "rxs": _FakeGroup(
+                {
+                    "rx1": _FakeGroup(
+                        {
+                            "Ez": _FakeDataset(dataset_value),
+                            "Hx": _FakeDataset(dataset_value),
+                        },
+                        attrs={},
+                    )
+                }
+            )
+        },
+        attrs={
+            "gprMax": b"4.0-test",
+            "Title": b"Merged result",
+            "Iterations": 3,
+            "dt": 1e-11,
+            "nrx": 1,
+        },
+    )
+
+
 class ResultsReaderTests(unittest.TestCase):
     def test_load_metadata_and_ascan_from_fake_backend(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -123,6 +148,36 @@ class ResultsReaderTests(unittest.TestCase):
             self.assertEqual(len(amplitudes), 2)
             self.assertEqual(len(time_s), 3)
             self.assertIn("trace_1", labels)
+
+    def test_load_metadata_from_sparse_merged_result_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "trace_merged.out"
+            output_path.write_text("", encoding="utf-8")
+            reader = _TestReader(
+                {
+                    output_path: _build_sparse_merged_result_file(
+                        np.asarray(
+                            [
+                                [1.0, 2.0],
+                                [3.0, 4.0],
+                                [5.0, 6.0],
+                            ]
+                        )
+                    )
+                }
+            )
+
+            metadata = reader.load_metadata(output_path)
+            amplitudes, time_s, labels = reader.load_matrix(output_path, "rx1", "Ez")
+
+            self.assertEqual(metadata.model_title, "Merged result")
+            self.assertEqual(metadata.grid_shape, (0, 0, 0))
+            self.assertEqual(metadata.resolution_m, (0.0, 0.0, 0.0))
+            self.assertEqual(metadata.receiver_count, 1)
+            self.assertEqual(metadata.available_components, ["Ez", "Hx"])
+            self.assertEqual(len(amplitudes), 2)
+            self.assertEqual(len(time_s), 3)
+            self.assertEqual(labels[0], "trace_1")
 
     def test_missing_h5py_dependency_raises_clear_error(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

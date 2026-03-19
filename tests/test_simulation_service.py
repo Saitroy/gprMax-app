@@ -4,6 +4,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -48,15 +49,36 @@ class _FakeProcess:
 
 
 class _FakeRunner:
-    def __init__(self) -> None:
+    def __init__(self, *, batch_output_count: int = 0) -> None:
         self.started = False
+        self._batch_output_count = batch_output_count
 
     def start(self, command, *, working_directory, callbacks):
         self.started = True
+        if self._batch_output_count > 0:
+            output_directory = Path(working_directory) / "input" / "output"
+            output_directory.mkdir(parents=True, exist_ok=True)
+            for index in range(1, self._batch_output_count + 1):
+                (output_directory / f"simulation{index}.out").write_text(
+                    f"trace {index}",
+                    encoding="utf-8",
+                )
         callbacks.on_stdout("stdout line\n")
         callbacks.on_stderr("stderr line\n")
         callbacks.on_completed(0, False)
         return _FakeProcess()
+
+
+class _MergeCapableAdapter(_FakeAdapter):
+    def __init__(self, python_executable: str) -> None:
+        self._python_executable = python_executable
+
+    def runtime_config(self):
+        class _RuntimeConfig:
+            def __init__(self, python_executable: str) -> None:
+                self.python_executable = python_executable
+
+        return _RuntimeConfig(self._python_executable)
 
 
 class SimulationServiceTests(unittest.TestCase):
@@ -155,6 +177,55 @@ class SimulationServiceTests(unittest.TestCase):
 
             self.assertFalse(runner.started)
             self.assertEqual(state.run_history, [])
+
+    def test_merges_batch_outputs_after_successful_run(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Batch Demo", Path(temp_dir))
+            state = AppState(current_project=project)
+            runner = _FakeRunner(batch_output_count=3)
+            service = SimulationService(
+                adapter=_MergeCapableAdapter(sys.executable),
+                input_generation_service=InputGenerationService(
+                    generator=GprMaxInputGenerator(),
+                    artifact_store=RunArtifactStore(),
+                ),
+                artifact_store=RunArtifactStore(),
+                run_repository=RunRepository(),
+                runner=runner,
+                state=state,
+            )
+
+            def _fake_merge(command, cwd, capture_output, text, check, timeout):
+                self.assertEqual(command[0], sys.executable)
+                self.assertEqual(command[1:3], ["-m", "tools.outputfiles_merge"])
+                basefilename = Path(command[3])
+                (basefilename.parent / f"{basefilename.name}_merged.out").write_text(
+                    "merged",
+                    encoding="utf-8",
+                )
+
+                class _Completed:
+                    returncode = 0
+                    stdout = "merged ok\n"
+                    stderr = ""
+
+                return _Completed()
+
+            with patch(
+                "gprmax_workbench.application.services.simulation_service.subprocess.run",
+                side_effect=_fake_merge,
+            ) as merge_run:
+                run_record = service.start_simulation(
+                    project,
+                    SimulationRunConfig(num_model_runs=3),
+                )
+
+            self.assertTrue(merge_run.called)
+            self.assertTrue(
+                any(path.endswith("simulation_merged.out") for path in run_record.output_files)
+            )
+            snapshot = service.get_log_snapshot_for_run(run_record)
+            self.assertIn("merged ok", snapshot.stdout_text)
 
 
 if __name__ == "__main__":
