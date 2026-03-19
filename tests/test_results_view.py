@@ -306,26 +306,81 @@ class ResultsViewTests(unittest.TestCase):
 
         self.assertEqual(view._output_list.count(), 2)
 
+    def test_refresh_project_respects_focused_run_even_when_result_list_is_unchanged(self) -> None:
+        summary_one = _build_run_summary(Path("D:/demo/output/run1.out"), run_id="run-1")
+        summary_two = _build_run_summary(Path("D:/demo/output/run2.out"), run_id="run-2")
+        metadata = ResultMetadata(
+            output_file=summary_two.output_files[0],
+            gprmax_version="3.1.7",
+            model_title="Demo result",
+            iterations=4,
+            grid_shape=(100, 1, 1),
+            resolution_m=(0.01, 0.01, 0.01),
+            dt_s=1e-11,
+            src_steps_m=(0.0, 0.0, 0.0),
+            rx_steps_m=(0.01, 0.0, 0.0),
+            source_count=1,
+            receiver_count=1,
+            receivers=[
+                ReceiverResultSummary(
+                    receiver_id="rx1",
+                    name="Receiver 1",
+                    position_m=Vector3(x=0.1, y=0.0, z=0.0),
+                    components=["Ez"],
+                )
+            ],
+        )
+        trace = AscanTrace(
+            metadata=TraceMetadata(
+                output_file=summary_two.output_files[0].path,
+                receiver_id="rx1",
+                receiver_name="Receiver 1",
+                component="Ez",
+                dt_s=1e-11,
+                iterations=4,
+            ),
+            time_s=[0.0, 1e-11, 2e-11, 3e-11],
+            values=[0.0, 0.1, -0.2, 0.3],
+        )
+        results_service = ResultsService(
+            result_repository=_FakeResultRepository([summary_two, summary_one]),
+            state=AppState(),
+        )
+        view = ResultsView(
+            localization=LocalizationService("ru"),
+            results_service=results_service,
+            trace_service=_FakeTraceService(metadata, {"Ez": trace}),
+            bscan_service=_FakeBscanService(),
+        )
+
+        view.refresh_project(Path("D:/demo"))
+        results_service.focus_run("run-1")
+        view.refresh_project(Path("D:/demo"))
+
+        self.assertEqual(results_service.viewer_state.selected_run_id, "run-1")
+        self.assertEqual(view._run_list.currentItem().data(Qt.ItemDataRole.UserRole), "run-1")
+
 
 def _build_run_summary(
     output_path: Path,
     *,
+    run_id: str = "run-1",
     output_kind: OutputFileKind = OutputFileKind.ASCAN,
     extra_outputs: list[OutputFileDescriptor] | None = None,
 ) -> RunResultSummary:
     run_record = SimulationRunRecord(
-        run_id="run-1",
+        run_id=run_id,
         project_root=Path("D:/demo"),
         project_name="Demo",
         status=SimulationStatus.COMPLETED,
         created_at=datetime(2026, 3, 19, tzinfo=UTC),
-        working_directory=Path("D:/demo/runs/run-1"),
-        input_file=Path("D:/demo/runs/run-1/input/simulation.in"),
-        output_directory=Path("D:/demo/runs/run-1/output"),
-        stdout_log_path=Path("D:/demo/runs/run-1/logs/stdout.log"),
-        stderr_log_path=Path("D:/demo/runs/run-1/logs/stderr.log"),
-        combined_log_path=Path("D:/demo/runs/run-1/logs/combined.log"),
-        metadata_path=Path("D:/demo/runs/run-1/metadata.json"),
+        working_directory=Path(f"D:/demo/runs/{run_id}"),
+        input_file=Path(f"D:/demo/runs/{run_id}/input/simulation.in"),
+        output_directory=Path(f"D:/demo/runs/{run_id}/output"),
+        stdout_log_path=Path(f"D:/demo/runs/{run_id}/logs/stdout.log"),
+        stderr_log_path=Path(f"D:/demo/runs/{run_id}/logs/stderr.log"),
+        combined_log_path=Path(f"D:/demo/runs/{run_id}/logs/combined.log"),
+        metadata_path=Path(f"D:/demo/runs/{run_id}/metadata.json"),
         configuration=SimulationRunConfig(),
     )
     return RunResultSummary(

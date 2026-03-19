@@ -143,7 +143,7 @@ class ResultsView(QWidget):
         plot_layout.addWidget(self._status_label)
 
         plot_card = self._build_card("results.card.plot", plot_panel)
-        plot_card.setMinimumHeight(420)
+        plot_card.setMinimumHeight(460)
         plot_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         details_panel = QWidget()
@@ -153,21 +153,21 @@ class ResultsView(QWidget):
         details_layout.addWidget(summary_card)
         details_layout.addWidget(self._artifact_splitter, 1)
 
-        self._right_splitter = QSplitter(Qt.Orientation.Vertical)
-        self._right_splitter.addWidget(plot_card)
-        self._right_splitter.addWidget(details_panel)
-        self._right_splitter.setStretchFactor(0, 3)
-        self._right_splitter.setStretchFactor(1, 1)
-        self._right_splitter.setChildrenCollapsible(False)
-        self._right_splitter.setSizes([560, 260])
+        self._bottom_splitter = QSplitter()
+        self._bottom_splitter.addWidget(left_panel)
+        self._bottom_splitter.addWidget(details_panel)
+        self._bottom_splitter.setStretchFactor(0, 0)
+        self._bottom_splitter.setStretchFactor(1, 1)
+        self._bottom_splitter.setSizes([300, 900])
+        self._bottom_splitter.setChildrenCollapsible(False)
 
-        self._main_splitter = QSplitter()
-        self._main_splitter.addWidget(left_panel)
-        self._main_splitter.addWidget(self._right_splitter)
-        self._main_splitter.setStretchFactor(0, 0)
-        self._main_splitter.setStretchFactor(1, 1)
-        self._main_splitter.setSizes([280, 920])
-        self._main_splitter.setChildrenCollapsible(False)
+        self._page_splitter = QSplitter(Qt.Orientation.Vertical)
+        self._page_splitter.addWidget(plot_card)
+        self._page_splitter.addWidget(self._bottom_splitter)
+        self._page_splitter.setStretchFactor(0, 3)
+        self._page_splitter.setStretchFactor(1, 2)
+        self._page_splitter.setChildrenCollapsible(False)
+        self._page_splitter.setSizes([620, 340])
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -175,7 +175,7 @@ class ResultsView(QWidget):
         layout.addWidget(self._title)
         layout.addWidget(self._subtitle)
         layout.addLayout(toolbar)
-        layout.addWidget(self._main_splitter, 1)
+        layout.addWidget(self._page_splitter, 1)
 
         self.retranslate_ui()
         self._clear_results(self._localization.text("results.status.open_project"))
@@ -192,6 +192,7 @@ class ResultsView(QWidget):
         summaries = self._results_service.refresh_results(project_root)
         refresh_key = self._build_refresh_key(project_root, summaries)
         if self._project_root == project_root and self._refresh_key == refresh_key:
+            self._sync_run_selection()
             return
 
         self._project_root = project_root
@@ -705,8 +706,24 @@ class ResultsView(QWidget):
         artifact_orientation = (
             Qt.Orientation.Horizontal if self.width() >= 1320 else Qt.Orientation.Vertical
         )
-        self._main_splitter.setOrientation(main_orientation)
+        self._bottom_splitter.setOrientation(main_orientation)
         self._artifact_splitter.setOrientation(artifact_orientation)
+
+    def _sync_run_selection(self) -> None:
+        selected_run_id = self._results_service.viewer_state.selected_run_id
+        if not selected_run_id:
+            return
+
+        for row in range(self._run_list.count()):
+            item = self._run_list.item(row)
+            if item.data(Qt.ItemDataRole.UserRole) != selected_run_id:
+                continue
+            if self._run_list.currentRow() == row:
+                return
+            with QSignalBlocker(self._run_list):
+                self._run_list.setCurrentRow(row)
+            self._on_run_changed(row)
+            return
 
 
 def _empty_bscan_result(message: str):

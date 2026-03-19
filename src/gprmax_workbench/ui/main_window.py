@@ -27,8 +27,10 @@ from PySide6.QtWidgets import (
 from ..application.services.project_service import ProjectValidationError
 from ..application.services.simulation_service import (
     SimulationPreparationError,
+    SimulationRuntimeCapabilityError,
 )
 from .dialogs.new_project_dialog import NewProjectDialog
+from .dialogs.documentation_dialog import DocumentationDialog
 from .dialogs.settings_dialog import SettingsDialog
 from .views.project_view import ProjectView
 from .views.results_view import ResultsView
@@ -80,6 +82,12 @@ class MainWindow(QMainWindow):
         )
         self._settings_view = SettingsView(self._localization)
         self._settings_dialog = SettingsDialog(self._settings_view, self)
+        self._repo_root = Path(__file__).resolve().parents[3]
+        self._documentation_dialog = DocumentationDialog(
+            localization=self._localization,
+            repo_root=self._repo_root,
+            parent=self,
+        )
         self._pages = self._build_pages()
         self._page_index_by_title_key = {
             page.title_key: index for index, page in enumerate(self._pages)
@@ -135,8 +143,11 @@ class MainWindow(QMainWindow):
     def _connect_signals(self) -> None:
         self._welcome_view.new_project_requested.connect(self._on_new_project)
         self._welcome_view.open_project_requested.connect(self._on_open_project)
+        self._welcome_view.documentation_requested.connect(self._open_documentation_dialog)
         self._welcome_view.recent_project_requested.connect(self._on_open_recent_project)
-        self._welcome_view.example_project_requested.connect(self._on_open_example_project)
+        self._documentation_dialog.example_project_requested.connect(
+            self._on_open_example_project
+        )
         self._project_view.save_requested.connect(self._on_save_project)
         self._project_view.editor_changed.connect(self._on_project_editor_changed)
         self._settings_view.save_requested.connect(self._on_save_settings)
@@ -210,6 +221,8 @@ class MainWindow(QMainWindow):
             settings=settings_service.settings,
             runtime_info=self._context.runtime_service.runtime_info(),
         )
+        runtime_info = self._context.runtime_service.runtime_info()
+        self._simulation_view.set_gpu_capability(runtime_info.capability("gpu"))
         self._results_view.refresh_project(project.root if project is not None else None)
         self._refresh_welcome_summary()
         self._simulation_view.set_runtime_label(
@@ -237,7 +250,9 @@ class MainWindow(QMainWindow):
         self._results_view.retranslate_ui()
         self._settings_view.retranslate_ui()
         self._settings_dialog.retranslate_ui(self._localization.text("settings.title"))
+        self._documentation_dialog.retranslate_ui()
         self._welcome_view.set_example_projects(self._discover_example_projects())
+        self._documentation_dialog.set_examples(self._discover_example_projects())
         self._refresh_welcome_summary()
         self._update_window_title()
 
@@ -385,6 +400,13 @@ class MainWindow(QMainWindow):
         self._settings_dialog.show()
         self._settings_dialog.raise_()
         self._settings_dialog.activateWindow()
+
+    def _open_documentation_dialog(self) -> None:
+        self._documentation_dialog.set_examples(self._discover_example_projects())
+        self._documentation_dialog.retranslate_ui()
+        self._documentation_dialog.show()
+        self._documentation_dialog.raise_()
+        self._documentation_dialog.activateWindow()
 
     def _show_project_page(self) -> None:
         self._show_page(self._page_index_by_title_key["page.project.title"])
@@ -653,6 +675,15 @@ class MainWindow(QMainWindow):
                 ),
             )
             return
+        except SimulationRuntimeCapabilityError as exc:
+            message = self._localization.translate_message(str(exc))
+            self._simulation_view.set_validation_messages([message])
+            QMessageBox.warning(
+                self,
+                self._localization.text("message.start_run.title"),
+                message,
+            )
+            return
         except Exception as exc:
             LOGGER.exception("Failed to start simulation")
             QMessageBox.warning(
@@ -840,8 +871,7 @@ class MainWindow(QMainWindow):
         )
 
     def _discover_example_projects(self) -> list[ExampleProjectItem]:
-        repo_root = Path(__file__).resolve().parents[3]
-        summary_path = repo_root / "examples" / "summary.json"
+        summary_path = self._repo_root / "examples" / "summary.json"
         if not summary_path.exists():
             return []
 

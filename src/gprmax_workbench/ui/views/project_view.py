@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QListWidget,
+    QListWidgetItem,
     QPushButton,
-    QTabWidget,
+    QSplitter,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -17,8 +20,6 @@ from ...application.services.model_editor_service import ModelEditorService
 from ...application.services.validation_service import ValidationService
 from ...domain.models import Project
 from ...domain.validation import ValidationResult
-from ..layouts.flow_layout import FlowLayout
-from ..widgets.metric_tile import MetricTile
 from ..widgets.model_editor.general_panel import GeneralPanel
 from ..widgets.model_editor.geometry_panel import GeometryPanel
 from ..widgets.model_editor.materials_panel import MaterialsPanel
@@ -58,21 +59,13 @@ class ProjectView(QWidget):
         self._workflow_hint = QLabel()
         self._workflow_hint.setObjectName("SectionBody")
         self._workflow_hint.setWordWrap(True)
+        self._section_nav = QListWidget()
+        self._section_nav.setObjectName("ContextNavigation")
+        self._section_nav.currentRowChanged.connect(self._on_section_changed)
+        self._section_stack = QStackedWidget()
 
         self._save_button = QPushButton()
         self._save_button.clicked.connect(self.save_requested.emit)
-
-        self._materials_tile = MetricTile()
-        self._waveforms_tile = MetricTile()
-        self._sources_tile = MetricTile()
-        self._receivers_tile = MetricTile()
-        self._geometry_tile = MetricTile()
-        metrics_row = FlowLayout(horizontal_spacing=12, vertical_spacing=12)
-        metrics_row.addWidget(self._materials_tile)
-        metrics_row.addWidget(self._waveforms_tile)
-        metrics_row.addWidget(self._sources_tile)
-        metrics_row.addWidget(self._receivers_tile)
-        metrics_row.addWidget(self._geometry_tile)
 
         self._general_panel = GeneralPanel(localization, model_editor_service, validation_service)
         self._materials_panel = MaterialsPanel(localization, model_editor_service, validation_service)
@@ -81,6 +74,15 @@ class ProjectView(QWidget):
         self._receivers_panel = ReceiversPanel(localization, model_editor_service, validation_service)
         self._geometry_panel = GeometryPanel(localization, model_editor_service, validation_service)
         self._preview_panel = PreviewPanel(localization, model_editor_service, input_preview_service)
+        self._sections: list[tuple[str, QWidget]] = [
+            ("project.section.area", self._general_panel),
+            ("project.section.materials", self._materials_panel),
+            ("project.section.signal", self._waveforms_panel),
+            ("project.section.sources", self._sources_panel),
+            ("project.section.receivers", self._receivers_panel),
+            ("project.section.geometry", self._geometry_panel),
+            ("project.section.preview", self._preview_panel),
+        ]
 
         for panel in (
             self._general_panel,
@@ -114,15 +116,26 @@ class ProjectView(QWidget):
         card_actions.addStretch(1)
         project_layout.addLayout(card_actions)
 
-        tabs = QTabWidget()
-        tabs.addTab(self._general_panel, "General")
-        tabs.addTab(self._materials_panel, "Materials")
-        tabs.addTab(self._waveforms_panel, "Waveforms")
-        tabs.addTab(self._sources_panel, "Sources")
-        tabs.addTab(self._receivers_panel, "Receivers")
-        tabs.addTab(self._geometry_panel, "Geometry")
-        tabs.addTab(self._preview_panel, "Input Preview")
-        self._tabs = tabs
+        nav_card = QFrame()
+        nav_card.setObjectName("ViewCard")
+        nav_layout = QVBoxLayout(nav_card)
+        nav_layout.setContentsMargins(12, 12, 12, 12)
+        nav_layout.setSpacing(10)
+        self._nav_heading = QLabel()
+        self._nav_heading.setObjectName("SectionTitle")
+        nav_layout.addWidget(self._nav_heading)
+        nav_layout.addWidget(self._section_nav, 1)
+
+        for _, panel in self._sections:
+            self._section_stack.addWidget(panel)
+
+        self._content_splitter = QSplitter()
+        self._content_splitter.addWidget(nav_card)
+        self._content_splitter.addWidget(self._section_stack)
+        self._content_splitter.setStretchFactor(0, 0)
+        self._content_splitter.setStretchFactor(1, 1)
+        self._content_splitter.setChildrenCollapsible(False)
+        self._content_splitter.setSizes([230, 980])
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -130,10 +143,10 @@ class ProjectView(QWidget):
         layout.addWidget(self._header)
         layout.addWidget(self._subtitle)
         layout.addWidget(project_card)
-        layout.addLayout(metrics_row)
-        layout.addWidget(tabs, 1)
+        layout.addWidget(self._content_splitter, 1)
 
         self.retranslate_ui()
+        self._section_nav.setCurrentRow(0)
         self.set_project(None, None, False, None)
 
     def set_project(
@@ -172,9 +185,6 @@ class ProjectView(QWidget):
             )
             self._validation_label.setText(self._format_validation(validation, is_dirty))
             self._workflow_hint.setText(self._localization.text("project.workflow_hint"))
-
-        self._refresh_metrics(project)
-
         self._general_panel.set_project(project)
         self._materials_panel.set_project(project)
         self._waveforms_panel.set_project(project)
@@ -214,7 +224,6 @@ class ProjectView(QWidget):
             self._validation_label.setText(self._format_validation(validation, True))
             self._workflow_hint.setText(self._localization.text("project.workflow_hint"))
 
-        self._refresh_metrics(project)
         self.editor_changed.emit()
 
     def _format_validation(
@@ -242,14 +251,8 @@ class ProjectView(QWidget):
         self._header.setText(self._localization.text("project.title"))
         self._subtitle.setText(self._localization.text("project.subtitle"))
         self._save_button.setText(self._localization.text("action.save_project"))
-        self._refresh_metrics(self._current_project)
-        self._tabs.setTabText(0, self._localization.text("project.tab.general"))
-        self._tabs.setTabText(1, self._localization.text("project.tab.materials"))
-        self._tabs.setTabText(2, self._localization.text("project.tab.waveforms"))
-        self._tabs.setTabText(3, self._localization.text("project.tab.sources"))
-        self._tabs.setTabText(4, self._localization.text("project.tab.receivers"))
-        self._tabs.setTabText(5, self._localization.text("project.tab.geometry"))
-        self._tabs.setTabText(6, self._localization.text("project.tab.preview"))
+        self._nav_heading.setText(self._localization.text("project.navigation"))
+        self._retranslate_sections()
         self._general_panel.retranslate_ui()
         self._materials_panel.retranslate_ui()
         self._waveforms_panel.retranslate_ui()
@@ -259,47 +262,17 @@ class ProjectView(QWidget):
         self._preview_panel.retranslate_ui()
         self.set_project(self._current_project, self._validation_service.current_validation(), self._is_dirty, self._project_file)
 
-    def _refresh_metrics(self, project: Project | None) -> None:
-        if project is None:
-            self._materials_tile.set_content(
-                eyebrow=self._localization.text("project.metric.materials"),
-                value="0",
-            )
-            self._waveforms_tile.set_content(
-                eyebrow=self._localization.text("project.metric.waveforms"),
-                value="0",
-            )
-            self._sources_tile.set_content(
-                eyebrow=self._localization.text("project.metric.sources"),
-                value="0",
-            )
-            self._receivers_tile.set_content(
-                eyebrow=self._localization.text("project.metric.receivers"),
-                value="0",
-            )
-            self._geometry_tile.set_content(
-                eyebrow=self._localization.text("project.metric.geometry"),
-                value="0",
-            )
-            return
+    def _retranslate_sections(self) -> None:
+        current_row = self._section_nav.currentRow()
+        self._section_nav.clear()
+        for index, (title_key, _) in enumerate(self._sections):
+            item = QListWidgetItem(self._localization.text(title_key))
+            item.setData(Qt.ItemDataRole.UserRole, index)
+            self._section_nav.addItem(item)
+        if self._section_nav.count() > 0:
+            self._section_nav.setCurrentRow(max(0, current_row))
 
-        self._materials_tile.set_content(
-            eyebrow=self._localization.text("project.metric.materials"),
-            value=str(len(project.model.materials)),
-        )
-        self._waveforms_tile.set_content(
-            eyebrow=self._localization.text("project.metric.waveforms"),
-            value=str(len(project.model.waveforms)),
-        )
-        self._sources_tile.set_content(
-            eyebrow=self._localization.text("project.metric.sources"),
-            value=str(len(project.model.sources)),
-        )
-        self._receivers_tile.set_content(
-            eyebrow=self._localization.text("project.metric.receivers"),
-            value=str(len(project.model.receivers)),
-        )
-        self._geometry_tile.set_content(
-            eyebrow=self._localization.text("project.metric.geometry"),
-            value=str(len(project.model.geometry)),
-        )
+    def _on_section_changed(self, row: int) -> None:
+        if row < 0:
+            return
+        self._section_stack.setCurrentIndex(row)

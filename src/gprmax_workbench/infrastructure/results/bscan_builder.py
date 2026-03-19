@@ -22,42 +22,13 @@ class BscanBuilder:
         if not run_summary.output_files:
             return BscanLoadResult(False, "No output files are available for this run.")
 
-        merged_file = next(
-            (item for item in run_summary.output_files if item.is_merged),
-            None,
+        merged_result = self._load_matrix_candidate(
+            run_summary=run_summary,
+            receiver_id=receiver_id,
+            component=component,
         )
-        if merged_file is not None:
-            try:
-                amplitudes, time_s, trace_labels_raw = self._reader.load_matrix(
-                    merged_file.path,
-                    receiver_id,
-                    component,
-                )
-            except ResultsReadError as exc:
-                return BscanLoadResult(False, str(exc))
-
-            metadata = self._reader.load_metadata(merged_file.path)
-            receiver = next(
-                (
-                    item
-                    for item in metadata.receivers
-                    if item.receiver_id == receiver_id
-                ),
-                None,
-            )
-            return BscanLoadResult(
-                available=True,
-                message="Loaded B-scan from merged output file.",
-                dataset=BscanDataset(
-                    receiver_id=receiver_id,
-                    receiver_name=receiver.name if receiver is not None else receiver_id,
-                    component=component,
-                    time_s=time_s,
-                    amplitudes=amplitudes,
-                    source_files=[merged_file.path],
-                    trace_labels=trace_labels_raw,
-                ),
-            )
+        if merged_result is not None:
+            return merged_result
 
         single_trace_files = [item for item in run_summary.output_files if not item.is_merged]
         if len(single_trace_files) < 2:
@@ -121,3 +92,48 @@ class BscanBuilder:
                 trace_labels=trace_labels,
             ),
         )
+
+    def _load_matrix_candidate(
+        self,
+        *,
+        run_summary: RunResultSummary,
+        receiver_id: str,
+        component: str,
+    ) -> BscanLoadResult | None:
+        candidates = sorted(
+            run_summary.output_files,
+            key=lambda item: (0 if item.is_merged else 1, -item.size_bytes, item.name.lower()),
+        )
+        for output_file in candidates:
+            try:
+                amplitudes, time_s, trace_labels_raw = self._reader.load_matrix(
+                    output_file.path,
+                    receiver_id,
+                    component,
+                )
+            except ResultsReadError:
+                continue
+
+            metadata = self._reader.load_metadata(output_file.path)
+            receiver = next(
+                (
+                    item
+                    for item in metadata.receivers
+                    if item.receiver_id == receiver_id
+                ),
+                None,
+            )
+            return BscanLoadResult(
+                available=True,
+                message="Loaded B-scan from merged output file.",
+                dataset=BscanDataset(
+                    receiver_id=receiver_id,
+                    receiver_name=receiver.name if receiver is not None else receiver_id,
+                    component=component,
+                    time_s=time_s,
+                    amplitudes=amplitudes,
+                    source_files=[output_file.path],
+                    trace_labels=trace_labels_raw,
+                ),
+            )
+        return None

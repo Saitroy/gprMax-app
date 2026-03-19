@@ -4,11 +4,13 @@ import logging
 from datetime import UTC, datetime
 from pathlib import Path
 from threading import Lock
+from typing import Callable
 from uuid import uuid4
 
 from ...domain.execution_status import SimulationStatus
 from ...domain.gprmax_config import SimulationRunConfig
 from ...domain.models import Project
+from ...domain.runtime_info import RuntimeInfo
 from ...domain.simulation import (
     PreparedSimulationRun,
     RunArtifacts,
@@ -39,6 +41,7 @@ class SimulationService:
         run_repository: RunRepository,
         runner: GprMaxSubprocessRunner,
         state: AppState,
+        runtime_info_provider: Callable[[], RuntimeInfo] | None = None,
     ) -> None:
         self._adapter = adapter
         self._input_generation_service = input_generation_service
@@ -46,6 +49,7 @@ class SimulationService:
         self._run_repository = run_repository
         self._runner = runner
         self._state = state
+        self._runtime_info_provider = runtime_info_provider
         self._lock = Lock()
         self._active_process: RunningProcess | None = None
         self._active_artifacts: RunArtifacts | None = None
@@ -172,6 +176,7 @@ class SimulationService:
         runtime_ok, runtime_message = self.runtime_probe()
         if not runtime_ok:
             raise RuntimeError(runtime_message)
+        self._validate_execution_capabilities(configuration)
 
         prepared = self.prepare_simulation_run(project, configuration)
         record = prepared.record
@@ -406,6 +411,25 @@ class SimulationService:
             return ""
         return path.read_text(encoding="utf-8")
 
+    def _validate_execution_capabilities(
+        self,
+        configuration: SimulationRunConfig,
+    ) -> None:
+        if self._runtime_info_provider is None:
+            return
+
+        runtime_info = self._runtime_info_provider()
+        if configuration.use_gpu and not runtime_info.is_capability_ready("gpu"):
+            raise SimulationRuntimeCapabilityError(
+                "GPU execution is not available in the current runtime. "
+                "Disable 'Use GPU' or install pycuda support in the bundled engine."
+            )
+        if configuration.mpi_tasks and not runtime_info.is_capability_ready("mpi"):
+            raise SimulationRuntimeCapabilityError(
+                "MPI execution is not available in the current runtime. "
+                "Disable MPI or install mpi4py support in the bundled engine."
+            )
+
 
 class SimulationPreparationError(ValueError):
     def __init__(self, validation: ValidationResult) -> None:
@@ -414,3 +438,7 @@ class SimulationPreparationError(ValueError):
             f"{issue.path}: {issue.message}" for issue in validation.errors
         )
         super().__init__(message or "Simulation preparation failed.")
+
+
+class SimulationRuntimeCapabilityError(RuntimeError):
+    """Raised when the selected run configuration requires unavailable runtime features."""

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .capability_status import CapabilityStatus
+from .capability_status import CapabilityLevel, CapabilityStatus
 from .engine_config import EngineConfig
 
 
@@ -21,3 +21,15 @@ class RuntimeInfo:
     diagnostics: list[str] = field(default_factory=list)
     is_healthy: bool = False
 
+    def capability(self, code: str) -> CapabilityStatus | None:
+        for item in self.capabilities:
+            if item.code == code:
+                return item
+        return None
+
+    def capability_level(self, code: str) -> CapabilityLevel | None:
+        capability = self.capability(code)
+        return capability.level if capability is not None else None
+
+    def is_capability_ready(self, code: str) -> bool:
+        return self.capability_level(code) == CapabilityLevel.READY

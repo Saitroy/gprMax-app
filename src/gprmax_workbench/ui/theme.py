@@ -128,6 +128,25 @@ QListWidget#Navigation::item:selected {
 QListWidget#Navigation::item:hover:!selected {
     background: rgba(255, 255, 255, 0.12);
 }
+QListWidget#ContextNavigation {
+    background: transparent;
+    border: none;
+    outline: none;
+}
+QListWidget#ContextNavigation::item {
+    border-radius: 10px;
+    margin: 2px 0;
+    padding: 10px 12px;
+    color: #324352;
+}
+QListWidget#ContextNavigation::item:selected {
+    background: #dce6ef;
+    color: #21313f;
+    border: 1px solid #c5d2dd;
+}
+QListWidget#ContextNavigation::item:hover:!selected {
+    background: #eef3f7;
+}
 QFrame#ViewCard {
     background: #fbfbfa;
     border: 1px solid #d7dee4;
@@ -241,6 +260,24 @@ QPushButton#PrimaryButton:hover {
 }
 QPushButton#PrimaryButton:pressed {
     background: #526a7e;
+}
+QToolButton#InfoButton {
+    background: rgba(255, 255, 255, 0.16);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.32);
+    border-radius: 15px;
+    font-size: 10pt;
+    font-weight: 700;
+    min-width: 30px;
+    min-height: 30px;
+    padding: 0px;
+}
+QToolButton#InfoButton:hover {
+    background: rgba(255, 255, 255, 0.22);
+    border-color: rgba(255, 255, 255, 0.44);
+}
+QToolButton#InfoButton:pressed {
+    background: rgba(255, 255, 255, 0.28);
 }
 QLineEdit,
 QPlainTextEdit,

@@ -8,8 +8,6 @@ from PySide6.QtWidgets import (
     QComboBox,
     QFormLayout,
     QFrame,
-    QGridLayout,
-    QHBoxLayout,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -18,11 +16,13 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSplitter,
     QSpinBox,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
 
 from ...application.services.localization_service import LocalizationService
+from ...domain.capability_status import CapabilityLevel, CapabilityStatus
 from ...domain.execution_status import SimulationMode
 from ...domain.gprmax_config import SimulationRunConfig
 from ...domain.simulation import SimulationRunRecord
@@ -48,6 +48,7 @@ class SimulationView(QWidget):
         super().__init__(parent)
         self._localization = localization
         self._card_headings: dict[str, QLabel] = {}
+        self._gpu_capability: CapabilityStatus | None = None
 
         self._title = QLabel()
         self._title.setObjectName("ViewTitle")
@@ -61,6 +62,10 @@ class SimulationView(QWidget):
         self._status_label = QLabel()
         self._validation_label = QLabel()
         self._validation_label.setWordWrap(True)
+        self._section_nav = QListWidget()
+        self._section_nav.setObjectName("ContextNavigation")
+        self._section_nav.currentRowChanged.connect(self._on_section_changed)
+        self._section_stack = QStackedWidget()
 
         self._mode_tile = MetricTile()
         self._runs_tile = MetricTile()
@@ -72,7 +77,13 @@ class SimulationView(QWidget):
         self._mode_combo.currentIndexChanged.connect(self._refresh_configuration_summary)
 
         self._gpu_checkbox = QCheckBox()
+        self._gpu_checkbox.toggled.connect(self._update_gpu_controls_state)
+        self._gpu_checkbox.setObjectName("simulation.gpu_checkbox")
+        self._gpu_status_label = QLabel()
+        self._gpu_status_label.setObjectName("simulation.gpu_status")
+        self._gpu_status_label.setWordWrap(True)
         self._gpu_devices_edit = QLineEdit()
+        self._gpu_devices_edit.setObjectName("simulation.gpu_devices")
         self._gpu_devices_edit.setPlaceholderText("")
 
         self._num_runs_spinbox = QSpinBox()
@@ -124,21 +135,21 @@ class SimulationView(QWidget):
         self._open_output_button = QPushButton()
         self._open_output_button.clicked.connect(self.open_output_directory_requested.emit)
 
-        buttons = FlowLayout(horizontal_spacing=10, vertical_spacing=10)
-        buttons.addWidget(self._start_button)
-        buttons.addWidget(self._preview_button)
-        buttons.addWidget(self._export_button)
-        buttons.addWidget(self._cancel_button)
-        buttons.addWidget(self._open_run_button)
-        buttons.addWidget(self._open_output_button)
+        self._action_bar = FlowLayout(horizontal_spacing=10, vertical_spacing=10)
+        self._action_bar.addWidget(self._start_button)
+        self._action_bar.addWidget(self._preview_button)
+        self._action_bar.addWidget(self._export_button)
+        self._action_bar.addWidget(self._cancel_button)
+        self._action_bar.addWidget(self._open_run_button)
+        self._action_bar.addWidget(self._open_output_button)
 
         metrics_row = FlowLayout(horizontal_spacing=12, vertical_spacing=12)
         metrics_row.addWidget(self._mode_tile)
         metrics_row.addWidget(self._runs_tile)
         metrics_row.addWidget(self._activity_tile)
 
-        runtime_card = self._build_card(
-            "simulation.runtime_card",
+        status_card = self._build_card(
+            "simulation.status_card",
             self._build_runtime_widget(),
         )
         config_card = self._build_card(
@@ -148,37 +159,87 @@ class SimulationView(QWidget):
         history_card = self._build_card("simulation.history_card", self._run_history)
 
         self._top_splitter = QSplitter()
-        self._top_splitter.addWidget(runtime_card)
+        self._top_splitter.addWidget(status_card)
         self._top_splitter.addWidget(config_card)
         self._top_splitter.setStretchFactor(0, 1)
         self._top_splitter.setStretchFactor(1, 1)
         self._top_splitter.setChildrenCollapsible(False)
 
-        self._io_splitter = QSplitter()
-        self._io_splitter.addWidget(
+        launch_page = QWidget()
+        launch_layout = QVBoxLayout(launch_page)
+        launch_layout.setContentsMargins(0, 0, 0, 0)
+        launch_layout.setSpacing(16)
+        launch_layout.addLayout(metrics_row)
+        launch_layout.addWidget(self._top_splitter)
+        self._launch_page = launch_page
+
+        preview_page = QWidget()
+        preview_layout = QVBoxLayout(preview_page)
+        preview_layout.setContentsMargins(0, 0, 0, 0)
+        preview_layout.setSpacing(16)
+        preview_layout.addWidget(
             self._build_card("simulation.preview_card", self._preview_text),
+            1,
         )
-        self._io_splitter.addWidget(
+        self._preview_page = preview_page
+
+        logs_page = QWidget()
+        logs_layout = QVBoxLayout(logs_page)
+        logs_layout.setContentsMargins(0, 0, 0, 0)
+        logs_layout.setSpacing(16)
+        logs_layout.addWidget(
             self._build_card("simulation.log_card", self._log_text),
+            1,
         )
-        self._io_splitter.setStretchFactor(0, 1)
-        self._io_splitter.setStretchFactor(1, 1)
-        self._io_splitter.setChildrenCollapsible(False)
+        logs_layout.addWidget(history_card, 1)
+        self._log_page = logs_page
+
+        self._sections = [
+            "simulation.section.launch",
+            "simulation.section.preview",
+            "simulation.section.logs",
+        ]
+        self._section_stack.addWidget(self._launch_page)
+        self._section_stack.addWidget(self._preview_page)
+        self._section_stack.addWidget(self._log_page)
+
+        nav_card = QFrame()
+        nav_card.setObjectName("ViewCard")
+        nav_layout = QVBoxLayout(nav_card)
+        nav_layout.setContentsMargins(12, 12, 12, 12)
+        nav_layout.setSpacing(10)
+        self._nav_heading = QLabel()
+        self._nav_heading.setObjectName("SectionTitle")
+        nav_layout.addWidget(self._nav_heading)
+        nav_layout.addWidget(self._section_nav, 1)
+
+        self._content_splitter = QSplitter()
+        self._content_splitter.addWidget(nav_card)
+        self._content_splitter.addWidget(self._section_stack)
+        self._content_splitter.setStretchFactor(0, 0)
+        self._content_splitter.setStretchFactor(1, 1)
+        self._content_splitter.setChildrenCollapsible(False)
+        self._content_splitter.setSizes([240, 980])
+
+        self._workspace_container = QWidget()
+        workspace_layout = QVBoxLayout(self._workspace_container)
+        workspace_layout.setContentsMargins(0, 0, 0, 0)
+        workspace_layout.setSpacing(16)
+        workspace_layout.addLayout(self._action_bar)
+        workspace_layout.addWidget(self._content_splitter, 1)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(18)
         layout.addWidget(self._title)
         layout.addWidget(self._subtitle)
-        layout.addLayout(metrics_row)
-        layout.addWidget(self._top_splitter)
-        layout.addLayout(buttons)
-        layout.addWidget(self._io_splitter)
-        layout.addWidget(history_card, 1)
+        layout.addWidget(self._workspace_container, 1)
 
         self.retranslate_ui()
+        self._section_nav.setCurrentRow(0)
         self.set_run_state(None, [])
         self.set_project_state(project_name=None, is_dirty=False)
+        self.set_gpu_capability(None)
         self._refresh_configuration_summary()
         self._refresh_responsive_layout()
 
@@ -209,7 +270,37 @@ class SimulationView(QWidget):
 
     def set_runtime_label(self, runtime_label: str) -> None:
         self._runtime_label.setText(runtime_label)
-        self._refresh_configuration_summary()
+
+    def set_gpu_capability(self, capability: CapabilityStatus | None) -> None:
+        self._gpu_capability = capability
+        is_ready = capability is not None and capability.level == CapabilityLevel.READY
+        if not is_ready:
+            self._gpu_checkbox.setChecked(False)
+        self._gpu_checkbox.setEnabled(is_ready)
+        self._update_gpu_controls_state()
+
+        if capability is None:
+            self._gpu_status_label.setText(
+                self._localization.text("simulation.gpu_status.unknown")
+            )
+            self._gpu_checkbox.setToolTip("")
+            return
+
+        if capability.level == CapabilityLevel.READY:
+            text = self._localization.text("simulation.gpu_status.ready")
+        else:
+            detail = (
+                self._localization.translate_message(capability.detail)
+                if capability.detail
+                else self._localization.text("simulation.gpu_status.not_available")
+            )
+            text = self._localization.text(
+                "simulation.gpu_status.unavailable",
+                detail=detail,
+            )
+
+        self._gpu_status_label.setText(text)
+        self._gpu_checkbox.setToolTip(text if not is_ready else "")
 
     def set_project_state(self, *, project_name: str | None, is_dirty: bool) -> None:
         if project_name is None:
@@ -320,6 +411,7 @@ class SimulationView(QWidget):
         self._extra_args_label = QLabel()
         layout.addRow(self._mode_label, self._mode_combo)
         layout.addRow("", self._gpu_checkbox)
+        layout.addRow("", self._gpu_status_label)
         layout.addRow(self._gpu_devices_label, self._gpu_devices_edit)
         layout.addRow(self._num_runs_label, self._num_runs_spinbox)
         layout.addRow(self._restart_label, self._restart_spinbox)
@@ -365,6 +457,8 @@ class SimulationView(QWidget):
     def retranslate_ui(self) -> None:
         self._title.setText(self._localization.text("simulation.title"))
         self._subtitle.setText(self._localization.text("simulation.subtitle"))
+        self._nav_heading.setText(self._localization.text("simulation.navigation"))
+        self._retranslate_sections()
         self._mode_combo.setItemText(
             0, self._localization.simulation_mode_text(SimulationMode.NORMAL.value)
         )
@@ -434,6 +528,7 @@ class SimulationView(QWidget):
         self._extra_args_label.setText(self._localization.text("simulation.extra_args"))
         for key, heading in self._card_headings.items():
             heading.setText(self._localization.text(key))
+        self.set_gpu_capability(self._gpu_capability)
         self._refresh_configuration_summary()
 
     def _refresh_configuration_summary(self) -> None:
@@ -447,9 +542,37 @@ class SimulationView(QWidget):
             eyebrow=self._localization.text("simulation.metric.runs"),
             value=str(self._num_runs_spinbox.value()),
         )
+
+        activity_value = self._status_label.text() or self._project_state_label.text()
+        self._activity_tile.set_content(
+            eyebrow=self._localization.text("simulation.metric.activity"),
+            value=activity_value,
+        )
+
     def _refresh_responsive_layout(self) -> None:
         wide = self.width() >= 1120
         top_orientation = Qt.Orientation.Horizontal if wide else Qt.Orientation.Vertical
-        io_orientation = Qt.Orientation.Horizontal if self.width() >= 1240 else Qt.Orientation.Vertical
         self._top_splitter.setOrientation(top_orientation)
-        self._io_splitter.setOrientation(io_orientation)
+        self._content_splitter.setOrientation(
+            Qt.Orientation.Horizontal if self.width() >= 1080 else Qt.Orientation.Vertical
+        )
+
+    def _update_gpu_controls_state(self) -> None:
+        self._gpu_devices_edit.setEnabled(
+            self._gpu_checkbox.isEnabled() and self._gpu_checkbox.isChecked()
+        )
+
+    def _retranslate_sections(self) -> None:
+        current_row = self._section_nav.currentRow()
+        self._section_nav.clear()
+        for index, title_key in enumerate(self._sections):
+            item = QListWidgetItem(self._localization.text(title_key))
+            item.setData(Qt.ItemDataRole.UserRole, index)
+            self._section_nav.addItem(item)
+        if self._section_nav.count() > 0:
+            self._section_nav.setCurrentRow(max(0, current_row))
+
+    def _on_section_changed(self, row: int) -> None:
+        if row < 0:
+            return
+        self._section_stack.setCurrentIndex(row)

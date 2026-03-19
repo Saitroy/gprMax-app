@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QPushButton,
     QToolButton,
+    QToolTip,
     QVBoxLayout,
     QWidget,
 )
@@ -32,8 +33,8 @@ class ExampleProjectItem:
 class WelcomeView(QWidget):
     new_project_requested = Signal()
     open_project_requested = Signal()
+    documentation_requested = Signal()
     recent_project_requested = Signal(str)
-    example_project_requested = Signal(str)
 
     def __init__(
         self,
@@ -56,6 +57,7 @@ class WelcomeView(QWidget):
         self._workflow_info_button.setObjectName("InfoButton")
         self._workflow_info_button.setAutoRaise(False)
         self._workflow_info_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+        self._workflow_info_button.clicked.connect(self._show_workflow_help)
 
         header_row = QHBoxLayout()
         header_row.setContentsMargins(0, 0, 0, 0)
@@ -69,6 +71,8 @@ class WelcomeView(QWidget):
         self._new_button.clicked.connect(self.new_project_requested.emit)
         self._open_button = QPushButton()
         self._open_button.clicked.connect(self.open_project_requested.emit)
+        self._documentation_button = QPushButton()
+        self._documentation_button.clicked.connect(self.documentation_requested.emit)
 
         hero = QFrame()
         hero.setObjectName("HeroCard")
@@ -85,20 +89,11 @@ class WelcomeView(QWidget):
         hero_actions = FlowLayout(horizontal_spacing=10, vertical_spacing=10)
         hero_actions.addWidget(self._new_button)
         hero_actions.addWidget(self._open_button)
-        self._examples_inline_title = QLabel()
-        self._examples_inline_title.setObjectName("SectionTitle")
-        self._examples_inline_body = QLabel()
-        self._examples_inline_body.setObjectName("HeroBody")
-        self._examples_inline_body.setWordWrap(True)
-        self._example_actions = FlowLayout(horizontal_spacing=10, vertical_spacing=10)
+        hero_actions.addWidget(self._documentation_button)
         hero_layout.addWidget(self._hero_eyebrow)
         hero_layout.addWidget(self._hero_title)
         hero_layout.addWidget(self._hero_body)
         hero_layout.addLayout(hero_actions)
-        hero_layout.addSpacing(8)
-        hero_layout.addWidget(self._examples_inline_title)
-        hero_layout.addWidget(self._examples_inline_body)
-        hero_layout.addLayout(self._example_actions)
         self._hero_card = hero
 
         self._status_heading = QLabel()
@@ -173,21 +168,6 @@ class WelcomeView(QWidget):
         examples: Sequence[ExampleProjectItem],
     ) -> None:
         self._example_projects = list(examples)
-        self._clear_layout(self._example_actions)
-        if not self._example_projects:
-            empty_label = QLabel(self._localization.text("welcome.examples.none"))
-            empty_label.setWordWrap(True)
-            empty_label.setObjectName("HeroBody")
-            self._example_actions.addWidget(empty_label)
-            return
-
-        for item in self._example_projects:
-            button = QPushButton(item.title)
-            button.clicked.connect(
-                lambda _checked=False, path=item.path: self.example_project_requested.emit(path)
-            )
-            button.setToolTip(item.description)
-            self._example_actions.addWidget(button)
 
     def _emit_recent_project(self, item: QListWidgetItem) -> None:
         path = item.data(Qt.ItemDataRole.UserRole)
@@ -202,27 +182,14 @@ class WelcomeView(QWidget):
         self._hero_body.setText(self._localization.text("welcome.hero.body"))
         self._new_button.setText(self._localization.text("action.new_project"))
         self._open_button.setText(self._localization.text("action.open_project"))
-        self._examples_inline_title.setText(self._localization.text("welcome.examples.title"))
-        self._examples_inline_body.setText(
-            self._localization.text("welcome.examples.description")
+        self._documentation_button.setText(
+            self._localization.text("action.open_documentation")
         )
         self._status_heading.setText(self._localization.text("welcome.status.title"))
         self._recent_card_heading.setText(self._localization.text("welcome.recent_projects"))
         self._workflow_info_button.setText(self._localization.text("welcome.workflow.info"))
-        self._workflow_info_button.setToolTip(
-            "\n".join(
-                [
-                    self._localization.text("welcome.workflow.title"),
-                    self._localization.text("welcome.workflow.description"),
-                    self._localization.text("welcome.workflow.step1"),
-                    self._localization.text("welcome.workflow.step2"),
-                    self._localization.text("welcome.workflow.step3"),
-                    self._localization.text("welcome.workflow.step4"),
-                ]
-            )
-        )
+        self._workflow_info_button.setToolTip(self._workflow_help_text())
         self._refresh_project_status()
-        self.set_example_projects(self._example_projects)
 
     def resizeEvent(self, event) -> None:  # noqa: N802
         super().resizeEvent(event)
@@ -234,7 +201,13 @@ class WelcomeView(QWidget):
                 self._localization.text("welcome.status.empty_project")
             )
             self._status_readiness.setText(
-                self._localization.text("welcome.status.readiness_line", value=self._readiness_text or self._localization.text("welcome.no_project"))
+                self._localization.text(
+                    "welcome.status.readiness_line",
+                    value=(
+                        self._readiness_text
+                        or self._localization.text("welcome.status.no_project")
+                    ),
+                )
             )
             self._status_activity.setText(
                 self._localization.text("welcome.status.activity_line", value=self._activity_text or self._localization.text("workspace.value.no_run"))
@@ -287,11 +260,21 @@ class WelcomeView(QWidget):
         layout.addWidget(content)
         return card
 
-    def _clear_layout(self, layout: FlowLayout) -> None:
-        while layout.count():
-            item = layout.takeAt(0)
-            if item is None:
-                continue
-            widget = item.widget()
-            if widget is not None:
-                widget.deleteLater()
+    def _workflow_help_text(self) -> str:
+        return "\n".join(
+            [
+                self._localization.text("welcome.workflow.title"),
+                self._localization.text("welcome.workflow.description"),
+                self._localization.text("welcome.workflow.step1"),
+                self._localization.text("welcome.workflow.step2"),
+                self._localization.text("welcome.workflow.step3"),
+                self._localization.text("welcome.workflow.step4"),
+            ]
+        )
+
+    def _show_workflow_help(self) -> None:
+        QToolTip.showText(
+            self._workflow_info_button.mapToGlobal(self._workflow_info_button.rect().bottomLeft()),
+            self._workflow_help_text(),
+            self._workflow_info_button,
+        )

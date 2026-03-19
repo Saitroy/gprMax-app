@@ -39,6 +39,16 @@ class LocalizationServiceTests(unittest.TestCase):
 
         self.assertEqual(service.translate_message(original), original)
 
+    def test_translates_gpu_runtime_capability_error_to_russian(self) -> None:
+        service = LocalizationService("ru")
+
+        translated = service.translate_message(
+            "GPU execution is not available in the current runtime. Disable 'Use GPU' or install pycuda support in the bundled engine."
+        )
+
+        self.assertIn("GPU", translated)
+        self.assertIn("pycuda", translated)
+
 
 if __name__ == "__main__":
     unittest.main()

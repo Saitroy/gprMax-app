@@ -133,6 +133,7 @@ def build_context() -> ApplicationContext:
         run_repository=run_repository,
         runner=GprMaxSubprocessRunner(),
         state=state,
+        runtime_info_provider=runtime_service.runtime_info,
     )
     run_service = RunService(run_repository)
     results_service = ResultsService(

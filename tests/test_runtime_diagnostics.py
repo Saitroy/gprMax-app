@@ -72,6 +72,7 @@ class RuntimeDiagnosticsTests(unittest.TestCase):
             self.assertEqual(info.capabilities[0].code, "cpu")
             self.assertEqual(info.capabilities[0].level.value, "ready")
             self.assertEqual(info.capabilities[1].level.value, "optional")
+            self.assertIn("pycuda", info.capabilities[1].detail)
             self.assertEqual(info.capabilities[2].level.value, "optional")
 
     def test_reports_missing_bundled_engine_and_unhealthy_runtime(self) -> None:

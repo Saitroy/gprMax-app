@@ -79,7 +79,7 @@ class ResultArtifactLocator:
 
     def _classify_output_file(self, path: Path) -> OutputFileKind:
         stem = path.stem.lower()
-        if stem.endswith("_merged"):
+        if "_merged" in stem:
             return OutputFileKind.MERGED
         return OutputFileKind.ASCAN
 

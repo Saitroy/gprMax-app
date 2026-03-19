@@ -28,7 +28,7 @@ class Hdf5ResultsReader:
             path=output_file,
             name=output_file.name,
             kind=OutputFileKind.MERGED
-            if output_file.stem.lower().endswith("_merged")
+            if "_merged" in output_file.stem.lower()
             else OutputFileKind.ASCAN,
             size_bytes=output_file.stat().st_size if output_file.exists() else 0,
         )

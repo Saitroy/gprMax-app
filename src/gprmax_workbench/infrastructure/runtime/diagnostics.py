@@ -191,6 +191,11 @@ class RuntimeDiagnostics:
             if probe_result.python_exists and probe_result.module_available
             else CapabilityLevel.UNAVAILABLE
         )
+        cpu_detail = (
+            ""
+            if cpu_level == CapabilityLevel.READY
+            else "The base gprMax runtime is not healthy."
+        )
         if cpu_level == CapabilityLevel.READY:
             gpu_level = (
                 CapabilityLevel.READY
@@ -202,13 +207,28 @@ class RuntimeDiagnostics:
                 if probe_result.mpi_available
                 else CapabilityLevel.OPTIONAL
             )
+            gpu_detail = (
+                ""
+                if probe_result.gpu_available
+                else "pycuda is not available in the current runtime."
+            )
+            mpi_detail = (
+                ""
+                if probe_result.mpi_available
+                else "mpi4py is not available in the current runtime."
+            )
         else:
             gpu_level = CapabilityLevel.UNAVAILABLE
             mpi_level = CapabilityLevel.UNAVAILABLE
+            gpu_detail = (
+                "GPU execution is unavailable because the base gprMax runtime is not healthy."
+            )
+            mpi_detail = (
+                "MPI execution is unavailable because the base gprMax runtime is not healthy."
+            )
 
         return [
-            CapabilityStatus(code="cpu", level=cpu_level),
-            CapabilityStatus(code="gpu", level=gpu_level),
-            CapabilityStatus(code="mpi", level=mpi_level),
+            CapabilityStatus(code="cpu", level=cpu_level, detail=cpu_detail),
+            CapabilityStatus(code="gpu", level=gpu_level, detail=gpu_detail),
+            CapabilityStatus(code="mpi", level=mpi_level, detail=mpi_detail),
         ]
-
