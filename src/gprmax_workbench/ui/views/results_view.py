@@ -93,9 +93,12 @@ class ResultsView(QWidget):
 
         output_card = self._build_card("results.card.output_files", self._output_list)
         artifact_card = self._build_card("results.card.other_artifacts", self._artifact_list)
-        artifact_row = QHBoxLayout()
-        artifact_row.addWidget(output_card, 1)
-        artifact_row.addWidget(artifact_card, 1)
+        self._artifact_splitter = QSplitter()
+        self._artifact_splitter.addWidget(output_card)
+        self._artifact_splitter.addWidget(artifact_card)
+        self._artifact_splitter.setStretchFactor(0, 1)
+        self._artifact_splitter.setStretchFactor(1, 1)
+        self._artifact_splitter.setChildrenCollapsible(False)
 
         selectors = QWidget()
         selectors_layout = QFormLayout(selectors)
@@ -117,17 +120,18 @@ class ResultsView(QWidget):
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(12)
         right_layout.addWidget(summary_card)
-        right_layout.addLayout(artifact_row)
+        right_layout.addWidget(self._artifact_splitter)
         right_layout.addWidget(selectors)
         right_layout.addWidget(tabs, 1)
         right_layout.addWidget(self._status_label)
 
-        splitter = QSplitter()
-        splitter.addWidget(left_panel)
-        splitter.addWidget(right_content)
-        splitter.setStretchFactor(0, 0)
-        splitter.setStretchFactor(1, 1)
-        splitter.setSizes([280, 920])
+        self._main_splitter = QSplitter()
+        self._main_splitter.addWidget(left_panel)
+        self._main_splitter.addWidget(right_content)
+        self._main_splitter.setStretchFactor(0, 0)
+        self._main_splitter.setStretchFactor(1, 1)
+        self._main_splitter.setSizes([280, 920])
+        self._main_splitter.setChildrenCollapsible(False)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -135,10 +139,11 @@ class ResultsView(QWidget):
         layout.addWidget(self._title)
         layout.addWidget(self._subtitle)
         layout.addLayout(toolbar)
-        layout.addWidget(splitter, 1)
+        layout.addWidget(self._main_splitter, 1)
 
         self.retranslate_ui()
         self._clear_results(self._localization.text("results.status.open_project"))
+        self._refresh_responsive_layout()
 
     def refresh_project(self, project_root: Path | None) -> None:
         if project_root is None:
@@ -193,6 +198,10 @@ class ResultsView(QWidget):
 
     def refresh_current_project(self) -> None:
         self.refresh_project(self._project_root)
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._refresh_responsive_layout()
 
     def _on_run_changed(self, row: int) -> None:
         if self._loading:
@@ -491,6 +500,16 @@ class ResultsView(QWidget):
         self._bscan_view.retranslate_ui()
         for key, heading in self._card_headings.items():
             heading.setText(self._localization.text(key))
+
+    def _refresh_responsive_layout(self) -> None:
+        main_orientation = (
+            Qt.Orientation.Horizontal if self.width() >= 1180 else Qt.Orientation.Vertical
+        )
+        artifact_orientation = (
+            Qt.Orientation.Horizontal if self.width() >= 1320 else Qt.Orientation.Vertical
+        )
+        self._main_splitter.setOrientation(main_orientation)
+        self._artifact_splitter.setOrientation(artifact_orientation)
 
 
 def _empty_bscan_result(message: str):

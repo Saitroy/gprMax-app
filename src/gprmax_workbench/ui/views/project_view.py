@@ -17,6 +17,8 @@ from ...application.services.model_editor_service import ModelEditorService
 from ...application.services.validation_service import ValidationService
 from ...domain.models import Project
 from ...domain.validation import ValidationResult
+from ..layouts.flow_layout import FlowLayout
+from ..widgets.metric_tile import MetricTile
 from ..widgets.model_editor.general_panel import GeneralPanel
 from ..widgets.model_editor.geometry_panel import GeometryPanel
 from ..widgets.model_editor.materials_panel import MaterialsPanel
@@ -53,9 +55,24 @@ class ProjectView(QWidget):
         self._summary_label.setWordWrap(True)
         self._validation_label = QLabel()
         self._validation_label.setWordWrap(True)
+        self._workflow_hint = QLabel()
+        self._workflow_hint.setObjectName("SectionBody")
+        self._workflow_hint.setWordWrap(True)
 
         self._save_button = QPushButton()
         self._save_button.clicked.connect(self.save_requested.emit)
+
+        self._materials_tile = MetricTile()
+        self._waveforms_tile = MetricTile()
+        self._sources_tile = MetricTile()
+        self._receivers_tile = MetricTile()
+        self._geometry_tile = MetricTile()
+        metrics_row = FlowLayout(horizontal_spacing=12, vertical_spacing=12)
+        metrics_row.addWidget(self._materials_tile)
+        metrics_row.addWidget(self._waveforms_tile)
+        metrics_row.addWidget(self._sources_tile)
+        metrics_row.addWidget(self._receivers_tile)
+        metrics_row.addWidget(self._geometry_tile)
 
         self._general_panel = GeneralPanel(localization, model_editor_service, validation_service)
         self._materials_panel = MaterialsPanel(localization, model_editor_service, validation_service)
@@ -92,6 +109,7 @@ class ProjectView(QWidget):
         project_layout.addWidget(self._project_file_label)
         project_layout.addWidget(self._summary_label)
         project_layout.addWidget(self._validation_label)
+        project_layout.addWidget(self._workflow_hint)
 
         card_actions = QHBoxLayout()
         card_actions.addWidget(self._save_button)
@@ -114,6 +132,7 @@ class ProjectView(QWidget):
         layout.addWidget(self._header)
         layout.addWidget(self._subtitle)
         layout.addWidget(project_card)
+        layout.addLayout(metrics_row)
         layout.addWidget(tabs, 1)
 
         self.retranslate_ui()
@@ -140,6 +159,7 @@ class ProjectView(QWidget):
         if project is None:
             self._summary_label.setText(self._localization.text("project.summary.empty"))
             self._validation_label.setText(self._localization.text("project.validation.empty"))
+            self._workflow_hint.setText(self._localization.text("project.workflow_hint.empty"))
             self._preview_panel.clear()
         else:
             self._summary_label.setText(
@@ -153,6 +173,9 @@ class ProjectView(QWidget):
                 )
             )
             self._validation_label.setText(self._format_validation(validation, is_dirty))
+            self._workflow_hint.setText(self._localization.text("project.workflow_hint"))
+
+        self._refresh_metrics(project)
 
         self._general_panel.set_project(project)
         self._materials_panel.set_project(project)
@@ -178,6 +201,7 @@ class ProjectView(QWidget):
         if project is None:
             self._summary_label.setText(self._localization.text("project.summary.empty"))
             self._validation_label.setText(self._localization.text("project.validation.empty"))
+            self._workflow_hint.setText(self._localization.text("project.workflow_hint.empty"))
         else:
             self._summary_label.setText(
                 self._localization.text(
@@ -190,7 +214,9 @@ class ProjectView(QWidget):
                 )
             )
             self._validation_label.setText(self._format_validation(validation, True))
+            self._workflow_hint.setText(self._localization.text("project.workflow_hint"))
 
+        self._refresh_metrics(project)
         self.editor_changed.emit()
 
     def _format_validation(
@@ -219,6 +245,7 @@ class ProjectView(QWidget):
         self._subtitle.setText(self._localization.text("project.subtitle"))
         self._project_workspace_label.setText(self._localization.text("project.workspace"))
         self._save_button.setText(self._localization.text("action.save_project"))
+        self._refresh_metrics(self._current_project)
         self._tabs.setTabText(0, self._localization.text("project.tab.general"))
         self._tabs.setTabText(1, self._localization.text("project.tab.materials"))
         self._tabs.setTabText(2, self._localization.text("project.tab.waveforms"))
@@ -234,3 +261,48 @@ class ProjectView(QWidget):
         self._geometry_panel.retranslate_ui()
         self._preview_panel.retranslate_ui()
         self.set_project(self._current_project, self._validation_service.current_validation(), self._is_dirty, self._project_file)
+
+    def _refresh_metrics(self, project: Project | None) -> None:
+        if project is None:
+            self._materials_tile.set_content(
+                eyebrow=self._localization.text("project.metric.materials"),
+                value="0",
+            )
+            self._waveforms_tile.set_content(
+                eyebrow=self._localization.text("project.metric.waveforms"),
+                value="0",
+            )
+            self._sources_tile.set_content(
+                eyebrow=self._localization.text("project.metric.sources"),
+                value="0",
+            )
+            self._receivers_tile.set_content(
+                eyebrow=self._localization.text("project.metric.receivers"),
+                value="0",
+            )
+            self._geometry_tile.set_content(
+                eyebrow=self._localization.text("project.metric.geometry"),
+                value="0",
+            )
+            return
+
+        self._materials_tile.set_content(
+            eyebrow=self._localization.text("project.metric.materials"),
+            value=str(len(project.model.materials)),
+        )
+        self._waveforms_tile.set_content(
+            eyebrow=self._localization.text("project.metric.waveforms"),
+            value=str(len(project.model.waveforms)),
+        )
+        self._sources_tile.set_content(
+            eyebrow=self._localization.text("project.metric.sources"),
+            value=str(len(project.model.sources)),
+        )
+        self._receivers_tile.set_content(
+            eyebrow=self._localization.text("project.metric.receivers"),
+            value=str(len(project.model.receivers)),
+        )
+        self._geometry_tile.set_content(
+            eyebrow=self._localization.text("project.metric.geometry"),
+            value=str(len(project.model.geometry)),
+        )

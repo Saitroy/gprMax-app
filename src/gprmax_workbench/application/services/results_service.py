@@ -48,6 +48,10 @@ class ResultsService:
         self._state.results_viewer.selected_receiver_id = None
         self._state.results_viewer.selected_component = None
 
+    def focus_run(self, run_id: str | None) -> None:
+        """Select a run and reset dependent result selections."""
+        self.select_run(run_id)
+
     def select_output_file(self, output_file: Path | None) -> None:
         self._state.results_viewer.selected_output_file = (
             str(output_file) if output_file is not None else None

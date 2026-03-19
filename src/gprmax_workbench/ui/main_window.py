@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
@@ -32,7 +33,8 @@ from .views.project_view import ProjectView
 from .views.results_view import ResultsView
 from .views.settings_view import SettingsView
 from .views.simulation_view import SimulationView
-from .views.welcome_view import WelcomeView
+from .views.welcome_view import ExampleProjectItem, WelcomeView
+from .widgets.workspace_banner import WorkspaceBanner
 
 if TYPE_CHECKING:
     from ..app import ApplicationContext
@@ -60,6 +62,7 @@ class MainWindow(QMainWindow):
         self._simulation_refresh_timer.timeout.connect(self._refresh_simulation_runtime_state)
 
         self._welcome_view = WelcomeView(self._localization)
+        self._workspace_banner = WorkspaceBanner(self._localization)
         self._project_view = ProjectView(
             localization=self._localization,
             model_editor_service=context.model_editor_service,
@@ -78,12 +81,23 @@ class MainWindow(QMainWindow):
         )
         self._settings_view = SettingsView(self._localization)
         self._pages = self._build_pages()
+        self._page_index_by_title_key = {
+            page.title_key: index for index, page in enumerate(self._pages)
+        }
+        self._navigation_page_indexes = [
+            index
+            for index, page in enumerate(self._pages)
+            if page.title_key != "page.settings.title"
+        ]
+        self._last_polled_run_state: tuple[str, str] | None = None
 
         self._new_project_action = QAction(self)
         self._open_project_action = QAction(self)
         self._save_project_action = QAction(self)
+        self._open_settings_action = QAction(self)
         self._about_action = QAction(self)
         self._file_menu = self.menuBar().addMenu("")
+        self._settings_menu = self.menuBar().addMenu("")
         self._help_menu = self.menuBar().addMenu("")
 
         self.setWindowTitle(self._localization.text("window.title.base"))
@@ -93,6 +107,7 @@ class MainWindow(QMainWindow):
         self._create_actions()
         self._build_ui()
         self._apply_screen_adaptive_geometry()
+        self._welcome_view.set_example_projects(self._discover_example_projects())
         self.retranslate_ui()
         self.refresh_views()
         self._simulation_refresh_timer.start()
@@ -130,6 +145,7 @@ class MainWindow(QMainWindow):
         self._welcome_view.new_project_requested.connect(self._on_new_project)
         self._welcome_view.open_project_requested.connect(self._on_open_project)
         self._welcome_view.recent_project_requested.connect(self._on_open_recent_project)
+        self._welcome_view.example_project_requested.connect(self._on_open_example_project)
         self._project_view.save_requested.connect(self._on_save_project)
         self._project_view.editor_changed.connect(self._on_project_editor_changed)
         self._settings_view.save_requested.connect(self._on_save_settings)
@@ -148,11 +164,13 @@ class MainWindow(QMainWindow):
         self._new_project_action.triggered.connect(self._on_new_project)
         self._open_project_action.triggered.connect(self._on_open_project)
         self._save_project_action.triggered.connect(self._on_save_project)
+        self._open_settings_action.triggered.connect(self._open_settings_page)
         self._about_action.triggered.connect(self._show_about_dialog)
 
         self._file_menu.addAction(self._new_project_action)
         self._file_menu.addAction(self._open_project_action)
         self._file_menu.addAction(self._save_project_action)
+        self._settings_menu.addAction(self._open_settings_action)
         self._help_menu.addAction(self._about_action)
 
     def _build_ui(self) -> None:
@@ -162,7 +180,7 @@ class MainWindow(QMainWindow):
         layout.setSpacing(20)
 
         sidebar = self._build_sidebar()
-        content = self._build_content_stack()
+        content = self._build_content_area()
 
         layout.addWidget(sidebar, 0)
         layout.addWidget(content, 1)
@@ -201,6 +219,7 @@ class MainWindow(QMainWindow):
             runtime_info=self._context.runtime_service.runtime_info(),
         )
         self._results_view.refresh_project(project.root if project is not None else None)
+        self._refresh_workspace_banner()
         self._simulation_view.set_runtime_label(
             self._context.simulation_service.runtime_label()
         )
@@ -210,26 +229,31 @@ class MainWindow(QMainWindow):
 
     def retranslate_ui(self) -> None:
         self._file_menu.setTitle(self._localization.text("menu.file"))
+        self._settings_menu.setTitle(self._localization.text("menu.settings"))
         self._help_menu.setTitle(self._localization.text("menu.help"))
         self._new_project_action.setText(self._localization.text("action.new_project"))
         self._open_project_action.setText(self._localization.text("action.open_project"))
         self._save_project_action.setText(self._localization.text("action.save_project"))
+        self._open_settings_action.setText(self._localization.text("action.open_settings"))
         self._about_action.setText(self._localization.text("action.about"))
         self._sidebar_title.setText(self._localization.text("sidebar.title"))
         self._sidebar_subtitle.setText(self._localization.text("sidebar.subtitle"))
         self._retranslate_navigation()
         self._welcome_view.retranslate_ui()
+        self._workspace_banner.retranslate_ui()
         self._project_view.retranslate_ui()
         self._simulation_view.retranslate_ui()
         self._results_view.retranslate_ui()
         self._settings_view.retranslate_ui()
+        self._welcome_view.set_example_projects(self._discover_example_projects())
         self._update_window_title()
 
     def _retranslate_navigation(self) -> None:
-        for index, page in enumerate(self._pages):
-            item = self._navigation.item(index)
+        for row, page_index in enumerate(self._navigation_page_indexes):
+            item = self._navigation.item(row)
             if item is None:
                 continue
+            page = self._pages[page_index]
             item.setText(self._localization.text(page.title_key))
             item.setToolTip(self._localization.text(page.description_key))
 
@@ -242,6 +266,7 @@ class MainWindow(QMainWindow):
             is_dirty=workspace.state.current_project_dirty,
         )
         self._save_project_action.setEnabled(project is not None)
+        self._refresh_workspace_banner()
         self._update_window_title()
 
     def _build_sidebar(self) -> QWidget:
@@ -270,12 +295,12 @@ class MainWindow(QMainWindow):
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
 
-        for page in self._pages:
+        for page_index in self._navigation_page_indexes:
             item = QListWidgetItem()
+            item.setData(Qt.ItemDataRole.UserRole, page_index)
             self._navigation.addItem(item)
 
-        self._navigation.currentRowChanged.connect(self._stack.setCurrentIndex)
-        self._navigation.currentRowChanged.connect(self._update_status)
+        self._navigation.currentRowChanged.connect(self._on_navigation_changed)
 
         layout.addWidget(self._sidebar_title)
         layout.addWidget(self._sidebar_subtitle)
@@ -323,12 +348,51 @@ class MainWindow(QMainWindow):
         self._navigation.setCurrentRow(0)
         return self._stack
 
-    def _update_status(self, index: int) -> None:
-        if index < 0 or index >= len(self._pages):
+    def _build_content_area(self) -> QWidget:
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(16)
+        layout.addWidget(self._workspace_banner)
+        layout.addWidget(self._build_content_stack(), 1)
+        return container
+
+    def _on_navigation_changed(self, row: int) -> None:
+        item = self._navigation.item(row) if row >= 0 else None
+        if item is None:
+            return
+        page_index = item.data(Qt.ItemDataRole.UserRole)
+        if not isinstance(page_index, int):
+            return
+        self._show_page(page_index, sync_navigation=False)
+
+    def _update_status(self, page_index: int) -> None:
+        if page_index < 0 or page_index >= len(self._pages):
             return
         self.statusBar().showMessage(
-            self._localization.text(self._pages[index].description_key)
+            self._localization.text(self._pages[page_index].description_key)
         )
+
+    def _show_page(self, page_index: int, *, sync_navigation: bool = True) -> None:
+        self._stack.setCurrentIndex(page_index)
+        if sync_navigation:
+            row = (
+                self._navigation_page_indexes.index(page_index)
+                if page_index in self._navigation_page_indexes
+                else -1
+            )
+            self._navigation.setCurrentRow(row)
+        self._update_status(page_index)
+
+    def _open_settings_page(self) -> None:
+        self._show_page(self._page_index_by_title_key["page.settings.title"])
+        self._navigation.setCurrentRow(-1)
+
+    def _show_project_page(self) -> None:
+        self._show_page(self._page_index_by_title_key["page.project.title"])
+
+    def _show_results_page(self) -> None:
+        self._show_page(self._page_index_by_title_key["page.results.title"])
 
     def _update_window_title(self) -> None:
         current_project = self._context.workspace_service.state.current_project
@@ -374,7 +438,7 @@ class MainWindow(QMainWindow):
             return
 
         self.refresh_views()
-        self._navigation.setCurrentRow(1)
+        self._show_project_page()
         self.statusBar().showMessage(
             self._localization.text(
                 "status.created_project",
@@ -398,6 +462,9 @@ class MainWindow(QMainWindow):
     def _on_open_recent_project(self, path: str) -> None:
         self._open_project_at(Path(path))
 
+    def _on_open_example_project(self, path: str) -> None:
+        self._open_project_at(Path(path))
+
     def _open_project_at(self, path: Path) -> None:
         try:
             project = self._context.workspace_service.open_project(path)
@@ -411,7 +478,7 @@ class MainWindow(QMainWindow):
             return
 
         self.refresh_views()
-        self._navigation.setCurrentRow(1)
+        self._show_project_page()
         self.statusBar().showMessage(
             self._localization.text(
                 "status.opened_project",
@@ -660,6 +727,7 @@ class MainWindow(QMainWindow):
         self._simulation_view.set_run_state(active_run, history)
         self._simulation_view.set_log_output(log_snapshot.combined_text)
         self._results_view.refresh_project(project.root)
+        self._refresh_workspace_banner()
         self._update_window_title()
 
     def _resolve_target_run(
@@ -698,3 +766,114 @@ class MainWindow(QMainWindow):
             self._localization.text("about.title"),
             self._localization.text("about.body"),
         )
+
+    def _refresh_workspace_banner(self) -> None:
+        workspace = self._context.workspace_service.state
+        project = workspace.current_project
+        runtime_info = self._context.runtime_service.runtime_info()
+
+        if project is None:
+            self._workspace_banner.set_empty_state()
+            return
+
+        validation = workspace.current_project_validation
+        if validation.errors:
+            validation_state = self._localization.text(
+                "workspace.value.validation_errors",
+                errors=len(validation.errors),
+                warnings=len(validation.warnings),
+            )
+        elif validation.warnings:
+            validation_state = self._localization.text(
+                "workspace.value.validation_warnings",
+                warnings=len(validation.warnings),
+            )
+        else:
+            validation_state = self._localization.text("workspace.value.validation_ready")
+
+        project_state = self._localization.text(
+            "workspace.value.project_dirty"
+            if workspace.current_project_dirty
+            else "workspace.value.project_saved"
+        )
+
+        runtime_state = self._localization.text(
+            "workspace.value.runtime_state",
+            mode=self._localization.text(
+                f"settings.runtime_mode.{runtime_info.engine.mode.value}"
+            ),
+            version=runtime_info.gprmax_version or self._localization.text("common.not_set"),
+        )
+
+        if workspace.active_run is not None and workspace.active_run.status.value in {
+            "preparing",
+            "running",
+        }:
+            activity_state = self._localization.text(
+                "workspace.value.run_active",
+                run_id=workspace.active_run.run_id,
+                status=self._localization.simulation_status_text(
+                    workspace.active_run.status.value
+                ),
+            )
+        elif workspace.run_history:
+            latest = workspace.run_history[0]
+            activity_state = self._localization.text(
+                "workspace.value.run_last",
+                run_id=latest.run_id,
+                status=self._localization.simulation_status_text(latest.status.value),
+            )
+        else:
+            activity_state = self._localization.text("workspace.value.no_run")
+
+        self._workspace_banner.set_workspace_state(
+            project_name=project.metadata.name,
+            model_title=project.model.title or self._localization.text("common.not_set"),
+            project_root=str(project.root),
+            project_state=project_state,
+            validation_state=validation_state,
+            runtime_state=runtime_state,
+            activity_state=activity_state,
+        )
+
+    def _discover_example_projects(self) -> list[ExampleProjectItem]:
+        repo_root = Path(__file__).resolve().parents[3]
+        summary_path = repo_root / "examples" / "summary.json"
+        if not summary_path.exists():
+            return []
+
+        try:
+            payload = json.loads(summary_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            LOGGER.exception("Failed to load example projects from %s", summary_path)
+            return []
+
+        projects = payload.get("projects", {})
+        examples: list[ExampleProjectItem] = []
+        for item in projects.values():
+            if not isinstance(item, dict):
+                continue
+            project_root = item.get("project_root")
+            if not isinstance(project_root, str):
+                continue
+            absolute_path = (summary_path.parent / project_root).resolve()
+            if not absolute_path.exists():
+                continue
+            title = absolute_path.name.replace("_", " ").title()
+            project_file = absolute_path / "project.gprwb.json"
+            if project_file.exists():
+                try:
+                    project_payload = json.loads(project_file.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    project_payload = {}
+                metadata_payload = project_payload.get("metadata", {})
+                if isinstance(metadata_payload, dict):
+                    title = str(metadata_payload.get("name", title))
+            examples.append(
+                ExampleProjectItem(
+                    title=title,
+                    description=str(item.get("notes", "")),
+                    path=str(absolute_path),
+                )
+            )
+        return examples

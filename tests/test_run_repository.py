@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
+import json
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -50,6 +51,52 @@ class RunRepositoryTests(unittest.TestCase):
             self.assertEqual(loaded.status, SimulationStatus.COMPLETED)
             self.assertEqual(loaded.command[-1], "simulation.in")
             self.assertEqual(loaded.output_files, ["output/model.out"])
+
+    def test_load_resolves_relative_paths_from_metadata_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            metadata_path = root / "examples" / "project" / "runs" / "run-001" / "metadata.json"
+            metadata_path.parent.mkdir(parents=True, exist_ok=True)
+
+            payload = {
+                "schema": {"name": "gprmax-workbench-run", "version": 1},
+                "run_id": "run-001",
+                "project_root": "..\\..",
+                "project_name": "Portable Example",
+                "status": "completed",
+                "created_at": "2026-03-15T00:00:00+00:00",
+                "started_at": "2026-03-15T00:00:00+00:00",
+                "finished_at": "2026-03-15T00:00:01+00:00",
+                "working_directory": ".",
+                "input_file": "input\\simulation.in",
+                "output_directory": "input\\output",
+                "stdout_log_path": "logs\\stdout.log",
+                "stderr_log_path": "logs\\stderr.log",
+                "combined_log_path": "logs\\combined.log",
+                "metadata_path": "metadata.json",
+                "command": ["<bundled-python>", "-m", "gprMax", "input\\simulation.in"],
+                "exit_code": 0,
+                "error_summary": "",
+                "output_files": [],
+                "configuration": {"mode": "normal"},
+            }
+            metadata_path.write_text(
+                json.dumps(payload, indent=2),
+                encoding="utf-8",
+            )
+
+            loaded = RunRepository().load(metadata_path)
+
+            self.assertEqual(loaded.project_root, metadata_path.parent.parent.parent.resolve())
+            self.assertEqual(loaded.working_directory, metadata_path.parent.resolve())
+            self.assertEqual(
+                loaded.input_file,
+                (metadata_path.parent / "input" / "simulation.in").resolve(),
+            )
+            self.assertEqual(
+                loaded.output_directory,
+                (metadata_path.parent / "input" / "output").resolve(),
+            )
 
 
 if __name__ == "__main__":

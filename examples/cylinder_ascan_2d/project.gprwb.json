@@ -1,0 +1,162 @@
+{
+  "schema": {
+    "name": "gprmax-workbench-project",
+    "version": 1
+  },
+  "metadata": {
+    "name": "Cylinder A-scan 2D",
+    "description": "Portable example project based on the gprMax cylinder_Ascan_2D reference model.",
+    "created_at": "2026-03-16T13:13:46.361651+00:00",
+    "updated_at": "2026-03-16T13:13:46.363421+00:00"
+  },
+  "model": {
+    "title": "A-scan from a metal cylinder buried in a dielectric half-space",
+    "notes": "",
+    "tags": [],
+    "domain": {
+      "size_m": {
+        "x": 0.24,
+        "y": 0.21,
+        "z": 0.002
+      },
+      "resolution_m": {
+        "x": 0.002,
+        "y": 0.002,
+        "z": 0.002
+      },
+      "time_window_s": 3e-09,
+      "pml_cells": {
+        "x_min": 10,
+        "y_min": 10,
+        "z_min": 0,
+        "x_max": 10,
+        "y_max": 10,
+        "z_max": 0
+      }
+    },
+    "materials": [
+      {
+        "identifier": "half_space",
+        "relative_permittivity": 6.0,
+        "conductivity": 0.0,
+        "relative_permeability": 1.0,
+        "magnetic_loss": 0.0,
+        "notes": "",
+        "tags": []
+      }
+    ],
+    "waveforms": [
+      {
+        "identifier": "my_ricker",
+        "kind": "ricker",
+        "amplitude": 1.0,
+        "center_frequency_hz": 1500000000.0,
+        "notes": "",
+        "tags": []
+      }
+    ],
+    "sources": [
+      {
+        "identifier": "tx-1",
+        "kind": "hertzian_dipole",
+        "axis": "z",
+        "position_m": {
+          "x": 0.1,
+          "y": 0.17,
+          "z": 0.0
+        },
+        "waveform_id": "my_ricker",
+        "delay_s": 0.0,
+        "resistance_ohms": null,
+        "notes": "",
+        "tags": [],
+        "parameters": {}
+      }
+    ],
+    "receivers": [
+      {
+        "identifier": "rx-1",
+        "position_m": {
+          "x": 0.14,
+          "y": 0.17,
+          "z": 0.0
+        },
+        "outputs": [],
+        "notes": "",
+        "tags": []
+      }
+    ],
+    "geometry": [
+      {
+        "kind": "box",
+        "label": "Half-space",
+        "material_ids": [
+          "half_space"
+        ],
+        "dielectric_smoothing": true,
+        "notes": "",
+        "tags": [],
+        "parameters": {
+          "lower_left_m": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+          },
+          "upper_right_m": {
+            "x": 0.24,
+            "y": 0.17,
+            "z": 0.002
+          }
+        }
+      },
+      {
+        "kind": "cylinder",
+        "label": "Metal cylinder",
+        "material_ids": [
+          "pec"
+        ],
+        "dielectric_smoothing": true,
+        "notes": "",
+        "tags": [],
+        "parameters": {
+          "start_m": {
+            "x": 0.12,
+            "y": 0.08,
+            "z": 0.0
+          },
+          "end_m": {
+            "x": 0.12,
+            "y": 0.08,
+            "z": 0.002
+          },
+          "radius_m": 0.01
+        }
+      }
+    ],
+    "geometry_views": [
+      {
+        "lower_left_m": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "upper_right_m": {
+          "x": 0.24,
+          "y": 0.21,
+          "z": 0.002
+        },
+        "resolution_m": {
+          "x": 0.002,
+          "y": 0.002,
+          "z": 0.002
+        },
+        "filename": "cylinder_half_space",
+        "mode": "n"
+      }
+    ],
+    "python_blocks": []
+  },
+  "advanced": {
+    "raw_input_overrides": []
+  }
+}

@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QPlainTextEdit,
     QPushButton,
+    QSplitter,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -26,6 +27,7 @@ from ...domain.execution_status import SimulationMode
 from ...domain.gprmax_config import SimulationRunConfig
 from ...domain.simulation import SimulationRunRecord
 from ..layouts.flow_layout import FlowLayout
+from ..widgets.metric_tile import MetricTile
 
 
 class SimulationView(QWidget):
@@ -60,9 +62,15 @@ class SimulationView(QWidget):
         self._validation_label = QLabel()
         self._validation_label.setWordWrap(True)
 
+        self._mode_tile = MetricTile()
+        self._runs_tile = MetricTile()
+        self._runtime_tile = MetricTile()
+        self._activity_tile = MetricTile()
+
         self._mode_combo = QComboBox()
         self._mode_combo.addItem("", SimulationMode.NORMAL.value)
         self._mode_combo.addItem("", SimulationMode.GEOMETRY_ONLY.value)
+        self._mode_combo.currentIndexChanged.connect(self._refresh_configuration_summary)
 
         self._gpu_checkbox = QCheckBox()
         self._gpu_devices_edit = QLineEdit()
@@ -71,6 +79,7 @@ class SimulationView(QWidget):
         self._num_runs_spinbox = QSpinBox()
         self._num_runs_spinbox.setRange(1, 1_000_000)
         self._num_runs_spinbox.setValue(1)
+        self._num_runs_spinbox.valueChanged.connect(self._refresh_configuration_summary)
 
         self._restart_spinbox = QSpinBox()
         self._restart_spinbox.setRange(0, 1_000_000)
@@ -104,6 +113,7 @@ class SimulationView(QWidget):
         self._export_button.clicked.connect(self.export_requested.emit)
 
         self._start_button = QPushButton()
+        self._start_button.setObjectName("PrimaryButton")
         self._start_button.clicked.connect(self.start_requested.emit)
 
         self._cancel_button = QPushButton()
@@ -116,12 +126,18 @@ class SimulationView(QWidget):
         self._open_output_button.clicked.connect(self.open_output_directory_requested.emit)
 
         buttons = FlowLayout(horizontal_spacing=10, vertical_spacing=10)
+        buttons.addWidget(self._start_button)
         buttons.addWidget(self._preview_button)
         buttons.addWidget(self._export_button)
-        buttons.addWidget(self._start_button)
         buttons.addWidget(self._cancel_button)
         buttons.addWidget(self._open_run_button)
         buttons.addWidget(self._open_output_button)
+
+        metrics_row = FlowLayout(horizontal_spacing=12, vertical_spacing=12)
+        metrics_row.addWidget(self._mode_tile)
+        metrics_row.addWidget(self._runs_tile)
+        metrics_row.addWidget(self._runtime_tile)
+        metrics_row.addWidget(self._activity_tile)
 
         runtime_card = self._build_card(
             "simulation.runtime_card",
@@ -133,34 +149,40 @@ class SimulationView(QWidget):
         )
         history_card = self._build_card("simulation.history_card", self._run_history)
 
-        io_layout = QGridLayout()
-        io_layout.addWidget(
+        self._top_splitter = QSplitter()
+        self._top_splitter.addWidget(runtime_card)
+        self._top_splitter.addWidget(config_card)
+        self._top_splitter.setStretchFactor(0, 1)
+        self._top_splitter.setStretchFactor(1, 1)
+        self._top_splitter.setChildrenCollapsible(False)
+
+        self._io_splitter = QSplitter()
+        self._io_splitter.addWidget(
             self._build_card("simulation.preview_card", self._preview_text),
-            0,
-            0,
         )
-        io_layout.addWidget(
+        self._io_splitter.addWidget(
             self._build_card("simulation.log_card", self._log_text),
-            0,
-            1,
         )
-        io_layout.setColumnStretch(0, 1)
-        io_layout.setColumnStretch(1, 1)
+        self._io_splitter.setStretchFactor(0, 1)
+        self._io_splitter.setStretchFactor(1, 1)
+        self._io_splitter.setChildrenCollapsible(False)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(18)
         layout.addWidget(self._title)
         layout.addWidget(self._subtitle)
-        layout.addWidget(runtime_card)
-        layout.addWidget(config_card)
+        layout.addLayout(metrics_row)
+        layout.addWidget(self._top_splitter)
         layout.addLayout(buttons)
-        layout.addLayout(io_layout)
+        layout.addWidget(self._io_splitter)
         layout.addWidget(history_card, 1)
 
         self.retranslate_ui()
         self.set_run_state(None, [])
         self.set_project_state(project_name=None, is_dirty=False)
+        self._refresh_configuration_summary()
+        self._refresh_responsive_layout()
 
     def current_configuration(self) -> SimulationRunConfig:
         mode = SimulationMode(self._mode_combo.currentData())
@@ -189,6 +211,7 @@ class SimulationView(QWidget):
 
     def set_runtime_label(self, runtime_label: str) -> None:
         self._runtime_label.setText(runtime_label)
+        self._refresh_configuration_summary()
 
     def set_project_state(self, *, project_name: str | None, is_dirty: bool) -> None:
         if project_name is None:
@@ -203,6 +226,10 @@ class SimulationView(QWidget):
                 name=project_name,
                 state=dirty_state,
             )
+        )
+        self._activity_tile.set_content(
+            eyebrow=self._localization.text("simulation.metric.activity"),
+            value=self._project_state_label.text(),
         )
 
     def set_validation_messages(self, messages: list[str]) -> None:
@@ -246,6 +273,10 @@ class SimulationView(QWidget):
             is_running = active_run.status.value in {"preparing", "running"}
             self._cancel_button.setEnabled(is_running)
             self._start_button.setEnabled(not is_running)
+        self._activity_tile.set_content(
+            eyebrow=self._localization.text("simulation.metric.activity"),
+            value=self._status_label.text(),
+        )
 
         current_selection = self.selected_run_id()
         self._run_history.clear()
@@ -303,6 +334,10 @@ class SimulationView(QWidget):
         layout.addRow("", self._mpi_no_spawn_checkbox)
         layout.addRow(self._extra_args_label, self._extra_args_edit)
         return widget
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._refresh_responsive_layout()
 
     def _build_card(self, title_key: str, content: QWidget) -> QFrame:
         card = QFrame()
@@ -404,3 +439,27 @@ class SimulationView(QWidget):
         self._extra_args_label.setText(self._localization.text("simulation.extra_args"))
         for key, heading in self._card_headings.items():
             heading.setText(self._localization.text(key))
+        self._refresh_configuration_summary()
+
+    def _refresh_configuration_summary(self) -> None:
+        self._mode_tile.set_content(
+            eyebrow=self._localization.text("simulation.metric.mode"),
+            value=self._localization.simulation_mode_text(
+                self._mode_combo.currentData() or SimulationMode.NORMAL.value
+            ),
+        )
+        self._runs_tile.set_content(
+            eyebrow=self._localization.text("simulation.metric.runs"),
+            value=str(self._num_runs_spinbox.value()),
+        )
+        self._runtime_tile.set_content(
+            eyebrow=self._localization.text("simulation.metric.runtime"),
+            value=self._runtime_label.text() or self._localization.text("common.not_set"),
+        )
+
+    def _refresh_responsive_layout(self) -> None:
+        wide = self.width() >= 1120
+        top_orientation = Qt.Orientation.Horizontal if wide else Qt.Orientation.Vertical
+        io_orientation = Qt.Orientation.Horizontal if self.width() >= 1240 else Qt.Orientation.Vertical
+        self._top_splitter.setOrientation(top_orientation)
+        self._io_splitter.setOrientation(io_orientation)

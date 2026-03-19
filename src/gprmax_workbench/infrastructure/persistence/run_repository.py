@@ -71,21 +71,37 @@ class RunRepository:
     def load(self, metadata_path: Path) -> SimulationRunRecord:
         payload = json.loads(metadata_path.read_text(encoding="utf-8"))
         configuration_payload = payload.get("configuration", {})
+        base_dir = metadata_path.parent
         return SimulationRunRecord(
             run_id=str(payload["run_id"]),
-            project_root=Path(payload["project_root"]),
+            project_root=_deserialize_path(payload["project_root"], base_dir=base_dir),
             project_name=str(payload.get("project_name", "")),
             status=SimulationStatus(payload["status"]),
             created_at=_deserialize_datetime(payload["created_at"]),
             started_at=_deserialize_datetime(payload.get("started_at")),
             finished_at=_deserialize_datetime(payload.get("finished_at")),
-            working_directory=Path(payload["working_directory"]),
-            input_file=Path(payload["input_file"]),
-            output_directory=Path(payload["output_directory"]),
-            stdout_log_path=Path(payload["stdout_log_path"]),
-            stderr_log_path=Path(payload["stderr_log_path"]),
-            combined_log_path=Path(payload["combined_log_path"]),
-            metadata_path=Path(payload["metadata_path"]),
+            working_directory=_deserialize_path(
+                payload["working_directory"],
+                base_dir=base_dir,
+            ),
+            input_file=_deserialize_path(payload["input_file"], base_dir=base_dir),
+            output_directory=_deserialize_path(
+                payload["output_directory"],
+                base_dir=base_dir,
+            ),
+            stdout_log_path=_deserialize_path(
+                payload["stdout_log_path"],
+                base_dir=base_dir,
+            ),
+            stderr_log_path=_deserialize_path(
+                payload["stderr_log_path"],
+                base_dir=base_dir,
+            ),
+            combined_log_path=_deserialize_path(
+                payload["combined_log_path"],
+                base_dir=base_dir,
+            ),
+            metadata_path=_deserialize_path(payload["metadata_path"], base_dir=base_dir),
             command=[str(item) for item in payload.get("command", [])],
             exit_code=payload.get("exit_code"),
             error_summary=str(payload.get("error_summary", "")),
@@ -120,3 +136,10 @@ def _deserialize_datetime(value: Any) -> datetime | None:
     if not value:
         return None
     return datetime.fromisoformat(str(value))
+
+
+def _deserialize_path(value: Any, *, base_dir: Path) -> Path:
+    raw = Path(str(value))
+    if raw.is_absolute():
+        return raw
+    return (base_dir / raw).resolve()
