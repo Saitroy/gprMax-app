@@ -24,7 +24,12 @@ from gprmax_workbench.domain.results import (
     RunResultSummary,
 )
 from gprmax_workbench.domain.simulation import SimulationRunRecord
-from gprmax_workbench.domain.traces import AscanTrace, BscanLoadResult, TraceMetadata
+from gprmax_workbench.domain.traces import (
+    AscanTrace,
+    BscanDataset,
+    BscanLoadResult,
+    TraceMetadata,
+)
 from gprmax_workbench.ui.views.results_view import ResultsView
 
 
@@ -74,11 +79,30 @@ class _FakeTraceService:
 
 
 class _FakeBscanService:
+    def __init__(self, *, available: bool = False) -> None:
+        self._available = available
+
     def load_bscan_if_available(self, run_summary, receiver_id, component):
+        if not self._available:
+            return BscanLoadResult(
+                available=False,
+                message="B-scan unavailable.",
+                dataset=None,
+            )
         return BscanLoadResult(
-            available=False,
-            message="B-scan unavailable.",
-            dataset=None,
+            available=True,
+            message="Loaded B-scan from merged output file.",
+            dataset=BscanDataset(
+                receiver_id=receiver_id,
+                receiver_name="Receiver 1",
+                component=component,
+                time_s=[0.0, 1e-11, 2e-11, 3e-11],
+                amplitudes=[
+                    [0.0, 0.1, -0.1, 0.2],
+                    [0.2, 0.0, -0.2, 0.1],
+                ],
+                trace_labels=["trace-1", "trace-2"],
+            ),
         )
 
 
@@ -87,89 +111,36 @@ class ResultsViewTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls._app = QApplication.instance() or QApplication([])
 
-    def test_refresh_project_auto_selects_trace_inputs_and_renders_trace(self) -> None:
+    def test_refresh_project_populates_separate_ascan_controls(self) -> None:
         output_path = Path("D:/demo/output/simulation.out")
         summary = _build_run_summary(output_path)
-        metadata = ResultMetadata(
-            output_file=summary.output_files[0],
-            gprmax_version="3.1.7",
-            model_title="Demo result",
-            iterations=4,
-            grid_shape=(100, 1, 1),
-            resolution_m=(0.01, 0.01, 0.01),
-            dt_s=1e-11,
-            src_steps_m=(0.0, 0.0, 0.0),
-            rx_steps_m=(0.01, 0.0, 0.0),
-            source_count=1,
-            receiver_count=1,
-            receivers=[
-                ReceiverResultSummary(
-                    receiver_id="rx1",
-                    name="Receiver 1",
-                    position_m=Vector3(x=0.1, y=0.0, z=0.0),
-                    components=["Ez", "Hx"],
-                )
-            ],
-        )
-        traces = {
-            "Ez": AscanTrace(
-                metadata=TraceMetadata(
-                    output_file=output_path,
-                    receiver_id="rx1",
-                    receiver_name="Receiver 1",
-                    component="Ez",
-                    dt_s=1e-11,
-                    iterations=4,
-                ),
-                time_s=[0.0, 1e-11, 2e-11, 3e-11],
-                values=[0.0, 0.1, -0.2, 0.3],
-            ),
-            "Hx": AscanTrace(
-                metadata=TraceMetadata(
-                    output_file=output_path,
-                    receiver_id="rx1",
-                    receiver_name="Receiver 1",
-                    component="Hx",
-                    dt_s=1e-11,
-                    iterations=4,
-                ),
-                time_s=[0.0, 1e-11, 2e-11, 3e-11],
-                values=[0.3, 0.2, -0.1, 0.0],
-            ),
-        }
-        results_service = ResultsService(
-            result_repository=_FakeResultRepository([summary]),
-            state=AppState(),
-        )
-        view = ResultsView(
-            localization=LocalizationService("ru"),
-            results_service=results_service,
-            trace_service=_FakeTraceService(metadata, traces),
-            bscan_service=_FakeBscanService(),
+        metadata = _build_metadata(summary.output_files[0], components=["Ez", "Hx"])
+        traces = _build_traces(output_path, components=["Ez", "Hx"])
+        view, results_service = _build_view(
+            [summary],
+            metadata=metadata,
+            traces=traces,
         )
 
         view.refresh_project(Path("D:/demo"))
 
-        self.assertEqual(view._receiver_combo.count(), 1)
-        self.assertEqual(view._component_list.count(), 2)
-        self.assertEqual(view._bscan_component_combo.count(), 2)
         self.assertEqual(results_service.viewer_state.selected_run_id, "run-1")
-        self.assertEqual(results_service.viewer_state.selected_receiver_id, "rx1")
-        self.assertEqual(results_service.viewer_state.selected_component, "Ez")
-        self.assertEqual(results_service.viewer_state.selected_ascan_components, ["Ez"])
+        self.assertEqual(view._ascan_output_combo.count(), 1)
+        self.assertEqual(view._ascan_receiver_combo.count(), 1)
+        self.assertEqual(view._ascan_component_list.count(), 2)
+        self.assertEqual(view._bscan_output_combo.count(), 0)
         self.assertEqual(
             view._trace_plot._layout.currentWidget().__class__.__name__,
             "QChartView",
         )
         self.assertEqual(len(view._trace_plot._chart.series()), 1)
 
-        view._component_list.item(1).setCheckState(Qt.CheckState.Checked)
+        view._ascan_component_list.item(1).setCheckState(Qt.CheckState.Checked)
 
-        self.assertEqual(results_service.viewer_state.selected_ascan_components, ["Ez", "Hx"])
         self.assertEqual(len(view._trace_plot._chart.series()), 2)
         self.assertTrue(view._trace_plot._chart.legend().isVisible())
 
-    def test_merged_output_is_shown_by_default_and_unmerged_can_be_enabled(self) -> None:
+    def test_merged_bscan_run_separates_ascan_and_bscan_controls(self) -> None:
         merged_output = Path("D:/demo/output/simulation_merged.out")
         single_output = Path("D:/demo/output/simulation1.out")
         summary = _build_run_summary(
@@ -184,147 +155,39 @@ class ResultsViewTests(unittest.TestCase):
             ],
             output_kind=OutputFileKind.MERGED,
         )
-        metadata = ResultMetadata(
-            output_file=summary.output_files[0],
-            gprmax_version="3.1.7",
-            model_title="Merged result",
-            iterations=4,
-            grid_shape=(100, 1, 1),
-            resolution_m=(0.01, 0.01, 0.01),
-            dt_s=1e-11,
-            src_steps_m=(0.0, 0.0, 0.0),
-            rx_steps_m=(0.01, 0.0, 0.0),
-            source_count=1,
-            receiver_count=1,
-            receivers=[
-                ReceiverResultSummary(
-                    receiver_id="rx1",
-                    name="Receiver 1",
-                    position_m=Vector3(x=0.1, y=0.0, z=0.0),
-                    components=["Ez"],
-                )
-            ],
-        )
-        trace = AscanTrace(
-            metadata=TraceMetadata(
-                output_file=single_output,
-                receiver_id="rx1",
-                receiver_name="Receiver 1",
-                component="Ez",
-                dt_s=1e-11,
-                iterations=4,
-            ),
-            time_s=[0.0, 1e-11, 2e-11, 3e-11],
-            values=[0.0, 0.1, -0.2, 0.3],
-        )
-        results_service = ResultsService(
-            result_repository=_FakeResultRepository([summary]),
-            state=AppState(),
-        )
-        view = ResultsView(
-            localization=LocalizationService("ru"),
-            results_service=results_service,
-            trace_service=_FakeTraceService(metadata, {"Ez": trace}),
-            bscan_service=_FakeBscanService(),
+        metadata = _build_metadata(summary.output_files[0], components=["Ez"])
+        traces = _build_traces(single_output, components=["Ez"])
+        view, _results_service = _build_view(
+            [summary],
+            metadata=metadata,
+            traces=traces,
+            bscan_available=True,
         )
 
         view.refresh_project(Path("D:/demo"))
 
+        self.assertTrue(view._tabs.isTabEnabled(1))
+        self.assertEqual(view._tabs.currentIndex(), 0)
+        self.assertEqual(view._ascan_output_combo.count(), 0)
+        self.assertIn("A-scan", view._ascan_status_label.text())
         self.assertFalse(view._show_unmerged_checkbox.isHidden())
-        self.assertEqual(view._output_list.count(), 1)
-        self.assertEqual(view._output_list.item(0).text(), "simulation_merged.out")
+        self.assertEqual(view._bscan_output_combo.count(), 1)
+        self.assertEqual(view._bscan_output_combo.currentData(), str(merged_output))
+        self.assertFalse(view._bscan_view._source_pixmap.isNull())
 
         view._show_unmerged_checkbox.setChecked(True)
 
-        self.assertEqual(view._output_list.count(), 2)
-
-    def test_switching_between_ascan_and_bscan_restores_expected_output_mode(self) -> None:
-        merged_output = Path("D:/demo/output/simulation_merged.out")
-        single_output = Path("D:/demo/output/simulation1.out")
-        summary = _build_run_summary(
-            merged_output,
-            extra_outputs=[
-                OutputFileDescriptor(
-                    path=single_output,
-                    name=single_output.name,
-                    kind=OutputFileKind.ASCAN,
-                    size_bytes=512,
-                )
-            ],
-            output_kind=OutputFileKind.MERGED,
-        )
-        metadata = ResultMetadata(
-            output_file=summary.output_files[0],
-            gprmax_version="3.1.7",
-            model_title="Merged result",
-            iterations=4,
-            grid_shape=(100, 1, 1),
-            resolution_m=(0.01, 0.01, 0.01),
-            dt_s=1e-11,
-            src_steps_m=(0.0, 0.0, 0.0),
-            rx_steps_m=(0.01, 0.0, 0.0),
-            source_count=1,
-            receiver_count=1,
-            receivers=[
-                ReceiverResultSummary(
-                    receiver_id="rx1",
-                    name="Receiver 1",
-                    position_m=Vector3(x=0.1, y=0.0, z=0.0),
-                    components=["Ez"],
-                )
-            ],
-        )
-        trace = AscanTrace(
-            metadata=TraceMetadata(
-                output_file=single_output,
-                receiver_id="rx1",
-                receiver_name="Receiver 1",
-                component="Ez",
-                dt_s=1e-11,
-                iterations=4,
-            ),
-            time_s=[0.0, 1e-11, 2e-11, 3e-11],
-            values=[0.0, 0.1, -0.2, 0.3],
-        )
-        results_service = ResultsService(
-            result_repository=_FakeResultRepository([summary]),
-            state=AppState(),
-        )
-        view = ResultsView(
-            localization=LocalizationService("ru"),
-            results_service=results_service,
-            trace_service=_FakeTraceService(metadata, {"Ez": trace}),
-            bscan_service=_FakeBscanService(),
-        )
-
-        view.refresh_project(Path("D:/demo"))
-
-        self.assertEqual(view._tabs.currentIndex(), 1)
-        self.assertEqual(view._output_list.count(), 1)
-        self.assertEqual(view._output_list.item(0).text(), "simulation_merged.out")
-
-        view._tabs.setCurrentIndex(0)
-
-        self.assertEqual(view._output_list.count(), 2)
-        self.assertEqual(
-            view._output_list.currentItem().data(Qt.ItemDataRole.UserRole),
-            str(single_output),
-        )
-        self.assertEqual(
-            view._output_list.currentItem().data(Qt.ItemDataRole.UserRole + 1),
-            ResultsView._OUTPUT_MODE_FILE,
-        )
+        self.assertEqual(view._ascan_output_combo.count(), 1)
+        self.assertEqual(view._ascan_output_combo.currentData(), str(single_output))
 
         view._tabs.setCurrentIndex(1)
+        view._tabs.setCurrentIndex(0)
+        view._tabs.setCurrentIndex(1)
 
-        self.assertEqual(view._output_list.count(), 1)
-        self.assertEqual(
-            view._output_list.currentItem().data(Qt.ItemDataRole.UserRole),
-            str(merged_output),
-        )
-        self.assertEqual(view._output_list.item(0).text(), "simulation_merged.out")
+        self.assertEqual(view._bscan_output_combo.currentData(), str(merged_output))
+        self.assertFalse(view._bscan_view._source_pixmap.isNull())
 
-    def test_stacked_bscan_entry_is_shown_by_default_for_multiple_single_traces(self) -> None:
+    def test_stacked_bscan_entry_is_separate_from_ascan_traces(self) -> None:
         output_one = Path("D:/demo/output/simulation1.out")
         output_two = Path("D:/demo/output/simulation2.out")
         summary = _build_run_summary(
@@ -338,105 +201,31 @@ class ResultsViewTests(unittest.TestCase):
                 )
             ],
         )
-        metadata = ResultMetadata(
-            output_file=summary.output_files[0],
-            gprmax_version="3.1.7",
-            model_title="Stacked result",
-            iterations=4,
-            grid_shape=(100, 1, 1),
-            resolution_m=(0.01, 0.01, 0.01),
-            dt_s=1e-11,
-            src_steps_m=(0.0, 0.0, 0.0),
-            rx_steps_m=(0.01, 0.0, 0.0),
-            source_count=1,
-            receiver_count=1,
-            receivers=[
-                ReceiverResultSummary(
-                    receiver_id="rx1",
-                    name="Receiver 1",
-                    position_m=Vector3(x=0.1, y=0.0, z=0.0),
-                    components=["Ez"],
-                )
-            ],
-        )
-        trace = AscanTrace(
-            metadata=TraceMetadata(
-                output_file=output_one,
-                receiver_id="rx1",
-                receiver_name="Receiver 1",
-                component="Ez",
-                dt_s=1e-11,
-                iterations=4,
-            ),
-            time_s=[0.0, 1e-11, 2e-11, 3e-11],
-            values=[0.0, 0.1, -0.2, 0.3],
-        )
-        results_service = ResultsService(
-            result_repository=_FakeResultRepository([summary]),
-            state=AppState(),
-        )
-        view = ResultsView(
-            localization=LocalizationService("ru"),
-            results_service=results_service,
-            trace_service=_FakeTraceService(metadata, {"Ez": trace}),
-            bscan_service=_FakeBscanService(),
+        metadata = _build_metadata(summary.output_files[0], components=["Ez"])
+        traces = _build_traces(output_one, components=["Ez"])
+        view, _results_service = _build_view(
+            [summary],
+            metadata=metadata,
+            traces=traces,
+            bscan_available=True,
         )
 
         view.refresh_project(Path("D:/demo"))
 
-        self.assertEqual(view._output_list.count(), 1)
-        self.assertIn("B-scan", view._output_list.item(0).text())
-        self.assertFalse(view._show_unmerged_checkbox.isHidden())
-
-        view._show_unmerged_checkbox.setChecked(True)
-
-        self.assertEqual(view._output_list.count(), 2)
+        self.assertEqual(view._ascan_output_combo.count(), 2)
+        self.assertTrue(view._show_unmerged_checkbox.isHidden())
+        self.assertEqual(view._bscan_output_combo.count(), 1)
+        self.assertIn("B-scan", view._bscan_output_combo.currentText())
 
     def test_refresh_project_respects_focused_run_even_when_result_list_is_unchanged(self) -> None:
         summary_one = _build_run_summary(Path("D:/demo/output/run1.out"), run_id="run-1")
         summary_two = _build_run_summary(Path("D:/demo/output/run2.out"), run_id="run-2")
-        metadata = ResultMetadata(
-            output_file=summary_two.output_files[0],
-            gprmax_version="3.1.7",
-            model_title="Demo result",
-            iterations=4,
-            grid_shape=(100, 1, 1),
-            resolution_m=(0.01, 0.01, 0.01),
-            dt_s=1e-11,
-            src_steps_m=(0.0, 0.0, 0.0),
-            rx_steps_m=(0.01, 0.0, 0.0),
-            source_count=1,
-            receiver_count=1,
-            receivers=[
-                ReceiverResultSummary(
-                    receiver_id="rx1",
-                    name="Receiver 1",
-                    position_m=Vector3(x=0.1, y=0.0, z=0.0),
-                    components=["Ez"],
-                )
-            ],
-        )
-        trace = AscanTrace(
-            metadata=TraceMetadata(
-                output_file=summary_two.output_files[0].path,
-                receiver_id="rx1",
-                receiver_name="Receiver 1",
-                component="Ez",
-                dt_s=1e-11,
-                iterations=4,
-            ),
-            time_s=[0.0, 1e-11, 2e-11, 3e-11],
-            values=[0.0, 0.1, -0.2, 0.3],
-        )
-        results_service = ResultsService(
-            result_repository=_FakeResultRepository([summary_two, summary_one]),
-            state=AppState(),
-        )
-        view = ResultsView(
-            localization=LocalizationService("ru"),
-            results_service=results_service,
-            trace_service=_FakeTraceService(metadata, {"Ez": trace}),
-            bscan_service=_FakeBscanService(),
+        metadata = _build_metadata(summary_two.output_files[0], components=["Ez"])
+        traces = _build_traces(summary_two.output_files[0].path, components=["Ez"])
+        view, results_service = _build_view(
+            [summary_two, summary_one],
+            metadata=metadata,
+            traces=traces,
         )
 
         view.refresh_project(Path("D:/demo"))
@@ -445,6 +234,81 @@ class ResultsViewTests(unittest.TestCase):
 
         self.assertEqual(results_service.viewer_state.selected_run_id, "run-1")
         self.assertEqual(view._run_list.currentItem().data(Qt.ItemDataRole.UserRole), "run-1")
+
+
+def _build_view(
+    summaries: list[RunResultSummary],
+    *,
+    metadata: ResultMetadata,
+    traces: dict[str, AscanTrace],
+    bscan_available: bool = False,
+) -> tuple[ResultsView, ResultsService]:
+    results_service = ResultsService(
+        result_repository=_FakeResultRepository(summaries),
+        state=AppState(),
+    )
+    view = ResultsView(
+        localization=LocalizationService("ru"),
+        results_service=results_service,
+        trace_service=_FakeTraceService(metadata, traces),
+        bscan_service=_FakeBscanService(available=bscan_available),
+    )
+    return view, results_service
+
+
+def _build_metadata(
+    output_file: OutputFileDescriptor,
+    *,
+    components: list[str],
+) -> ResultMetadata:
+    return ResultMetadata(
+        output_file=output_file,
+        gprmax_version="3.1.7",
+        model_title="Demo result",
+        iterations=4,
+        grid_shape=(100, 1, 1),
+        resolution_m=(0.01, 0.01, 0.01),
+        dt_s=1e-11,
+        src_steps_m=(0.0, 0.0, 0.0),
+        rx_steps_m=(0.01, 0.0, 0.0),
+        source_count=1,
+        receiver_count=1,
+        receivers=[
+            ReceiverResultSummary(
+                receiver_id="rx1",
+                name="Receiver 1",
+                position_m=Vector3(x=0.1, y=0.0, z=0.0),
+                components=components,
+            )
+        ],
+    )
+
+
+def _build_traces(
+    output_path: Path,
+    *,
+    components: list[str],
+) -> dict[str, AscanTrace]:
+    traces: dict[str, AscanTrace] = {}
+    base_values = {
+        "Ez": [0.0, 0.1, -0.2, 0.3],
+        "Hx": [0.3, 0.2, -0.1, 0.0],
+        "Hy": [0.1, -0.1, 0.2, -0.2],
+    }
+    for component in components:
+        traces[component] = AscanTrace(
+            metadata=TraceMetadata(
+                output_file=output_path,
+                receiver_id="rx1",
+                receiver_name="Receiver 1",
+                component=component,
+                dt_s=1e-11,
+                iterations=4,
+            ),
+            time_s=[0.0, 1e-11, 2e-11, 3e-11],
+            values=base_values.get(component, [0.0, 0.0, 0.0, 0.0]),
+        )
+    return traces
 
 
 def _build_run_summary(

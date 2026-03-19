@@ -1179,3 +1179,21 @@ _TRANSLATIONS["en"].update(
         "results.card.plot": "Result viewer",
     }
 )
+
+_TRANSLATIONS["ru"].update(
+    {
+        "results.ascan_output": "Трасса A-scan",
+        "results.bscan_output": "Результат B-scan",
+        "results.status.ascan_enable_unmerged": "В этом запуске отдельные A-scan трассы скрыты. Включите «Отобразить необъединённые трассы отдельно» для просмотра A-scan.",
+        "results.status.ascan_no_individual": "Для этого запуска отдельные трассы A-scan недоступны.",
+    }
+)
+
+_TRANSLATIONS["en"].update(
+    {
+        "results.ascan_output": "A-scan trace",
+        "results.bscan_output": "B-scan result",
+        "results.status.ascan_enable_unmerged": "Separate A-scan traces are currently hidden for this run. Enable 'Show unmerged traces separately' to inspect them.",
+        "results.status.ascan_no_individual": "No individual A-scan traces are available for this run.",
+    }
+)
