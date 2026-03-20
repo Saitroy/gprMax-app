@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from ...domain.execution_status import SimulationMode
 from ...domain.gprmax_config import SimulationRunConfig
 from ...domain.models import (
+    AntennaModelDefinition,
+    GeometryImportDefinition,
     GeometryPrimitive,
     GeometryView,
     MaterialDefinition,
@@ -59,12 +61,14 @@ class GprMaxInputGenerator:
         lines.extend(self._render_waveform(item) for item in project.model.waveforms)
         lines.extend(self._render_source(item) for item in project.model.sources)
         for item in project.model.receivers:
-            if item.outputs:
-                warnings.append(
-                    "Receiver output component filtering is not emitted yet; Stage 3 generates base #rx commands only."
-                )
             lines.append(self._render_receiver(item))
         lines.extend(self._render_geometry(item) for item in project.model.geometry)
+        lines.extend(
+            self._render_geometry_import(item)
+            for item in project.model.geometry_imports
+        )
+        for item in project.model.antenna_models:
+            lines.extend(self._render_antenna_model(item))
         lines.extend(self._render_geometry_view(item) for item in project.model.geometry_views)
 
         if configuration.mode == SimulationMode.GEOMETRY_ONLY and not project.model.geometry_views:
@@ -154,6 +158,21 @@ class GprMaxInputGenerator:
         return line
 
     def _render_receiver(self, receiver: ReceiverDefinition) -> str:
+        if receiver.identifier and receiver.outputs:
+            return (
+                "#rx: "
+                f"{self._format_vector(receiver.position_m)} "
+                f"{receiver.identifier} "
+                f"{' '.join(receiver.outputs)}"
+            )
+        if receiver.identifier:
+            return f"#rx: {self._format_vector(receiver.position_m)} {receiver.identifier}"
+        if receiver.outputs:
+            return (
+                "#rx: "
+                f"{self._format_vector(receiver.position_m)} "
+                f"{' '.join(receiver.outputs)}"
+            )
         return f"#rx: {self._format_vector(receiver.position_m)}"
 
     def _render_geometry(self, geometry: GeometryPrimitive) -> str:
@@ -202,6 +221,34 @@ class GprMaxInputGenerator:
             f"{self._format_vector(view.resolution_m)} "
             f"{view.filename} {view.mode}"
         )
+
+    def _render_geometry_import(self, geometry_import: GeometryImportDefinition) -> str:
+        line = (
+            "#geometry_objects_read: "
+            f"{self._format_vector(geometry_import.position_m)} "
+            f"{geometry_import.geometry_hdf5} "
+            f"{geometry_import.materials_file}"
+        )
+        if geometry_import.dielectric_smoothing:
+            line = f"{line} y"
+        return line
+
+    def _render_antenna_model(self, antenna: AntennaModelDefinition) -> list[str]:
+        rotation = ", rotate90=True" if antenna.rotate90 else ""
+        invocation = (
+            f"{antenna.function_name}("
+            f"{self._format_number(antenna.position_m.x)}, "
+            f"{self._format_number(antenna.position_m.y)}, "
+            f"{self._format_number(antenna.position_m.z)}, "
+            f"resolution={self._format_number(antenna.resolution_m)}"
+            f"{rotation})"
+        )
+        return [
+            "#python:",
+            f"from {antenna.module_path} import {antenna.function_name}",
+            invocation,
+            "#end_python:",
+        ]
 
     def _format_from_parameters(self, geometry: GeometryPrimitive, key: str) -> str:
         raw = geometry.parameters.get(key)

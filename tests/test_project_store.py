@@ -9,6 +9,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from gprmax_workbench.domain.models import (
+    AntennaModelDefinition,
+    GeometryImportDefinition,
     GeometryPrimitive,
     MaterialDefinition,
     ModelDomain,
@@ -100,6 +102,31 @@ class JsonProjectStoreTests(unittest.TestCase):
                             },
                         )
                     ],
+                    geometry_imports=[
+                        GeometryImportDefinition(
+                            identifier="import_1",
+                            position_m=Vector3(x=0.3, y=0.1, z=0.0),
+                            geometry_hdf5="assets/object.h5",
+                            materials_file="assets/materials.txt",
+                            dielectric_smoothing=True,
+                            notes="Imported body",
+                            tags=["import"],
+                        )
+                    ],
+                    antenna_models=[
+                        AntennaModelDefinition(
+                            identifier="ant_1",
+                            library="gprmax_user_libs",
+                            model_key="gssi_1500",
+                            module_path="user_libs.antennas.GSSI",
+                            function_name="antenna_like_GSSI_1500",
+                            position_m=Vector3(x=0.2, y=0.15, z=0.05),
+                            resolution_m=0.002,
+                            rotate90=True,
+                            notes="Antenna",
+                            tags=["tx"],
+                        )
+                    ],
                     python_blocks=["# python block placeholder"],
                 ),
                 advanced_input_overrides=["# custom raw command"],
@@ -122,6 +149,10 @@ class JsonProjectStoreTests(unittest.TestCase):
             self.assertEqual(loaded.model.receivers[0].outputs, ["Ez"])
             self.assertFalse(loaded.model.geometry[0].dielectric_smoothing)
             self.assertEqual(loaded.model.geometry[0].label, "slab")
+            self.assertEqual(loaded.model.geometry_imports[0].geometry_hdf5, "assets/object.h5")
+            self.assertTrue(loaded.model.geometry_imports[0].dielectric_smoothing)
+            self.assertEqual(loaded.model.antenna_models[0].function_name, "antenna_like_GSSI_1500")
+            self.assertTrue(loaded.model.antenna_models[0].rotate90)
             self.assertEqual(loaded.advanced_input_overrides, ["# custom raw command"])
 
 

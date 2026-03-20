@@ -4,14 +4,18 @@ import copy
 from collections.abc import Callable, Sequence
 
 from ...domain.model_entities import (
+    default_antenna_model,
     default_geometry,
+    default_geometry_import,
     default_material,
     default_receiver,
     default_source,
     default_waveform,
 )
 from ...domain.models import (
+    AntennaModelDefinition,
     BUILTIN_MATERIAL_IDENTIFIERS,
+    GeometryImportDefinition,
     GeometryPrimitive,
     MaterialDefinition,
     Project,
@@ -251,6 +255,111 @@ class ModelEditorService:
         if not project.model.geometry:
             return None
         return min(index, len(project.model.geometry) - 1)
+
+    def add_geometry_import(self) -> int:
+        project = self.require_current_project()
+        existing = [
+            item.identifier for item in project.model.geometry_imports if item.identifier
+        ]
+        geometry_import = default_geometry_import(
+            len(project.model.geometry_imports) + 1
+        )
+        geometry_import.identifier = self._make_unique_name(
+            geometry_import.identifier,
+            existing,
+        )
+        project.model.geometry_imports.append(geometry_import)
+        self._after_mutation(project)
+        return len(project.model.geometry_imports) - 1
+
+    def update_geometry_import(
+        self,
+        index: int,
+        geometry_import: GeometryImportDefinition,
+    ) -> ValidationResult:
+        def mutate(project: Project) -> None:
+            project.model.geometry_imports[index] = geometry_import
+
+        return self._mutate(mutate)
+
+    def duplicate_geometry_import(self, index: int) -> int:
+        project = self.require_current_project()
+        duplicate = copy.deepcopy(project.model.geometry_imports[index])
+        duplicate.identifier = self._make_unique_name(
+            duplicate.identifier or "geometry_import",
+            [item.identifier for item in project.model.geometry_imports if item.identifier],
+        )
+        project.model.geometry_imports.insert(index + 1, duplicate)
+        self._after_mutation(project)
+        return index + 1
+
+    def delete_geometry_import(self, index: int) -> int | None:
+        project = self.require_current_project()
+        del project.model.geometry_imports[index]
+        self._after_mutation(project)
+        if not project.model.geometry_imports:
+            return None
+        return min(index, len(project.model.geometry_imports) - 1)
+
+    def add_antenna_model(self) -> int:
+        project = self.require_current_project()
+        existing = [
+            item.identifier for item in project.model.antenna_models if item.identifier
+        ]
+        antenna_model = default_antenna_model(
+            project,
+            len(project.model.antenna_models) + 1,
+        )
+        antenna_model.identifier = self._make_unique_name(
+            antenna_model.identifier,
+            existing,
+        )
+        project.model.antenna_models.append(antenna_model)
+        self._after_mutation(project)
+        return len(project.model.antenna_models) - 1
+
+    def update_antenna_model(
+        self,
+        index: int,
+        antenna_model: AntennaModelDefinition,
+    ) -> ValidationResult:
+        def mutate(project: Project) -> None:
+            project.model.antenna_models[index] = antenna_model
+
+        return self._mutate(mutate)
+
+    def duplicate_antenna_model(self, index: int) -> int:
+        project = self.require_current_project()
+        duplicate = copy.deepcopy(project.model.antenna_models[index])
+        duplicate.identifier = self._make_unique_name(
+            duplicate.identifier or "antenna",
+            [item.identifier for item in project.model.antenna_models if item.identifier],
+        )
+        project.model.antenna_models.insert(index + 1, duplicate)
+        self._after_mutation(project)
+        return index + 1
+
+    def delete_antenna_model(self, index: int) -> int | None:
+        project = self.require_current_project()
+        del project.model.antenna_models[index]
+        self._after_mutation(project)
+        if not project.model.antenna_models:
+            return None
+        return min(index, len(project.model.antenna_models) - 1)
+
+    def update_advanced_workspace(
+        self,
+        *,
+        python_blocks: Sequence[str],
+        raw_input_overrides: Sequence[str],
+    ) -> ValidationResult:
+        def mutate(project: Project) -> None:
+            project.model.python_blocks = [item for item in python_blocks if item.strip()]
+            project.advanced_input_overrides = [
+                item for item in raw_input_overrides if item.strip()
+            ]
+
+        return self._mutate(mutate)
 
     def available_material_ids(self) -> list[str]:
         project = self.require_current_project()

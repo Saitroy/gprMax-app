@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Any
 
 from ..domain.models import (
+    AntennaModelDefinition,
+    GeometryImportDefinition,
     PROJECT_SCHEMA_NAME,
     PROJECT_SCHEMA_VERSION,
     GeometryPrimitive,
@@ -71,6 +73,14 @@ class JsonProjectStore:
                 ],
                 "geometry": [
                     _geometry_to_payload(item) for item in project.model.geometry
+                ],
+                "geometry_imports": [
+                    _geometry_import_to_payload(item)
+                    for item in project.model.geometry_imports
+                ],
+                "antenna_models": [
+                    _antenna_model_to_payload(item)
+                    for item in project.model.antenna_models
                 ],
                 "geometry_views": [
                     _geometry_view_to_payload(item)
@@ -149,6 +159,16 @@ class JsonProjectStore:
                 geometry=[
                     _geometry_from_payload(item)
                     for item in model_payload.get("geometry", [])
+                    if isinstance(item, dict)
+                ],
+                geometry_imports=[
+                    _geometry_import_from_payload(item)
+                    for item in model_payload.get("geometry_imports", [])
+                    if isinstance(item, dict)
+                ],
+                antenna_models=[
+                    _antenna_model_from_payload(item)
+                    for item in model_payload.get("antenna_models", [])
                     if isinstance(item, dict)
                 ],
                 geometry_views=[
@@ -376,4 +396,64 @@ def _geometry_view_from_payload(value: dict[str, Any]) -> GeometryView:
         ),
         filename=str(value.get("filename", "geometry")),
         mode=str(value.get("mode", "n")),
+    )
+
+
+def _geometry_import_to_payload(geometry_import: GeometryImportDefinition) -> dict[str, Any]:
+    return {
+        "identifier": geometry_import.identifier,
+        "position_m": _vector_to_payload(geometry_import.position_m),
+        "geometry_hdf5": geometry_import.geometry_hdf5,
+        "materials_file": geometry_import.materials_file,
+        "dielectric_smoothing": geometry_import.dielectric_smoothing,
+        "notes": geometry_import.notes,
+        "tags": list(geometry_import.tags),
+    }
+
+
+def _geometry_import_from_payload(value: dict[str, Any]) -> GeometryImportDefinition:
+    return GeometryImportDefinition(
+        identifier=str(value.get("identifier", "")),
+        position_m=_vector_from_payload(
+            value.get("position_m"),
+            default=Vector3(x=0.0, y=0.0, z=0.0),
+        ),
+        geometry_hdf5=str(value.get("geometry_hdf5", "")),
+        materials_file=str(value.get("materials_file", "")),
+        dielectric_smoothing=bool(value.get("dielectric_smoothing", False)),
+        notes=str(value.get("notes", "")),
+        tags=[str(item) for item in value.get("tags", [])],
+    )
+
+
+def _antenna_model_to_payload(antenna: AntennaModelDefinition) -> dict[str, Any]:
+    return {
+        "identifier": antenna.identifier,
+        "library": antenna.library,
+        "model_key": antenna.model_key,
+        "module_path": antenna.module_path,
+        "function_name": antenna.function_name,
+        "position_m": _vector_to_payload(antenna.position_m),
+        "resolution_m": antenna.resolution_m,
+        "rotate90": antenna.rotate90,
+        "notes": antenna.notes,
+        "tags": list(antenna.tags),
+    }
+
+
+def _antenna_model_from_payload(value: dict[str, Any]) -> AntennaModelDefinition:
+    return AntennaModelDefinition(
+        identifier=str(value.get("identifier", "")),
+        library=str(value.get("library", "")),
+        model_key=str(value.get("model_key", "")),
+        module_path=str(value.get("module_path", "")),
+        function_name=str(value.get("function_name", "")),
+        position_m=_vector_from_payload(
+            value.get("position_m"),
+            default=Vector3(x=0.0, y=0.0, z=0.0),
+        ),
+        resolution_m=float(value.get("resolution_m", 0.001)),
+        rotate90=bool(value.get("rotate90", False)),
+        notes=str(value.get("notes", "")),
+        tags=[str(item) for item in value.get("tags", [])],
     )

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from .models import (
+    AntennaModelDefinition,
+    GeometryImportDefinition,
     GeometryPrimitive,
     MaterialDefinition,
     Project,
@@ -14,6 +16,50 @@ EDITOR_GEOMETRY_KINDS = ("box", "sphere", "cylinder")
 EDITOR_SOURCE_KINDS = ("hertzian_dipole", "magnetic_dipole", "voltage_source")
 EDITOR_SOURCE_AXES = ("x", "y", "z")
 EDITOR_WAVEFORM_KINDS = ("ricker", "gaussian", "gaussiandot", "gaussiandotnorm")
+EDITOR_COMMAND_CATEGORIES = (
+    "general",
+    "materials",
+    "objects",
+    "sources",
+    "outputs",
+    "pml",
+    "advanced",
+)
+
+ANTENNA_LIBRARY_CATALOG: dict[str, dict[str, dict[str, str | float | tuple[float, ...]]]] = {
+    "gprmax_user_libs": {
+        "gssi_1500": {
+            "label": "GSSI 1.5 GHz",
+            "module_path": "user_libs.antennas.GSSI",
+            "function_name": "antenna_like_GSSI_1500",
+            "resolution_m": 0.001,
+            "manufacturer": "GSSI-like",
+            "description": "Shielded antenna model suitable for high-resolution shallow surveys.",
+            "dimensions_mm": "170 x 108 x 44",
+            "supported_resolutions_m": (0.001,),
+        },
+        "gssi_400": {
+            "label": "GSSI 400 MHz",
+            "module_path": "user_libs.antennas.GSSI",
+            "function_name": "antenna_like_GSSI_400",
+            "resolution_m": 0.001,
+            "manufacturer": "GSSI-like",
+            "description": "Lower-frequency antenna model with deeper penetration and larger footprint.",
+            "dimensions_mm": "340 x 210 x 95",
+            "supported_resolutions_m": (0.001,),
+        },
+        "mala_1200": {
+            "label": "MALA 1.2 GHz",
+            "module_path": "user_libs.antennas.MALA",
+            "function_name": "antenna_like_MALA_1200",
+            "resolution_m": 0.001,
+            "manufacturer": "MALA-like",
+            "description": "Compact antenna model for shallow, high-detail surveys.",
+            "dimensions_mm": "150 x 90 x 40",
+            "supported_resolutions_m": (0.001,),
+        },
+    }
+}
 
 
 def default_material(index: int) -> MaterialDefinition:
@@ -111,3 +157,38 @@ def default_geometry(project: Project, index: int, *, kind: str = "box") -> Geom
         material_ids=[default_material_id] if default_material_id else [],
         parameters=parameters,
     )
+
+
+def default_geometry_import(index: int) -> GeometryImportDefinition:
+    return GeometryImportDefinition(
+        identifier=f"geometry_import_{index}",
+        position_m=Vector3(x=0.0, y=0.0, z=0.0),
+        geometry_hdf5="",
+        materials_file="",
+        dielectric_smoothing=False,
+    )
+
+
+def default_antenna_model(project: Project, index: int) -> AntennaModelDefinition:
+    size = project.model.domain.size_m
+    catalog = ANTENNA_LIBRARY_CATALOG["gprmax_user_libs"]["gssi_1500"]
+    return AntennaModelDefinition(
+        identifier=f"antenna_{index}",
+        library="gprmax_user_libs",
+        model_key="gssi_1500",
+        module_path=str(catalog["module_path"]),
+        function_name=str(catalog["function_name"]),
+        position_m=Vector3(
+            x=min(size.x * 0.5, size.x),
+            y=min(size.y * 0.5, size.y),
+            z=min(size.z * 0.1, size.z),
+        ),
+        resolution_m=float(catalog["resolution_m"]),
+    )
+
+
+def antenna_catalog_entry(
+    library: str,
+    model_key: str,
+) -> dict[str, str | float | tuple[float, ...]] | None:
+    return ANTENNA_LIBRARY_CATALOG.get(library, {}).get(model_key)

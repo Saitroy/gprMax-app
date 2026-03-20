@@ -20,11 +20,15 @@ from ...application.services.model_editor_service import ModelEditorService
 from ...application.services.validation_service import ValidationService
 from ...domain.models import Project
 from ...domain.validation import ValidationResult
+from ...infrastructure.gprmax.command_registry import GprMaxCommandRegistry
+from ..widgets.model_editor.advanced_panel import AdvancedPanel
 from ..widgets.model_editor.general_panel import GeneralPanel
 from ..widgets.model_editor.geometry_panel import GeometryPanel
+from ..widgets.model_editor.libraries_panel import LibrariesPanel
 from ..widgets.model_editor.materials_panel import MaterialsPanel
 from ..widgets.model_editor.preview_panel import PreviewPanel
 from ..widgets.model_editor.receivers_panel import ReceiversPanel
+from ..widgets.model_editor.scene_canvas_panel import SceneCanvasPanel
 from ..widgets.model_editor.sources_panel import SourcesPanel
 from ..widgets.model_editor.waveforms_panel import WaveformsPanel
 
@@ -40,6 +44,7 @@ class ProjectView(QWidget):
         model_editor_service: ModelEditorService,
         validation_service: ValidationService,
         input_preview_service: InputPreviewService,
+        command_registry: GprMaxCommandRegistry,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -73,6 +78,14 @@ class ProjectView(QWidget):
         self._sources_panel = SourcesPanel(localization, model_editor_service, validation_service)
         self._receivers_panel = ReceiversPanel(localization, model_editor_service, validation_service)
         self._geometry_panel = GeometryPanel(localization, model_editor_service, validation_service)
+        self._scene_panel = SceneCanvasPanel(localization, model_editor_service, validation_service)
+        self._libraries_panel = LibrariesPanel(localization, model_editor_service, validation_service)
+        self._advanced_panel = AdvancedPanel(
+            localization,
+            model_editor_service,
+            validation_service,
+            command_registry,
+        )
         self._preview_panel = PreviewPanel(localization, model_editor_service, input_preview_service)
         self._sections: list[tuple[str, QWidget]] = [
             ("project.section.area", self._general_panel),
@@ -81,6 +94,9 @@ class ProjectView(QWidget):
             ("project.section.sources", self._sources_panel),
             ("project.section.receivers", self._receivers_panel),
             ("project.section.geometry", self._geometry_panel),
+            ("project.section.scene", self._scene_panel),
+            ("project.section.libraries", self._libraries_panel),
+            ("project.section.advanced", self._advanced_panel),
             ("project.section.preview", self._preview_panel),
         ]
 
@@ -91,6 +107,9 @@ class ProjectView(QWidget):
             self._sources_panel,
             self._receivers_panel,
             self._geometry_panel,
+            self._scene_panel,
+            self._libraries_panel,
+            self._advanced_panel,
         ):
             panel.model_changed.connect(self._on_model_changed)
 
@@ -191,6 +210,9 @@ class ProjectView(QWidget):
         self._sources_panel.set_project(project)
         self._receivers_panel.set_project(project)
         self._geometry_panel.set_project(project)
+        self._scene_panel.set_project(project)
+        self._libraries_panel.set_project(project)
+        self._advanced_panel.set_project(project)
 
     def _on_model_changed(self) -> None:
         project = self._model_editor_service.current_project()
@@ -205,6 +227,9 @@ class ProjectView(QWidget):
         self._receivers_panel.refresh_validation()
         self._geometry_panel.refresh_material_choices()
         self._geometry_panel.refresh_validation()
+        self._scene_panel.set_project(project)
+        self._libraries_panel.set_project(project)
+        self._advanced_panel.refresh_validation()
 
         if project is None:
             self._summary_label.setText(self._localization.text("project.summary.empty"))
@@ -259,6 +284,9 @@ class ProjectView(QWidget):
         self._sources_panel.retranslate_ui()
         self._receivers_panel.retranslate_ui()
         self._geometry_panel.retranslate_ui()
+        self._scene_panel.retranslate_ui()
+        self._libraries_panel.retranslate_ui()
+        self._advanced_panel.retranslate_ui()
         self._preview_panel.retranslate_ui()
         self.set_project(self._current_project, self._validation_service.current_validation(), self._is_dirty, self._project_file)
 

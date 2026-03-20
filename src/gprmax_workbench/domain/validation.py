@@ -2,14 +2,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
+from pathlib import Path
 
 from .execution_status import SimulationMode
 from .gprmax_config import SimulationRunConfig
 from .model_entities import (
+    ANTENNA_LIBRARY_CATALOG,
     EDITOR_GEOMETRY_KINDS,
     EDITOR_SOURCE_AXES,
     EDITOR_SOURCE_KINDS,
     EDITOR_WAVEFORM_KINDS,
+    antenna_catalog_entry,
 )
 from .models import BUILTIN_MATERIAL_IDENTIFIERS, Project, Vector3
 from .project_introspection import project_uses_scan_steps
@@ -156,6 +159,10 @@ def validate_project(project: Project) -> ValidationResult:
         item.identifier for item in project.model.receivers if item.identifier
     ]
     source_ids = [item.identifier for item in project.model.sources if item.identifier]
+    geometry_import_ids = [
+        item.identifier for item in project.model.geometry_imports if item.identifier
+    ]
+    antenna_ids = [item.identifier for item in project.model.antenna_models if item.identifier]
 
     _validate_unique_identifiers(
         result,
@@ -180,6 +187,18 @@ def validate_project(project: Project) -> ValidationResult:
         "model.sources",
         source_ids,
         "Source identifiers must be unique when provided.",
+    )
+    _validate_unique_identifiers(
+        result,
+        "model.geometry_imports",
+        geometry_import_ids,
+        "Imported geometry identifiers must be unique when provided.",
+    )
+    _validate_unique_identifiers(
+        result,
+        "model.antenna_models",
+        antenna_ids,
+        "Antenna identifiers must be unique when provided.",
     )
 
     for index, material in enumerate(project.model.materials):
@@ -308,6 +327,87 @@ def validate_project(project: Project) -> ValidationResult:
             project,
         )
 
+    for index, geometry_import in enumerate(project.model.geometry_imports):
+        if not geometry_import.identifier.strip():
+            result.add_error(
+                f"model.geometry_imports[{index}].identifier",
+                "Imported geometry identifier must not be empty.",
+            )
+        _validate_position_within_domain(
+            result,
+            f"model.geometry_imports[{index}].position_m",
+            geometry_import.position_m,
+            project,
+        )
+        if not geometry_import.geometry_hdf5.strip():
+            result.add_error(
+                f"model.geometry_imports[{index}].geometry_hdf5",
+                "Geometry HDF5 file must be selected.",
+            )
+        if not geometry_import.materials_file.strip():
+            result.add_error(
+                f"model.geometry_imports[{index}].materials_file",
+                "Materials file must be selected.",
+            )
+        geometry_path = _resolve_project_path(project, geometry_import.geometry_hdf5)
+        if geometry_path is not None and not geometry_path.exists():
+            result.add_warning(
+                f"model.geometry_imports[{index}].geometry_hdf5",
+                f"Geometry file does not exist at '{geometry_path}'.",
+            )
+        materials_path = _resolve_project_path(project, geometry_import.materials_file)
+        if materials_path is not None and not materials_path.exists():
+            result.add_warning(
+                f"model.geometry_imports[{index}].materials_file",
+                f"Materials file does not exist at '{materials_path}'.",
+            )
+
+    for index, antenna in enumerate(project.model.antenna_models):
+        if not antenna.identifier.strip():
+            result.add_error(
+                f"model.antenna_models[{index}].identifier",
+                "Antenna identifier must not be empty.",
+            )
+        _validate_position_within_domain(
+            result,
+            f"model.antenna_models[{index}].position_m",
+            antenna.position_m,
+            project,
+        )
+        _validate_positive_float(
+            result,
+            f"model.antenna_models[{index}].resolution_m",
+            antenna.resolution_m,
+        )
+        if not antenna.module_path.strip():
+            result.add_error(
+                f"model.antenna_models[{index}].module_path",
+                "Antenna module path must not be empty.",
+            )
+        if not antenna.function_name.strip():
+            result.add_error(
+                f"model.antenna_models[{index}].function_name",
+                "Antenna function name must not be empty.",
+            )
+        if antenna.library and antenna.library not in ANTENNA_LIBRARY_CATALOG:
+            result.add_warning(
+                f"model.antenna_models[{index}].library",
+                f"Antenna library '{antenna.library}' is not part of the current guided catalog.",
+            )
+        catalog_entry = antenna_catalog_entry(antenna.library, antenna.model_key)
+        if antenna.model_key and catalog_entry is None:
+            result.add_warning(
+                f"model.antenna_models[{index}].model_key",
+                f"Antenna model '{antenna.model_key}' is not part of the current guided catalog.",
+            )
+        if catalog_entry is not None:
+            supported = catalog_entry.get("supported_resolutions_m")
+            if isinstance(supported, tuple) and antenna.resolution_m not in supported:
+                result.add_warning(
+                    f"model.antenna_models[{index}].resolution_m",
+                    "Selected antenna resolution differs from catalog defaults and should be checked carefully.",
+                )
+
     for index, geometry_view in enumerate(project.model.geometry_views):
         _validate_box_bounds(
             result,
@@ -368,6 +468,25 @@ def validate_project_for_execution(
             result.add_error(
                 f"model.geometry[{index}].kind",
                 f"Geometry kind '{primitive.kind}' is not supported by the current input generator.",
+            )
+
+    for index, geometry_import in enumerate(project.model.geometry_imports):
+        if not geometry_import.geometry_hdf5.strip():
+            result.add_error(
+                f"model.geometry_imports[{index}].geometry_hdf5",
+                "Imported geometry requires a HDF5 file.",
+            )
+        if not geometry_import.materials_file.strip():
+            result.add_error(
+                f"model.geometry_imports[{index}].materials_file",
+                "Imported geometry requires a materials file.",
+            )
+
+    for index, antenna in enumerate(project.model.antenna_models):
+        if not antenna.module_path.strip() or not antenna.function_name.strip():
+            result.add_error(
+                f"model.antenna_models[{index}]",
+                "Antenna model requires a valid Python module and function.",
             )
 
     if configuration.use_gpu and configuration.mpi_tasks:
@@ -568,3 +687,13 @@ def _validate_box_bounds(
 
 def _vector_to_dict(vector: Vector3) -> dict[str, float]:
     return {"x": vector.x, "y": vector.y, "z": vector.z}
+
+
+def _resolve_project_path(project: Project, raw: str):
+    normalized = raw.strip()
+    if not normalized:
+        return None
+    candidate = project.root / normalized
+    if candidate.exists():
+        return candidate
+    return candidate if not Path(normalized).is_absolute() else Path(normalized)

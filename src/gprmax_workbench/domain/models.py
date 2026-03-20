@@ -104,6 +104,31 @@ class GeometryView:
 
 
 @dataclass(slots=True)
+class GeometryImportDefinition:
+    identifier: str
+    position_m: Vector3
+    geometry_hdf5: str
+    materials_file: str
+    dielectric_smoothing: bool = False
+    notes: str = ""
+    tags: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class AntennaModelDefinition:
+    identifier: str
+    library: str
+    model_key: str
+    module_path: str
+    function_name: str
+    position_m: Vector3
+    resolution_m: float = 0.001
+    rotate90: bool = False
+    notes: str = ""
+    tags: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
 class ProjectModel:
     title: str
     domain: ModelDomain = field(default_factory=ModelDomain)
@@ -115,6 +140,8 @@ class ProjectModel:
     sources: list[SourceDefinition] = field(default_factory=list)
     receivers: list[ReceiverDefinition] = field(default_factory=list)
     geometry: list[GeometryPrimitive] = field(default_factory=list)
+    geometry_imports: list[GeometryImportDefinition] = field(default_factory=list)
+    antenna_models: list[AntennaModelDefinition] = field(default_factory=list)
     geometry_views: list[GeometryView] = field(default_factory=list)
     python_blocks: list[str] = field(default_factory=list)
 

@@ -9,6 +9,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from gprmax_workbench.domain.gprmax_config import SimulationRunConfig
 from gprmax_workbench.domain.models import (
+    AntennaModelDefinition,
+    GeometryImportDefinition,
     GeometryPrimitive,
     GeometryView,
     MaterialDefinition,
@@ -69,6 +71,27 @@ class InputGeneratorTests(unittest.TestCase):
                     },
                 )
             ]
+            project.model.geometry_imports = [
+                GeometryImportDefinition(
+                    identifier="import_1",
+                    position_m=Vector3(0.05, 0.05, 0.0),
+                    geometry_hdf5="../assets/body.h5",
+                    materials_file="../assets/materials.txt",
+                    dielectric_smoothing=True,
+                )
+            ]
+            project.model.antenna_models = [
+                AntennaModelDefinition(
+                    identifier="antenna_1",
+                    library="gprmax_user_libs",
+                    model_key="gssi_1500",
+                    module_path="user_libs.antennas.GSSI",
+                    function_name="antenna_like_GSSI_1500",
+                    position_m=Vector3(0.125, 0.094, 0.1),
+                    resolution_m=0.002,
+                    rotate90=True,
+                )
+            ]
             project.model.geometry_views = [
                 GeometryView(
                     lower_left_m=Vector3(0.0, 0.0, 0.0),
@@ -89,14 +112,18 @@ class InputGeneratorTests(unittest.TestCase):
             self.assertIn("#material:", generated.text)
             self.assertIn("#waveform:", generated.text)
             self.assertIn("#voltage_source:", generated.text)
-            self.assertIn("#rx:", generated.text)
+            self.assertIn("#rx: 0.2 0.1 0 rx1 Ez", generated.text)
             self.assertIn("#box:", generated.text)
+            self.assertIn("#geometry_objects_read:", generated.text)
+            self.assertIn("../assets/body.h5", generated.text)
+            self.assertIn("from user_libs.antennas.GSSI import antenna_like_GSSI_1500", generated.text)
+            self.assertIn("rotate90=True", generated.text)
             self.assertIn("#geometry_view:", generated.text)
             self.assertIn("#output_dir: ../output", generated.text)
             self.assertIn("75", generated.text)
             self.assertIn("5e-10", generated.text)
             self.assertIn(" n", generated.text)
-            self.assertTrue(generated.warnings)
+            self.assertFalse(generated.warnings)
 
 
 if __name__ == "__main__":

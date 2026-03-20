@@ -69,6 +69,7 @@ class MainWindow(QMainWindow):
             model_editor_service=context.model_editor_service,
             validation_service=context.validation_service,
             input_preview_service=context.input_preview_service,
+            command_registry=context.command_registry,
         )
         self._simulation_view = SimulationView(
             localization=self._localization,

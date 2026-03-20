@@ -8,6 +8,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from gprmax_workbench.domain.models import (
+    AntennaModelDefinition,
+    GeometryImportDefinition,
     GeometryPrimitive,
     MaterialDefinition,
     SourceDefinition,
@@ -95,6 +97,38 @@ class ValidationTests(unittest.TestCase):
 
             self.assertTrue(
                 any(issue.path == "model.scan_trace_count" for issue in validation.warnings)
+            )
+
+    def test_validation_reports_invalid_geometry_import_and_antenna(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project(name="Advanced Demo", root=Path(temp_dir))
+            project.model.geometry_imports = [
+                GeometryImportDefinition(
+                    identifier="",
+                    position_m=Vector3(0.0, 0.0, 0.0),
+                    geometry_hdf5="",
+                    materials_file="",
+                )
+            ]
+            project.model.antenna_models = [
+                AntennaModelDefinition(
+                    identifier="ant_1",
+                    library="gprmax_user_libs",
+                    model_key="gssi_1500",
+                    module_path="",
+                    function_name="",
+                    position_m=Vector3(0.0, 0.0, 0.0),
+                    resolution_m=0.0,
+                )
+            ]
+
+            validation = validate_project(project)
+
+            self.assertTrue(
+                any("geometry_imports[0].geometry_hdf5" in issue.path for issue in validation.errors)
+            )
+            self.assertTrue(
+                any("antenna_models[0].resolution_m" in issue.path for issue in validation.errors)
             )
 
 

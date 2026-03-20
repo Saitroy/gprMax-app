@@ -25,6 +25,7 @@ from .application.services.validation_service import ValidationService
 from .application.services.workspace_service import WorkspaceService
 from .application.state import AppState
 from .infrastructure.gprmax.adapter import SubprocessGprMaxAdapter
+from .infrastructure.gprmax.command_registry import GprMaxCommandRegistry
 from .infrastructure.gprmax.input_generator import GprMaxInputGenerator
 from .infrastructure.gprmax.runner import GprMaxSubprocessRunner
 from .infrastructure.logging import setup_logging
@@ -63,6 +64,7 @@ class ApplicationContext:
     validation_service: ValidationService
     input_generation_service: InputGenerationService
     input_preview_service: InputPreviewService
+    command_registry: GprMaxCommandRegistry
     simulation_service: SimulationService
     run_service: RunService
     results_service: ResultsService
@@ -122,6 +124,7 @@ def build_context() -> ApplicationContext:
         generator=GprMaxInputGenerator(),
         artifact_store=artifact_store,
     )
+    command_registry = GprMaxCommandRegistry()
     input_preview_service = InputPreviewService(
         input_generation_service=input_generation_service,
         validation_service=validation_service,
@@ -157,6 +160,7 @@ def build_context() -> ApplicationContext:
         validation_service=validation_service,
         input_generation_service=input_generation_service,
         input_preview_service=input_preview_service,
+        command_registry=command_registry,
         simulation_service=simulation_service,
         run_service=run_service,
         results_service=results_service,
