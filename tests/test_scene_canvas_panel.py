@@ -276,6 +276,7 @@ class SceneCanvasPanelTests(unittest.TestCase):
             second_color = panel._entity_items[("geometry", second_index)]._color.name()  # noqa: SLF001
 
             self.assertNotEqual(first_color, second_color)
+            self.assertIn("soil", panel._entity_items[("geometry", first_index)]._secondary_label)  # noqa: SLF001
 
     def test_resize_mode_shows_box_handles(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -297,6 +298,73 @@ class SceneCanvasPanelTests(unittest.TestCase):
             panel._scene_mode_combo.setCurrentIndex(panel._scene_mode_combo.findData("resize"))  # noqa: SLF001
 
             self.assertEqual(len(panel._resize_handles), 4)  # noqa: SLF001
+
+    def test_create_tool_adds_selected_entity_at_click_position(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Scene Demo", Path(temp_dir))
+            state = AppState(
+                current_project=project,
+                current_project_validation=validate_project(project),
+            )
+            editor = ModelEditorService(state)
+            validation = ValidationService(state)
+            panel = SceneCanvasPanel(LocalizationService("ru"), editor, validation)
+
+            panel.set_project(project)
+            panel._scene_tool_combo.setCurrentIndex(panel._scene_tool_combo.findData("create"))  # noqa: SLF001
+            panel._handle_palette_click("receiver")  # noqa: SLF001
+            panel._handle_empty_scene_click(0.25, 0.35)  # noqa: SLF001
+
+            self.assertEqual(len(project.model.receivers), 1)
+            self.assertAlmostEqual(project.model.receivers[0].position_m.x, 0.25)
+            self.assertAlmostEqual(project.model.receivers[0].position_m.y, 0.35)
+
+    def test_measure_tool_creates_measurement_overlay(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Scene Demo", Path(temp_dir))
+            state = AppState(
+                current_project=project,
+                current_project_validation=validate_project(project),
+            )
+            editor = ModelEditorService(state)
+            validation = ValidationService(state)
+            panel = SceneCanvasPanel(LocalizationService("ru"), editor, validation)
+
+            panel.set_project(project)
+            panel._scene_tool_combo.setCurrentIndex(panel._scene_tool_combo.findData("measure"))  # noqa: SLF001
+            panel._handle_empty_scene_click(0.1, 0.2)  # noqa: SLF001
+            panel._handle_empty_scene_click(0.4, 0.6)  # noqa: SLF001
+
+            self.assertGreaterEqual(len(panel._measurement_items), 2)  # noqa: SLF001
+
+    def test_resize_preview_does_not_commit_until_release(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Scene Demo", Path(temp_dir))
+            project.model.domain.size_m = Vector3(1.0, 1.0, 0.1)
+            project.model.materials = [
+                MaterialDefinition(identifier="soil", relative_permittivity=4.0, conductivity=0.001)
+            ]
+            state = AppState(
+                current_project=project,
+                current_project_validation=validate_project(project),
+            )
+            editor = ModelEditorService(state)
+            validation = ValidationService(state)
+            geometry_index = editor.add_geometry("box")
+            geometry = project.model.geometry[geometry_index]
+            geometry.material_ids = ["soil"]
+            geometry.parameters["lower_left_m"] = {"x": 0.4, "y": 0.4, "z": 0.02}
+            geometry.parameters["upper_right_m"] = {"x": 0.6, "y": 0.6, "z": 0.08}
+            panel = SceneCanvasPanel(LocalizationService("ru"), editor, validation)
+
+            panel.set_project(project)
+            panel._set_selected_row("geometry", geometry_index)  # noqa: SLF001
+            panel._scene_mode_combo.setCurrentIndex(panel._scene_mode_combo.findData("resize"))  # noqa: SLF001
+            panel._preview_geometry_resize("corner_br", panel._scene.sceneRect().bottomRight())  # noqa: SLF001
+
+            lower_before = project.model.geometry[geometry_index].parameters["lower_left_m"]["x"]
+            self.assertEqual(lower_before, 0.4)
+            self.assertGreaterEqual(len(panel._preview_items), 2)  # noqa: SLF001
 
     def test_resize_handle_updates_box_size_within_domain(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
