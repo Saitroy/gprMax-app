@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import subprocess
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from threading import Lock
@@ -11,6 +12,7 @@ from uuid import uuid4
 from ...domain.execution_status import SimulationStatus
 from ...domain.gprmax_config import SimulationRunConfig
 from ...domain.models import Project
+from ...domain.project_introspection import project_uses_scan_steps
 from ...domain.runtime_info import RuntimeInfo
 from ...domain.simulation import (
     PreparedSimulationRun,
@@ -107,7 +109,7 @@ class SimulationService:
     ) -> Path:
         return self._input_generation_service.export_preview(
             project=project,
-            configuration=configuration,
+            configuration=self.suggest_run_configuration(project, configuration),
             destination=destination,
         )
 
@@ -116,13 +118,34 @@ class SimulationService:
         project: Project,
         configuration: SimulationRunConfig,
     ) -> ValidationResult:
-        return self._input_generation_service.validate_before_run(project, configuration)
+        effective_configuration = self.suggest_run_configuration(project, configuration)
+        return self._input_generation_service.validate_before_run(
+            project,
+            effective_configuration,
+        )
+
+    def suggest_run_configuration(
+        self,
+        project: Project,
+        configuration: SimulationRunConfig | None = None,
+    ) -> SimulationRunConfig:
+        effective_configuration = configuration or SimulationRunConfig()
+        if effective_configuration.num_model_runs > 1:
+            return effective_configuration
+        if not project_uses_scan_steps(project):
+            return effective_configuration
+
+        suggested_runs = self._suggest_num_model_runs(project)
+        if suggested_runs <= 1:
+            return effective_configuration
+        return replace(effective_configuration, num_model_runs=suggested_runs)
 
     def prepare_simulation_run(
         self,
         project: Project,
         configuration: SimulationRunConfig,
     ) -> PreparedSimulationRun:
+        configuration = self.suggest_run_configuration(project, configuration)
         validation = self.validate_before_run(project, configuration)
         if not validation.is_valid:
             raise SimulationPreparationError(validation)
@@ -167,6 +190,7 @@ class SimulationService:
         project: Project,
         configuration: SimulationRunConfig,
     ) -> SimulationRunRecord:
+        configuration = self.suggest_run_configuration(project, configuration)
         with self._lock:
             if self._state.active_run is not None and self._state.active_run.status in {
                 SimulationStatus.PREPARING,
@@ -490,6 +514,19 @@ class SimulationService:
 
     def _new_run_id(self) -> str:
         return datetime.now(tz=UTC).strftime("%Y%m%d-%H%M%S") + "-" + uuid4().hex[:8]
+
+    def _suggest_num_model_runs(self, project: Project) -> int:
+        for record in self._run_repository.load_history(project.root):
+            if (
+                record.status == SimulationStatus.COMPLETED
+                and record.configuration.num_model_runs > 1
+            ):
+                return record.configuration.num_model_runs
+
+            output_count = len(record.output_files)
+            if record.status == SimulationStatus.COMPLETED and output_count > 1:
+                return output_count
+        return 1
 
     def _read_text_file(self, path: Path) -> str:
         if not path.exists():

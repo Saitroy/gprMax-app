@@ -94,6 +94,7 @@ class MainWindow(QMainWindow):
         }
         self._navigation_page_indexes = list(range(len(self._pages)))
         self._last_polled_run_state: tuple[str, str] | None = None
+        self._simulation_configuration_project_root: Path | None = None
 
         self._new_project_action = QAction(self)
         self._open_project_action = QAction(self)
@@ -200,6 +201,12 @@ class MainWindow(QMainWindow):
 
         if project is not None:
             self._context.simulation_service.get_run_history(project.root)
+            if self._simulation_configuration_project_root != project.root:
+                suggested_configuration = (
+                    self._context.simulation_service.suggest_run_configuration(project)
+                )
+                self._simulation_view.set_configuration(suggested_configuration)
+                self._simulation_configuration_project_root = project.root
             self._simulation_view.set_project_state(
                 project_name=project.metadata.name,
                 is_dirty=workspace.state.current_project_dirty,
@@ -208,6 +215,7 @@ class MainWindow(QMainWindow):
             self._simulation_view.set_project_state(project_name=None, is_dirty=False)
             workspace.state.run_history = []
             self._last_polled_run_state = None
+            self._simulation_configuration_project_root = None
 
         self._welcome_view.set_current_project(project)
         self._welcome_view.set_recent_projects(workspace.state.recent_projects)
@@ -571,9 +579,14 @@ class MainWindow(QMainWindow):
             return
 
         configuration = self._simulation_view.current_configuration()
-        validation = self._context.simulation_service.validate_before_run(
+        effective_configuration = self._context.simulation_service.suggest_run_configuration(
             project,
             configuration,
+        )
+        self._simulation_view.set_configuration(effective_configuration)
+        validation = self._context.simulation_service.validate_before_run(
+            project,
+            effective_configuration,
         )
         messages = [
             f"{self._localization.severity_text(issue.severity.value)}: "
@@ -584,7 +597,7 @@ class MainWindow(QMainWindow):
         try:
             prepared = self._context.simulation_service.rebuild_input_preview(
                 project,
-                configuration,
+                effective_configuration,
             )
         except Exception as exc:
             LOGGER.exception("Failed to build input preview")
@@ -622,10 +635,15 @@ class MainWindow(QMainWindow):
         if not filename:
             return
 
+        effective_configuration = self._context.simulation_service.suggest_run_configuration(
+            project,
+            self._simulation_view.current_configuration(),
+        )
+        self._simulation_view.set_configuration(effective_configuration)
         try:
             destination = self._context.simulation_service.export_input(
                 project,
-                self._simulation_view.current_configuration(),
+                effective_configuration,
                 Path(filename),
             )
         except Exception as exc:
@@ -651,10 +669,15 @@ class MainWindow(QMainWindow):
             return
 
         configuration = self._simulation_view.current_configuration()
+        effective_configuration = self._context.simulation_service.suggest_run_configuration(
+            project,
+            configuration,
+        )
+        self._simulation_view.set_configuration(effective_configuration)
         try:
             run_record = self._context.simulation_service.start_simulation(
                 project,
-                configuration,
+                effective_configuration,
             )
         except SimulationPreparationError as exc:
             self._simulation_view.set_validation_messages(

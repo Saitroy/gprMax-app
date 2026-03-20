@@ -13,6 +13,7 @@ from gprmax_workbench.application.services.results_service import ResultsService
 from gprmax_workbench.application.state import AppState
 from gprmax_workbench.domain.execution_status import SimulationStatus
 from gprmax_workbench.domain.gprmax_config import SimulationRunConfig
+from gprmax_workbench.domain.models import default_project
 from gprmax_workbench.domain.results import (
     OutputFileDescriptor,
     OutputFileKind,
@@ -71,6 +72,32 @@ class ResultsServiceTests(unittest.TestCase):
         self.assertIsNone(state.results_viewer.selected_component)
         self.assertEqual(state.results_viewer.selected_ascan_components, [])
 
+    def test_prefers_latest_bscan_capable_run_for_stepped_projects(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_root = Path(temp_dir)
+            state = AppState(
+                current_project=default_project("B-scan Demo", project_root)
+            )
+            state.current_project.advanced_input_overrides = [
+                "#src_steps: 0.002 0 0",
+                "#rx_steps: 0.002 0 0",
+            ]
+            latest_single = _build_run_summary(project_root, "run-latest")
+            earlier_bscan = _build_run_summary(
+                project_root,
+                "run-bscan",
+                output_names=["simulation1.out", "simulation2.out"],
+                created_at=datetime(2026, 3, 14, tzinfo=UTC),
+            )
+            service = ResultsService(
+                result_repository=_FakeResultRepository([latest_single, earlier_bscan]),
+                state=state,
+            )
+
+            service.refresh_results(project_root)
+
+            self.assertEqual(service.viewer_state.selected_run_id, "run-bscan")
+
     def test_focus_run_resets_dependent_viewer_selection(self) -> None:
         state = AppState()
         service = ResultsService(
@@ -100,18 +127,37 @@ class ResultsServiceTests(unittest.TestCase):
         self.assertTrue(result.available)
 
 
-def _build_run_summary(project_root: Path, run_id: str) -> RunResultSummary:
+def _build_run_summary(
+    project_root: Path,
+    run_id: str,
+    *,
+    output_names: list[str] | None = None,
+    created_at: datetime | None = None,
+) -> RunResultSummary:
     run_dir = project_root / "runs" / run_id
     output_dir = run_dir / "output"
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_file = output_dir / "simulation1.out"
-    output_file.write_text("", encoding="utf-8")
+    outputs = output_names or ["simulation1.out"]
+    output_descriptors: list[OutputFileDescriptor] = []
+    for output_name in outputs:
+        output_file = output_dir / output_name
+        output_file.write_text("", encoding="utf-8")
+        output_descriptors.append(
+            OutputFileDescriptor(
+                path=output_file,
+                name=output_file.name,
+                kind=OutputFileKind.MERGED
+                if "_merged" in output_file.stem.lower()
+                else OutputFileKind.ASCAN,
+                size_bytes=0,
+            )
+        )
     run_record = SimulationRunRecord(
         run_id=run_id,
         project_root=project_root,
         project_name="Demo",
         status=SimulationStatus.COMPLETED,
-        created_at=datetime(2026, 3, 15, tzinfo=UTC),
+        created_at=created_at or datetime(2026, 3, 15, tzinfo=UTC),
         working_directory=run_dir,
         input_file=run_dir / "input" / "simulation.in",
         output_directory=output_dir,
@@ -123,14 +169,7 @@ def _build_run_summary(project_root: Path, run_id: str) -> RunResultSummary:
     )
     return RunResultSummary(
         run_record=run_record,
-        output_files=[
-            OutputFileDescriptor(
-                path=output_file,
-                name=output_file.name,
-                kind=OutputFileKind.ASCAN,
-                size_bytes=0,
-            )
-        ],
+        output_files=output_descriptors,
     )
 
 

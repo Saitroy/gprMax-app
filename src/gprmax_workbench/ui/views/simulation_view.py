@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import shlex
+from contextlib import ExitStack
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSignalBlocker, Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -253,6 +254,31 @@ class SimulationView(QWidget):
             mpi_no_spawn=self._mpi_no_spawn_checkbox.isChecked(),
             extra_arguments=extra_arguments,
         )
+
+    def set_configuration(self, configuration: SimulationRunConfig) -> None:
+        with ExitStack() as stack:
+            stack.enter_context(QSignalBlocker(self._mode_combo))
+            stack.enter_context(QSignalBlocker(self._num_runs_spinbox))
+            stack.enter_context(QSignalBlocker(self._restart_spinbox))
+            stack.enter_context(QSignalBlocker(self._mpi_tasks_spinbox))
+            stack.enter_context(QSignalBlocker(self._geometry_fixed_checkbox))
+            stack.enter_context(QSignalBlocker(self._write_processed_checkbox))
+            stack.enter_context(QSignalBlocker(self._benchmark_checkbox))
+            stack.enter_context(QSignalBlocker(self._mpi_no_spawn_checkbox))
+            stack.enter_context(QSignalBlocker(self._extra_args_edit))
+
+            mode_index = self._mode_combo.findData(configuration.mode.value)
+            self._mode_combo.setCurrentIndex(max(mode_index, 0))
+            self._num_runs_spinbox.setValue(max(configuration.num_model_runs, 1))
+            self._restart_spinbox.setValue(configuration.restart_from_model or 0)
+            self._mpi_tasks_spinbox.setValue(configuration.mpi_tasks or 0)
+            self._geometry_fixed_checkbox.setChecked(configuration.geometry_fixed)
+            self._write_processed_checkbox.setChecked(configuration.write_processed)
+            self._benchmark_checkbox.setChecked(configuration.benchmark)
+            self._mpi_no_spawn_checkbox.setChecked(configuration.mpi_no_spawn)
+            self._extra_args_edit.setText(" ".join(configuration.extra_arguments))
+
+        self._refresh_configuration_summary()
 
     def set_runtime_label(self, runtime_label: str) -> None:
         self._runtime_label.setText(runtime_label)

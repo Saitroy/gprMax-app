@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 import tempfile
 import unittest
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
@@ -20,6 +21,7 @@ from gprmax_workbench.domain.execution_status import SimulationStatus
 from gprmax_workbench.domain.gprmax_config import SimulationRunConfig
 from gprmax_workbench.domain.runtime_info import RuntimeInfo
 from gprmax_workbench.domain.models import default_project
+from gprmax_workbench.domain.simulation import SimulationRunRecord
 from gprmax_workbench.infrastructure.gprmax.adapter import GprMaxExecutionRequest
 from gprmax_workbench.infrastructure.gprmax.input_generator import GprMaxInputGenerator
 from gprmax_workbench.infrastructure.persistence.artifact_store import RunArtifactStore
@@ -226,6 +228,70 @@ class SimulationServiceTests(unittest.TestCase):
             )
             snapshot = service.get_log_snapshot_for_run(run_record)
             self.assertIn("merged ok", snapshot.stdout_text)
+
+    def test_suggests_batch_run_count_from_history_for_stepped_projects(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Stepped Demo", Path(temp_dir))
+            project.advanced_input_overrides = [
+                "#src_steps: 0.002 0 0",
+                "#rx_steps: 0.002 0 0",
+            ]
+            state = AppState(current_project=project)
+            run_repository = RunRepository()
+            historical_record = _build_historical_record(project.root, num_model_runs=60)
+            run_repository.save(historical_record)
+            service = SimulationService(
+                adapter=_FakeAdapter(),
+                input_generation_service=InputGenerationService(
+                    generator=GprMaxInputGenerator(),
+                    artifact_store=RunArtifactStore(),
+                ),
+                artifact_store=RunArtifactStore(),
+                run_repository=run_repository,
+                runner=_FakeRunner(),
+                state=state,
+            )
+
+            suggested = service.suggest_run_configuration(project, SimulationRunConfig())
+
+            self.assertEqual(suggested.num_model_runs, 60)
+
+
+def _build_historical_record(
+    project_root: Path,
+    *,
+    num_model_runs: int,
+) -> SimulationRunRecord:
+    run_id = "historical-bscan"
+    run_dir = project_root / "runs" / run_id
+    input_dir = run_dir / "input"
+    output_dir = input_dir / "output"
+    logs_dir = run_dir / "logs"
+    input_dir.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    (input_dir / "simulation.in").write_text("#title: historical\n", encoding="utf-8")
+    for index in range(1, 4):
+        (output_dir / f"simulation{index}.out").write_text("", encoding="utf-8")
+
+    return SimulationRunRecord(
+        run_id=run_id,
+        project_root=project_root,
+        project_name="Historical",
+        status=SimulationStatus.COMPLETED,
+        created_at=datetime(2026, 3, 19, tzinfo=UTC),
+        working_directory=run_dir,
+        input_file=input_dir / "simulation.in",
+        output_directory=output_dir,
+        stdout_log_path=logs_dir / "stdout.log",
+        stderr_log_path=logs_dir / "stderr.log",
+        combined_log_path=logs_dir / "combined.log",
+        metadata_path=run_dir / "metadata.json",
+        configuration=SimulationRunConfig(num_model_runs=num_model_runs),
+        output_files=[f"input\\output\\simulation{index}.out" for index in range(1, 4)],
+        exit_code=0,
+        finished_at=datetime(2026, 3, 19, tzinfo=UTC),
+    )
 
 
 if __name__ == "__main__":

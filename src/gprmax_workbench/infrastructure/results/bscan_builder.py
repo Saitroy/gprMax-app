@@ -54,11 +54,14 @@ class BscanBuilder:
         trace_labels: list[str] = []
         reference_time: list[float] | None = None
         receiver_name = receiver_id
+        first_error: ResultsReadError | None = None
 
         for path in source_files:
             try:
                 trace = self._reader.load_ascan(path, receiver_id, component)
-            except ResultsReadError:
+            except ResultsReadError as exc:
+                if first_error is None:
+                    first_error = exc
                 continue
 
             if reference_time is None:
@@ -74,6 +77,8 @@ class BscanBuilder:
             trace_labels.append(path.stem)
 
         if len(amplitudes) < 2 or reference_time is None:
+            if first_error is not None and not amplitudes:
+                return BscanLoadResult(False, str(first_error))
             return BscanLoadResult(
                 False,
                 "B-scan preview is unavailable for the selected receiver/component in this run.",

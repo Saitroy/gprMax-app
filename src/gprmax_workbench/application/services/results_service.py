@@ -4,6 +4,7 @@ from pathlib import Path
 
 from ...domain.results import RunResultSummary
 from ...domain.viewer_state import ResultsViewerState
+from ...domain.project_introspection import project_uses_scan_steps
 from ...infrastructure.results.result_repository import ResultRepository
 from ..state import AppState
 
@@ -36,7 +37,8 @@ class ResultsService:
             return []
 
         if selected_run_id not in {item.run_record.run_id for item in results}:
-            self._state.results_viewer.selected_run_id = results[0].run_record.run_id
+            preferred = self._preferred_run(results)
+            self._state.results_viewer.selected_run_id = preferred.run_record.run_id
             self._state.results_viewer.selected_output_file = None
             self._state.results_viewer.selected_receiver_id = None
             self._state.results_viewer.selected_component = None
@@ -89,3 +91,14 @@ class ResultsService:
 
     def _reset_viewer_state(self) -> None:
         self._state.results_viewer = ResultsViewerState()
+
+    def _preferred_run(self, results: list[RunResultSummary]) -> RunResultSummary:
+        project = self._state.current_project
+        if project_uses_scan_steps(project):
+            bscan_candidate = next(
+                (item for item in results if item.supports_bscan_preview),
+                None,
+            )
+            if bscan_candidate is not None:
+                return bscan_candidate
+        return results[0]

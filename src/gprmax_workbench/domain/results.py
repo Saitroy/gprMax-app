@@ -67,8 +67,20 @@ class RunResultSummary:
     issues: list[str] = field(default_factory=list)
 
     @property
+    def merged_output_files(self) -> list[OutputFileDescriptor]:
+        return [item for item in self.output_files if item.is_merged]
+
+    @property
+    def individual_output_files(self) -> list[OutputFileDescriptor]:
+        return [item for item in self.output_files if not item.is_merged]
+
+    @property
+    def supports_bscan_preview(self) -> bool:
+        return bool(self.merged_output_files) or len(self.individual_output_files) >= 2
+
+    @property
     def primary_output_file(self) -> OutputFileDescriptor | None:
         if not self.output_files:
             return None
-        merged = next((item for item in self.output_files if item.is_merged), None)
+        merged = next((item for item in self.merged_output_files), None)
         return merged or self.output_files[0]
