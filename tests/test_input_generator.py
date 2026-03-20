@@ -125,6 +125,28 @@ class InputGeneratorTests(unittest.TestCase):
             self.assertIn(" n", generated.text)
             self.assertFalse(generated.warnings)
 
+    def test_receiver_identifier_without_outputs_uses_default_components(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Generator Demo", Path(temp_dir))
+            project.model.receivers = [
+                ReceiverDefinition(
+                    identifier="rx-1",
+                    position_m=Vector3(0.08, 0.17, 0.0),
+                    outputs=[],
+                )
+            ]
+
+            generated = GprMaxInputGenerator().generate(
+                project=project,
+                configuration=SimulationRunConfig(),
+                output_dir="../output",
+            )
+
+            self.assertIn(
+                "#rx: 0.08 0.17 0 rx-1 Ex Ey Ez Hx Hy Hz",
+                generated.text,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

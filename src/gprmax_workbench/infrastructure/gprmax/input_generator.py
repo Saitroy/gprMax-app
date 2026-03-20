@@ -31,6 +31,8 @@ class GeneratedInput:
 class GprMaxInputGenerator:
     """Converts the project model into a gprMax input-file representation."""
 
+    _default_receiver_outputs = ("Ex", "Ey", "Ez", "Hx", "Hy", "Hz")
+
     def generate(
         self,
         project: Project,
@@ -158,20 +160,20 @@ class GprMaxInputGenerator:
         return line
 
     def _render_receiver(self, receiver: ReceiverDefinition) -> str:
-        if receiver.identifier and receiver.outputs:
+        outputs = list(receiver.outputs)
+        identifier = receiver.identifier.strip()
+
+        if identifier and not outputs:
+            outputs = list(self._default_receiver_outputs)
+        if outputs and not identifier:
+            identifier = "rx"
+
+        if identifier and outputs:
             return (
                 "#rx: "
                 f"{self._format_vector(receiver.position_m)} "
-                f"{receiver.identifier} "
-                f"{' '.join(receiver.outputs)}"
-            )
-        if receiver.identifier:
-            return f"#rx: {self._format_vector(receiver.position_m)} {receiver.identifier}"
-        if receiver.outputs:
-            return (
-                "#rx: "
-                f"{self._format_vector(receiver.position_m)} "
-                f"{' '.join(receiver.outputs)}"
+                f"{identifier} "
+                f"{' '.join(outputs)}"
             )
         return f"#rx: {self._format_vector(receiver.position_m)}"
 

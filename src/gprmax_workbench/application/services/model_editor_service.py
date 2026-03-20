@@ -72,6 +72,12 @@ class ModelEditorService:
 
         return self._mutate(mutate)
 
+    def update_domain_size(self, size_m: Vector3) -> ValidationResult:
+        def mutate(project: Project) -> None:
+            project.model.domain.size_m = size_m
+
+        return self._mutate(mutate)
+
     def add_material(self) -> int:
         project = self.require_current_project()
         existing = [item.identifier for item in project.model.materials]

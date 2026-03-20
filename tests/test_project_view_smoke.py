@@ -31,36 +31,49 @@ class ProjectViewSmokeTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls._app = QApplication.instance() or QApplication([])
 
+    def _build_view(self, temp_dir: str) -> ProjectView:
+        project = default_project("Smoke", Path(temp_dir))
+        state = AppState(
+            current_project=project,
+            current_project_validation=validate_project(project),
+        )
+        validation_service = ValidationService(state)
+        model_editor_service = ModelEditorService(state)
+        input_preview_service = InputPreviewService(
+            InputGenerationService(GprMaxInputGenerator(), RunArtifactStore()),
+            validation_service,
+        )
+        view = ProjectView(
+            localization=LocalizationService("ru"),
+            model_editor_service=model_editor_service,
+            validation_service=validation_service,
+            input_preview_service=input_preview_service,
+            command_registry=GprMaxCommandRegistry(),
+        )
+        view.set_project(project, state.current_project_validation, False, None)
+        return view
+
     def test_project_view_builds_extended_editor_sections(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            project = default_project("Smoke", Path(temp_dir))
-            state = AppState(
-                current_project=project,
-                current_project_validation=validate_project(project),
-            )
-            validation_service = ValidationService(state)
-            model_editor_service = ModelEditorService(state)
-            input_preview_service = InputPreviewService(
-                InputGenerationService(GprMaxInputGenerator(), RunArtifactStore()),
-                validation_service,
-            )
-            view = ProjectView(
-                localization=LocalizationService("ru"),
-                model_editor_service=model_editor_service,
-                validation_service=validation_service,
-                input_preview_service=input_preview_service,
-                command_registry=GprMaxCommandRegistry(),
-            )
-
-            view.set_project(project, state.current_project_validation, False, None)
+            view = self._build_view(temp_dir)
 
             labels = [
                 view._section_nav.item(index).text()  # noqa: SLF001
                 for index in range(view._section_nav.count())  # noqa: SLF001
             ]
+
             self.assertIn("Сцена", labels)
             self.assertIn("Библиотеки и импорт", labels)
             self.assertIn("Advanced", labels)
+            self.assertEqual(labels[0], "Сцена")
+
+    def test_scene_edit_request_switches_to_matching_section(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            view = self._build_view(temp_dir)
+
+            view._scene_panel.edit_requested.emit("receiver")  # noqa: SLF001
+
+            self.assertIs(view._section_stack.currentWidget(), view._receivers_panel)  # noqa: SLF001
 
 
 if __name__ == "__main__":

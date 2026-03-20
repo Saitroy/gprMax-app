@@ -88,13 +88,13 @@ class ProjectView(QWidget):
         )
         self._preview_panel = PreviewPanel(localization, model_editor_service, input_preview_service)
         self._sections: list[tuple[str, QWidget]] = [
+            ("project.section.scene", self._scene_panel),
             ("project.section.area", self._general_panel),
             ("project.section.materials", self._materials_panel),
             ("project.section.signal", self._waveforms_panel),
             ("project.section.sources", self._sources_panel),
             ("project.section.receivers", self._receivers_panel),
             ("project.section.geometry", self._geometry_panel),
-            ("project.section.scene", self._scene_panel),
             ("project.section.libraries", self._libraries_panel),
             ("project.section.advanced", self._advanced_panel),
             ("project.section.preview", self._preview_panel),
@@ -112,6 +112,7 @@ class ProjectView(QWidget):
             self._advanced_panel,
         ):
             panel.model_changed.connect(self._on_model_changed)
+        self._scene_panel.edit_requested.connect(self._on_scene_edit_requested)
 
         self._header = QLabel()
         self._header.setObjectName("ViewTitle")
@@ -304,3 +305,18 @@ class ProjectView(QWidget):
         if row < 0:
             return
         self._section_stack.setCurrentIndex(row)
+
+    def _on_scene_edit_requested(self, entity_kind: str) -> None:
+        target_key = {
+            "geometry": "project.section.geometry",
+            "source": "project.section.sources",
+            "receiver": "project.section.receivers",
+            "antenna": "project.section.libraries",
+            "import": "project.section.libraries",
+        }.get(entity_kind)
+        if target_key is None:
+            return
+        for row, (title_key, _panel) in enumerate(self._sections):
+            if title_key == target_key:
+                self._section_nav.setCurrentRow(row)
+                return
