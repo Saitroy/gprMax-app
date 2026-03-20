@@ -35,7 +35,7 @@ from .dialogs.settings_dialog import SettingsDialog
 from .views.project_view import ProjectView
 from .views.results_view import ResultsView
 from .views.settings_view import SettingsView
-from .views.simulation_view import SimulationView
+from .views.simulation_view import SimulationConfigurationError, SimulationView
 from .views.welcome_view import ExampleProjectItem, WelcomeView
 
 if TYPE_CHECKING:
@@ -578,7 +578,11 @@ class MainWindow(QMainWindow):
         if project is None:
             return
 
-        configuration = self._simulation_view.current_configuration()
+        configuration = self._current_simulation_configuration_or_warn(
+            title_key="message.input_preview.title"
+        )
+        if configuration is None:
+            return
         effective_configuration = self._context.simulation_service.suggest_run_configuration(
             project,
             configuration,
@@ -635,9 +639,14 @@ class MainWindow(QMainWindow):
         if not filename:
             return
 
+        configuration = self._current_simulation_configuration_or_warn(
+            title_key="message.export_input.title"
+        )
+        if configuration is None:
+            return
         effective_configuration = self._context.simulation_service.suggest_run_configuration(
             project,
-            self._simulation_view.current_configuration(),
+            configuration,
         )
         self._simulation_view.set_configuration(effective_configuration)
         try:
@@ -668,7 +677,11 @@ class MainWindow(QMainWindow):
         if project is None:
             return
 
-        configuration = self._simulation_view.current_configuration()
+        configuration = self._current_simulation_configuration_or_warn(
+            title_key="message.start_run.title"
+        )
+        if configuration is None:
+            return
         effective_configuration = self._context.simulation_service.suggest_run_configuration(
             project,
             configuration,
@@ -828,6 +841,21 @@ class MainWindow(QMainWindow):
             self._localization.text("message.simulation.no_project"),
         )
         return None
+
+    def _current_simulation_configuration_or_warn(
+        self,
+        *,
+        title_key: str,
+    ):
+        try:
+            return self._simulation_view.current_configuration()
+        except SimulationConfigurationError as exc:
+            QMessageBox.warning(
+                self,
+                self._localization.text(title_key),
+                str(exc),
+            )
+            return None
 
     def _show_about_dialog(self) -> None:
         QMessageBox.information(

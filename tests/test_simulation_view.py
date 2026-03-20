@@ -14,7 +14,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from gprmax_workbench.application.services.localization_service import LocalizationService
 from gprmax_workbench.domain.execution_status import SimulationMode
 from gprmax_workbench.domain.gprmax_config import SimulationRunConfig
-from gprmax_workbench.ui.views.simulation_view import SimulationView
+from gprmax_workbench.ui.views.simulation_view import (
+    SimulationConfigurationError,
+    SimulationView,
+)
 
 
 class SimulationViewTests(unittest.TestCase):
@@ -67,6 +70,16 @@ class SimulationViewTests(unittest.TestCase):
         self.assertTrue(configuration.write_processed)
         self.assertTrue(configuration.mpi_no_spawn)
         self.assertEqual(configuration.extra_arguments, ["--foo", "bar"])
+
+    def test_invalid_extra_args_raise_configuration_error(self) -> None:
+        view = SimulationView(
+            localization=LocalizationService("en"),
+            runtime_label="Bundled runtime",
+        )
+        view._extra_args_edit.setText('\"broken')
+
+        with self.assertRaises(SimulationConfigurationError):
+            view.current_configuration()
 
 
 if __name__ == "__main__":

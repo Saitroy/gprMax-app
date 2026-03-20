@@ -30,6 +30,10 @@ from ..layouts.flow_layout import FlowLayout
 from ..widgets.metric_tile import MetricTile
 
 
+class SimulationConfigurationError(ValueError):
+    """Raised when simulation settings cannot be parsed from the UI form."""
+
+
 class SimulationView(QWidget):
     preview_requested = Signal()
     export_requested = Signal()
@@ -235,11 +239,16 @@ class SimulationView(QWidget):
         mode = SimulationMode(self._mode_combo.currentData())
         restart_from = self._restart_spinbox.value() or None
         mpi_tasks = self._mpi_tasks_spinbox.value() or None
-        extra_arguments = (
-            shlex.split(self._extra_args_edit.text(), posix=False)
-            if self._extra_args_edit.text().strip()
-            else []
-        )
+        try:
+            extra_arguments = (
+                shlex.split(self._extra_args_edit.text(), posix=False)
+                if self._extra_args_edit.text().strip()
+                else []
+            )
+        except ValueError as exc:
+            raise SimulationConfigurationError(
+                self._localization.text("simulation.invalid_extra_args")
+            ) from exc
 
         return SimulationRunConfig(
             mode=mode,
