@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPlainTextEdit,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -59,6 +60,9 @@ class GeneralPanel(QWidget):
         self._resolution_y = build_float_spinbox(decimals=6, step=0.0001)
         self._resolution_z = build_float_spinbox(decimals=6, step=0.0001)
         self._time_window = build_float_spinbox(decimals=12, maximum=1.0, step=1e-10)
+        self._scan_trace_count = QSpinBox()
+        self._scan_trace_count.setRange(0, 1_000_000)
+        self._scan_trace_count.setSpecialValueText("")
         self._status_label = build_status_label("")
 
         self._metadata_group = QGroupBox()
@@ -79,6 +83,7 @@ class GeneralPanel(QWidget):
         self._domain_size_label = QLabel()
         self._resolution_label = QLabel()
         self._time_window_label = QLabel()
+        self._scan_trace_count_label = QLabel()
         domain_layout.addWidget(self._domain_size_label, 0, 0)
         domain_layout.addWidget(self._size_x, 0, 1)
         domain_layout.addWidget(self._size_y, 0, 2)
@@ -89,13 +94,15 @@ class GeneralPanel(QWidget):
         domain_layout.addWidget(self._resolution_z, 1, 3)
         domain_layout.addWidget(self._time_window_label, 2, 0)
         domain_layout.addWidget(self._time_window, 2, 1)
+        domain_layout.addWidget(self._scan_trace_count_label, 3, 0)
+        domain_layout.addWidget(self._scan_trace_count, 3, 1)
 
         axis_hint = QHBoxLayout()
         axis_hint.addWidget(QLabel("X"))
         axis_hint.addWidget(QLabel("Y"))
         axis_hint.addWidget(QLabel("Z"))
         axis_hint.addStretch(1)
-        domain_layout.addLayout(axis_hint, 3, 1, 1, 3)
+        domain_layout.addLayout(axis_hint, 4, 1, 1, 3)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -121,6 +128,7 @@ class GeneralPanel(QWidget):
             self._resolution_y,
             self._resolution_z,
             self._time_window,
+            self._scan_trace_count,
         ):
             widget.valueChanged.connect(self._apply_changes)
 
@@ -144,6 +152,7 @@ class GeneralPanel(QWidget):
             self._resolution_y,
             self._resolution_z,
             self._time_window,
+            self._scan_trace_count,
         ):
             widget.setEnabled(enabled)
 
@@ -160,6 +169,7 @@ class GeneralPanel(QWidget):
             self._resolution_y.setValue(0.01)
             self._resolution_z.setValue(0.01)
             self._time_window.setValue(3e-9)
+            self._scan_trace_count.setValue(0)
             self._status_label.setText(
                 self._localization.text("editor.general.open_project")
             )
@@ -178,6 +188,7 @@ class GeneralPanel(QWidget):
         self._resolution_y.setValue(project.model.domain.resolution_m.y)
         self._resolution_z.setValue(project.model.domain.resolution_m.z)
         self._time_window.setValue(project.model.domain.time_window_s)
+        self._scan_trace_count.setValue(project.model.scan_trace_count or 0)
         self._loading = False
         self.refresh_validation()
 
@@ -186,6 +197,7 @@ class GeneralPanel(QWidget):
             "metadata",
             "model.title",
             "model.domain",
+            "model.scan_trace_count",
         )
         self._status_label.setText(
             join_messages(messages, self._localization.text("editor.general.valid"))
@@ -212,6 +224,7 @@ class GeneralPanel(QWidget):
                 z=self._resolution_z.value(),
             ),
             time_window_s=self._time_window.value(),
+            scan_trace_count=self._scan_trace_count.value() or None,
         )
         self.refresh_validation()
         self.model_changed.emit()
@@ -247,6 +260,12 @@ class GeneralPanel(QWidget):
         )
         self._time_window_label.setText(
             self._localization.text("editor.general.time_window")
+        )
+        self._scan_trace_count_label.setText(
+            self._localization.text("editor.general.scan_trace_count")
+        )
+        self._scan_trace_count.setSpecialValueText(
+            self._localization.text("editor.general.scan_trace_count_auto")
         )
         if self._current_project is None:
             self._status_label.setText(

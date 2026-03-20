@@ -48,6 +48,7 @@ class JsonProjectStore:
             },
             "model": {
                 "title": project.model.title,
+                "scan_trace_count": project.model.scan_trace_count,
                 "notes": project.model.notes,
                 "tags": list(project.model.tags),
                 "domain": {
@@ -106,6 +107,11 @@ class JsonProjectStore:
             ),
             model=ProjectModel(
                 title=model_payload.get("title", ""),
+                scan_trace_count=(
+                    int(model_payload["scan_trace_count"])
+                    if model_payload.get("scan_trace_count") is not None
+                    else None
+                ),
                 notes=str(model_payload.get("notes", "")),
                 tags=[str(item) for item in model_payload.get("tags", [])],
                 domain=ModelDomain(

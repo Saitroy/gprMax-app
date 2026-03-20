@@ -12,7 +12,7 @@ from uuid import uuid4
 from ...domain.execution_status import SimulationStatus
 from ...domain.gprmax_config import SimulationRunConfig
 from ...domain.models import Project
-from ...domain.project_introspection import project_uses_scan_steps
+from ...domain.project_introspection import project_scan_trace_count, project_uses_scan_steps
 from ...domain.runtime_info import RuntimeInfo
 from ...domain.simulation import (
     PreparedSimulationRun,
@@ -130,6 +130,12 @@ class SimulationService:
         configuration: SimulationRunConfig | None = None,
     ) -> SimulationRunConfig:
         effective_configuration = configuration or SimulationRunConfig()
+        explicit_trace_count = project_scan_trace_count(project)
+        if explicit_trace_count is not None:
+            return replace(
+                effective_configuration,
+                num_model_runs=max(explicit_trace_count, 1),
+            )
         if effective_configuration.num_model_runs > 1:
             return effective_configuration
         if not project_uses_scan_steps(project):

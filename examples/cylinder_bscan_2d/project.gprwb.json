@@ -11,6 +11,7 @@
   },
   "model": {
     "title": "B-scan from a metal cylinder buried in a dielectric half-space",
+    "scan_trace_count": 60,
     "notes": "",
     "tags": [],
     "domain": {

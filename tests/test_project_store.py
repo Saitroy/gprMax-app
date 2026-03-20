@@ -38,6 +38,7 @@ class JsonProjectStoreTests(unittest.TestCase):
                 ),
                 model=ProjectModel(
                     title="Stage 2 model",
+                    scan_trace_count=45,
                     notes="Model notes",
                     tags=["stage4", "editor"],
                     domain=ModelDomain(
@@ -110,6 +111,7 @@ class JsonProjectStoreTests(unittest.TestCase):
             self.assertTrue(project_file.exists())
             self.assertEqual(loaded.metadata.name, "Demo project")
             self.assertEqual(loaded.model.title, "Stage 2 model")
+            self.assertEqual(loaded.model.scan_trace_count, 45)
             self.assertEqual(loaded.model.notes, "Model notes")
             self.assertEqual(loaded.model.tags, ["stage4", "editor"])
             self.assertEqual(loaded.model.domain.size_m.x, 2.0)

@@ -107,6 +107,7 @@ class GeometryView:
 class ProjectModel:
     title: str
     domain: ModelDomain = field(default_factory=ModelDomain)
+    scan_trace_count: int | None = None
     notes: str = ""
     tags: list[str] = field(default_factory=list)
     materials: list[MaterialDefinition] = field(default_factory=list)

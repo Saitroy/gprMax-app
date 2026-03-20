@@ -256,6 +256,36 @@ class SimulationServiceTests(unittest.TestCase):
 
             self.assertEqual(suggested.num_model_runs, 60)
 
+    def test_explicit_project_trace_count_overrides_history_and_current_value(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Stepped Demo", Path(temp_dir))
+            project.advanced_input_overrides = [
+                "#src_steps: 0.002 0 0",
+                "#rx_steps: 0.002 0 0",
+            ]
+            project.model.scan_trace_count = 80
+            state = AppState(current_project=project)
+            run_repository = RunRepository()
+            run_repository.save(_build_historical_record(project.root, num_model_runs=60))
+            service = SimulationService(
+                adapter=_FakeAdapter(),
+                input_generation_service=InputGenerationService(
+                    generator=GprMaxInputGenerator(),
+                    artifact_store=RunArtifactStore(),
+                ),
+                artifact_store=RunArtifactStore(),
+                run_repository=run_repository,
+                runner=_FakeRunner(),
+                state=state,
+            )
+
+            suggested = service.suggest_run_configuration(
+                project,
+                SimulationRunConfig(num_model_runs=5),
+            )
+
+            self.assertEqual(suggested.num_model_runs, 80)
+
 
 def _build_historical_record(
     project_root: Path,

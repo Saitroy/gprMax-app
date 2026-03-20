@@ -83,6 +83,20 @@ class ValidationTests(unittest.TestCase):
                 any("radius_m" in issue.path for issue in validation.errors)
             )
 
+    def test_validation_warns_when_stepped_scan_has_no_trace_count(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project(name="Bscan Demo", root=Path(temp_dir))
+            project.advanced_input_overrides = [
+                "#src_steps: 0.002 0 0",
+                "#rx_steps: 0.002 0 0",
+            ]
+
+            validation = validate_project(project)
+
+            self.assertTrue(
+                any(issue.path == "model.scan_trace_count" for issue in validation.warnings)
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

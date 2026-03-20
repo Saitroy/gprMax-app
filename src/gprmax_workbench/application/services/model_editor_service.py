@@ -53,6 +53,7 @@ class ModelEditorService:
         domain_size_m: Vector3,
         resolution_m: Vector3,
         time_window_s: float,
+        scan_trace_count: int | None,
     ) -> ValidationResult:
         def mutate(project: Project) -> None:
             project.metadata.name = project_name.strip()
@@ -63,6 +64,7 @@ class ModelEditorService:
             project.model.domain.size_m = domain_size_m
             project.model.domain.resolution_m = resolution_m
             project.model.domain.time_window_s = time_window_s
+            project.model.scan_trace_count = scan_trace_count
 
         return self._mutate(mutate)
 

@@ -12,6 +12,7 @@ from .model_entities import (
     EDITOR_WAVEFORM_KINDS,
 )
 from .models import BUILTIN_MATERIAL_IDENTIFIERS, Project, Vector3
+from .project_introspection import project_uses_scan_steps
 
 
 class ValidationSeverity(StrEnum):
@@ -80,6 +81,24 @@ def validate_project(project: Project) -> ValidationResult:
             "model.title",
             "Model title is empty. The generated input should usually include a title.",
         )
+
+    if project.model.scan_trace_count is not None and project.model.scan_trace_count < 1:
+        result.add_error(
+            "model.scan_trace_count",
+            "Trace count must be at least 1 when specified.",
+        )
+
+    if project_uses_scan_steps(project):
+        if project.model.scan_trace_count is None:
+            result.add_warning(
+                "model.scan_trace_count",
+                "Stepped scan commands are configured, but the number of traces is not set.",
+            )
+        elif project.model.scan_trace_count == 1:
+            result.add_warning(
+                "model.scan_trace_count",
+                "Stepped scan commands are configured, but the trace count is 1, so only a single trace will be generated.",
+            )
 
     _validate_positive_float(
         result,

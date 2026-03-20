@@ -55,12 +55,14 @@ class ModelEditorServiceTests(unittest.TestCase):
                 domain_size_m=Vector3(2.0, 1.5, 0.2),
                 resolution_m=Vector3(0.01, 0.01, 0.01),
                 time_window_s=4e-9,
+                scan_trace_count=60,
             )
 
             self.assertEqual(project.metadata.name, "Updated Project")
             self.assertEqual(project.model.title, "Updated Model")
             self.assertEqual(project.model.domain.size_m.x, 2.0)
             self.assertEqual(project.model.tags, ["lab", "demo"])
+            self.assertEqual(project.model.scan_trace_count, 60)
 
     def test_available_material_ids_deduplicates_builtin_names(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
