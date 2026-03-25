@@ -297,7 +297,37 @@ class SceneCanvasPanelTests(unittest.TestCase):
             panel._set_selected_row("geometry", geometry_index)  # noqa: SLF001
             panel._scene_mode_combo.setCurrentIndex(panel._scene_mode_combo.findData("resize"))  # noqa: SLF001
 
-            self.assertEqual(len(panel._resize_handles), 4)  # noqa: SLF001
+            roles = {handle.role for handle in panel._resize_handles}  # noqa: SLF001
+            self.assertEqual(len(panel._resize_handles), 8)  # noqa: SLF001
+            self.assertIn("corner_br", roles)
+            self.assertIn("edge_right", roles)
+            self.assertIn("edge_bottom", roles)
+
+    def test_scene_toolbar_reflects_tool_mode_and_plane_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Scene Demo", Path(temp_dir))
+            state = AppState(
+                current_project=project,
+                current_project_validation=validate_project(project),
+            )
+            editor = ModelEditorService(state)
+            validation = ValidationService(state)
+            panel = SceneCanvasPanel(LocalizationService("en"), editor, validation)
+
+            panel.set_project(project)
+            panel._scene_tool_combo.setCurrentIndex(panel._scene_tool_combo.findData("measure"))  # noqa: SLF001
+
+            self.assertTrue(panel._tool_buttons["measure"].isChecked())  # noqa: SLF001
+            self.assertFalse(panel._mode_buttons["resize"].isEnabled())  # noqa: SLF001
+
+            panel._set_scene_tool_from_toolbar("select")  # noqa: SLF001
+            panel._set_scene_mode_from_toolbar("resize")  # noqa: SLF001
+            panel._set_plane_from_toolbar("yz")  # noqa: SLF001
+
+            self.assertTrue(panel._tool_buttons["select"].isChecked())  # noqa: SLF001
+            self.assertTrue(panel._mode_buttons["resize"].isChecked())  # noqa: SLF001
+            self.assertTrue(panel._plane_buttons["yz"].isChecked())  # noqa: SLF001
+            self.assertEqual(panel._plane, "yz")  # noqa: SLF001
 
     def test_create_tool_adds_selected_entity_at_click_position(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -333,9 +363,35 @@ class SceneCanvasPanelTests(unittest.TestCase):
             panel.set_project(project)
             panel._scene_tool_combo.setCurrentIndex(panel._scene_tool_combo.findData("measure"))  # noqa: SLF001
             panel._handle_empty_scene_click(0.1, 0.2)  # noqa: SLF001
-            panel._handle_empty_scene_click(0.4, 0.6)  # noqa: SLF001
+            panel._handle_pointer_move(0.4, 0.6)  # noqa: SLF001
 
             self.assertGreaterEqual(len(panel._measurement_items), 2)  # noqa: SLF001
+            self.assertGreaterEqual(len(panel._cursor_items), 4)  # noqa: SLF001
+            self.assertIn("X=", panel._cursor_status_label.text())  # noqa: SLF001
+
+    def test_cylinder_resize_mode_shows_endpoint_and_radius_handles(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Scene Demo", Path(temp_dir))
+            project.model.materials = [
+                MaterialDefinition(identifier="soil", relative_permittivity=4.0, conductivity=0.001)
+            ]
+            state = AppState(
+                current_project=project,
+                current_project_validation=validate_project(project),
+            )
+            editor = ModelEditorService(state)
+            validation = ValidationService(state)
+            geometry_index = editor.add_geometry("cylinder")
+            panel = SceneCanvasPanel(LocalizationService("en"), editor, validation)
+
+            panel.set_project(project)
+            panel._set_plane_from_toolbar("xz")  # noqa: SLF001
+            panel._set_selected_row("geometry", geometry_index)  # noqa: SLF001
+            panel._scene_mode_combo.setCurrentIndex(panel._scene_mode_combo.findData("resize"))  # noqa: SLF001
+
+            roles = {handle.role for handle in panel._resize_handles}  # noqa: SLF001
+
+            self.assertEqual(roles, {"start", "end", "radius_pos", "radius_neg"})
 
     def test_resize_preview_does_not_commit_until_release(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

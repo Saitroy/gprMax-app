@@ -7,6 +7,7 @@ from math import ceil, floor, hypot, log10
 from PySide6.QtCore import QMimeData, QPointF, QRectF, QSignalBlocker, Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QDrag, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
+    QButtonGroup,
     QCheckBox,
     QComboBox,
     QFormLayout,
@@ -29,6 +30,8 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSizePolicy,
     QStackedWidget,
+    QStyle,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -51,6 +54,14 @@ class _SceneEntityRef:
     kind: str
     index: int
     label: str
+
+
+@dataclass(slots=True)
+class _SceneHandleSpec:
+    role: str
+    position: QPointF
+    handle_kind: str
+    label: str = ""
 
 
 def _nice_step(value: float) -> float:
@@ -84,14 +95,29 @@ class _PaletteButton(QPushButton):
         drag.exec(Qt.DropAction.CopyAction)
 
 
+class _SceneToolbarButton(QToolButton):
+    def __init__(self, key: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.key = key
+        self.setObjectName("SceneToolbarButton")
+        self.setCheckable(True)
+        self.setAutoRaise(False)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+
+
 class _CanvasView(QGraphicsView):
     entity_dropped = Signal(str, float, float)
     empty_context_requested = Signal(float, float, object)
     empty_clicked = Signal(float, float)
+    pointer_moved = Signal(float, float)
+    pointer_left = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setAcceptDrops(True)
+        self.setMouseTracking(True)
+        self.viewport().setMouseTracking(True)
         self.setRenderHints(
             QPainter.RenderHint.Antialiasing | QPainter.RenderHint.TextAntialiasing
         )
@@ -151,6 +177,15 @@ class _CanvasView(QGraphicsView):
             point = self.mapToScene(event.pos())
             self.empty_clicked.emit(point.x(), point.y())
         super().mouseReleaseEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802
+        point = self.mapToScene(event.position().toPoint())
+        self.pointer_moved.emit(point.x(), point.y())
+        super().mouseMoveEvent(event)
+
+    def leaveEvent(self, event) -> None:  # noqa: N802
+        self.pointer_left.emit()
+        super().leaveEvent(event)
 
 
 class _MetricRuler(QWidget):
@@ -361,14 +396,18 @@ class _SceneResizeHandle(QGraphicsObject):
         self,
         role: str,
         *,
+        handle_kind: str,
         color: QColor,
+        label: str,
         on_select,
         on_move,
         on_release,
     ) -> None:
         super().__init__()
         self.role = role
+        self.handle_kind = handle_kind
         self._color = color
+        self._label = label
         self._on_select = on_select
         self._on_move = on_move
         self._on_release = on_release
@@ -377,16 +416,36 @@ class _SceneResizeHandle(QGraphicsObject):
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations, True)
         self.setAcceptHoverEvents(True)
         self.setZValue(60)
+        cursor = Qt.CursorShape.SizeAllCursor
+        if handle_kind == "radius":
+            cursor = Qt.CursorShape.CrossCursor
+        self.setCursor(cursor)
 
     def boundingRect(self) -> QRectF:
-        return QRectF(-6.0, -6.0, 12.0, 12.0)
+        return QRectF(-8.0, -8.0, 16.0, 16.0)
 
     def paint(self, painter: QPainter, option, widget=None) -> None:
-        painter.setPen(QPen(self._color.darker(135), 1.6))
+        pen = QPen(self._color.darker(135), 1.8)
         fill = QColor(self._color)
-        fill.setAlpha(240 if self._hovered else 200)
+        fill.setAlpha(245 if self._hovered else 218)
+        painter.setPen(pen)
         painter.setBrush(QBrush(fill))
-        painter.drawRect(self.boundingRect())
+        rect = self.boundingRect().adjusted(1.0, 1.0, -1.0, -1.0)
+        if self.handle_kind == "radius":
+            path = QPainterPath()
+            path.moveTo(rect.center().x(), rect.top())
+            path.lineTo(rect.right(), rect.center().y())
+            path.lineTo(rect.center().x(), rect.bottom())
+            path.lineTo(rect.left(), rect.center().y())
+            path.closeSubpath()
+            painter.drawPath(path)
+        elif self.handle_kind == "endpoint":
+            painter.drawEllipse(rect)
+        else:
+            painter.drawRoundedRect(rect, 3.0, 3.0)
+        if self._hovered and self._label:
+            painter.setPen(QColor("#ffffff"))
+            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, self._label)
 
     def mousePressEvent(self, event) -> None:
         self._on_select()
@@ -435,8 +494,10 @@ class SceneCanvasPanel(QWidget):
         self._entity_items: dict[tuple[str, int], _SceneEntityItem] = {}
         self._resize_handles: list[_SceneResizeHandle] = []
         self._preview_items: list[QGraphicsItem] = []
+        self._cursor_items: list[QGraphicsItem] = []
         self._measurement_items: list[QGraphicsItem] = []
         self._measurement_start: QPointF | None = None
+        self._cursor_scene_point: QPointF | None = None
         self._loading = False
 
         self._plane_combo = QComboBox()
@@ -457,6 +518,7 @@ class SceneCanvasPanel(QWidget):
         self._apply_domain_button.clicked.connect(self._apply_domain_changes)
         self._fit_scene_button = QPushButton()
         self._fit_scene_button.clicked.connect(self._fit_scene)
+        self._fit_scene_button.setObjectName("SceneToolbarAction")
 
         self._entity_list = QListWidget()
         self._entity_list.currentRowChanged.connect(self._select_entity_from_list)
@@ -470,8 +532,75 @@ class SceneCanvasPanel(QWidget):
         self._view.entity_dropped.connect(self._on_entity_dropped)
         self._view.empty_context_requested.connect(self._show_canvas_context_menu)
         self._view.empty_clicked.connect(self._handle_empty_scene_click)
+        self._view.pointer_moved.connect(self._handle_pointer_move)
+        self._view.pointer_left.connect(self._handle_pointer_leave)
         self._horizontal_ruler = _MetricRuler(Qt.Orientation.Horizontal)
         self._vertical_ruler = _MetricRuler(Qt.Orientation.Vertical)
+        self._scene_toolbar = QFrame()
+        self._scene_toolbar.setObjectName("SceneToolbar")
+        self._scene_toolbar.setStyleSheet(
+            """
+            QFrame#SceneToolbar {
+                background: rgba(248, 250, 252, 0.96);
+                border: 1px solid #d2dbe3;
+                border-radius: 16px;
+            }
+            QLabel[toolbarRole="section"] {
+                color: #687a8a;
+                font-size: 9pt;
+                font-weight: 600;
+            }
+            QLabel[toolbarRole="status"] {
+                color: #405261;
+                background: #eef3f7;
+                border: 1px solid #d2dbe3;
+                border-radius: 10px;
+                padding: 6px 10px;
+            }
+            QToolButton#SceneToolbarButton,
+            QPushButton#SceneToolbarAction {
+                background: #f7fafc;
+                border: 1px solid #c4d1dc;
+                border-radius: 10px;
+                color: #223341;
+                padding: 7px 12px;
+                font-weight: 600;
+            }
+            QToolButton#SceneToolbarButton:hover,
+            QPushButton#SceneToolbarAction:hover {
+                background: #edf4f8;
+                border-color: #9cb0c1;
+            }
+            QToolButton#SceneToolbarButton:checked {
+                background: #dfeef9;
+                border-color: #6b93b5;
+                color: #1f425c;
+            }
+            QToolButton#SceneToolbarButton:disabled {
+                background: #f1f4f6;
+                border-color: #d7dee4;
+                color: #8a98a4;
+            }
+            """
+        )
+        self._plane_buttons: dict[str, _SceneToolbarButton] = {}
+        self._tool_buttons: dict[str, _SceneToolbarButton] = {}
+        self._mode_buttons: dict[str, _SceneToolbarButton] = {}
+        self._plane_group = QButtonGroup(self)
+        self._plane_group.setExclusive(True)
+        self._tool_group = QButtonGroup(self)
+        self._tool_group.setExclusive(True)
+        self._mode_group = QButtonGroup(self)
+        self._mode_group.setExclusive(True)
+        self._toolbar_plane_label = QLabel()
+        self._toolbar_plane_label.setProperty("toolbarRole", "section")
+        self._toolbar_tool_label = QLabel()
+        self._toolbar_tool_label.setProperty("toolbarRole", "section")
+        self._toolbar_mode_label = QLabel()
+        self._toolbar_mode_label.setProperty("toolbarRole", "section")
+        self._cursor_status_label = QLabel()
+        self._cursor_status_label.setProperty("toolbarRole", "status")
+        self._build_scene_toolbar()
 
         self._palette_buttons: list[_PaletteButton] = []
         palette = QWidget()
@@ -585,20 +714,7 @@ class SceneCanvasPanel(QWidget):
         side_panel = QWidget()
         side_layout = QVBoxLayout(side_panel)
         side_layout.setContentsMargins(0, 0, 0, 0)
-        plane_row = QHBoxLayout()
         self._plane_label = QLabel()
-        plane_row.addWidget(self._plane_label)
-        plane_row.addWidget(self._plane_combo)
-        side_layout.addLayout(plane_row)
-        tool_row = QHBoxLayout()
-        tool_row.addWidget(self._scene_tool_label)
-        tool_row.addWidget(self._scene_tool_combo, 1)
-        side_layout.addLayout(tool_row)
-        mode_row = QHBoxLayout()
-        mode_row.addWidget(self._scene_mode_label)
-        mode_row.addWidget(self._scene_mode_combo, 1)
-        mode_row.addWidget(self._fit_scene_button)
-        side_layout.addLayout(mode_row)
         snap_form = QFormLayout()
         self._grid_step_label_global = QLabel()
         snap_form.addRow("", self._snap_to_grid)
@@ -616,16 +732,18 @@ class SceneCanvasPanel(QWidget):
         view_shell = QWidget()
         view_shell_layout = QGridLayout(view_shell)
         view_shell_layout.setContentsMargins(0, 0, 0, 0)
-        view_shell_layout.setSpacing(0)
+        view_shell_layout.setHorizontalSpacing(0)
+        view_shell_layout.setVerticalSpacing(12)
+        view_shell_layout.addWidget(self._scene_toolbar, 0, 0, 1, 2)
         corner = QLabel()
         corner.setMinimumSize(64, 34)
         corner.setStyleSheet("background:#edf3f7; border: 1px solid #c7d2db;")
-        view_shell_layout.addWidget(corner, 0, 0)
-        view_shell_layout.addWidget(self._horizontal_ruler, 0, 1)
-        view_shell_layout.addWidget(self._vertical_ruler, 1, 0)
-        view_shell_layout.addWidget(self._view, 1, 1)
+        view_shell_layout.addWidget(corner, 1, 0)
+        view_shell_layout.addWidget(self._horizontal_ruler, 1, 1)
+        view_shell_layout.addWidget(self._vertical_ruler, 2, 0)
+        view_shell_layout.addWidget(self._view, 2, 1)
         view_shell_layout.setColumnStretch(1, 1)
-        view_shell_layout.setRowStretch(1, 1)
+        view_shell_layout.setRowStretch(2, 1)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -636,6 +754,103 @@ class SceneCanvasPanel(QWidget):
         self._build_nudge_buttons()
         self.retranslate_ui()
         self.set_project(None)
+
+    def _build_scene_toolbar(self) -> None:
+        layout = QHBoxLayout(self._scene_toolbar)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(14)
+        layout.addWidget(self._build_toolbar_section(self._toolbar_plane_label, self._build_plane_buttons()))
+        layout.addWidget(self._build_toolbar_section(self._toolbar_tool_label, self._build_tool_buttons()))
+        layout.addWidget(self._build_toolbar_section(self._toolbar_mode_label, self._build_mode_buttons()))
+        layout.addStretch(1)
+        self._cursor_status_label.setMinimumWidth(250)
+        layout.addWidget(self._cursor_status_label, 0, Qt.AlignmentFlag.AlignVCenter)
+        self._fit_scene_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DesktopIcon))
+        layout.addWidget(self._fit_scene_button, 0, Qt.AlignmentFlag.AlignVCenter)
+
+    def _build_toolbar_section(self, title: QLabel, content_layout: QHBoxLayout) -> QWidget:
+        wrapper = QWidget()
+        layout = QVBoxLayout(wrapper)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        layout.addWidget(title)
+        layout.addLayout(content_layout)
+        return wrapper
+
+    def _build_plane_buttons(self) -> QHBoxLayout:
+        layout = QHBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        for plane_key, label in (("xy", "XY"), ("xz", "XZ"), ("yz", "YZ")):
+            button = _SceneToolbarButton(plane_key)
+            button.setText(label)
+            button.clicked.connect(
+                lambda checked=False, key=plane_key: self._set_plane_from_toolbar(key)
+            )
+            self._plane_group.addButton(button)
+            self._plane_buttons[plane_key] = button
+            layout.addWidget(button)
+        return layout
+
+    def _build_tool_buttons(self) -> QHBoxLayout:
+        layout = QHBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        specs = (
+            ("select", QStyle.StandardPixmap.SP_ArrowForward),
+            ("create", QStyle.StandardPixmap.SP_FileDialogNewFolder),
+            ("measure", QStyle.StandardPixmap.SP_DialogApplyButton),
+        )
+        for key, icon in specs:
+            button = _SceneToolbarButton(key)
+            button.setIcon(self.style().standardIcon(icon))
+            button.clicked.connect(lambda checked=False, value=key: self._set_scene_tool_from_toolbar(value))
+            self._tool_group.addButton(button)
+            self._tool_buttons[key] = button
+            layout.addWidget(button)
+        return layout
+
+    def _build_mode_buttons(self) -> QHBoxLayout:
+        layout = QHBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        specs = (
+            ("move", QStyle.StandardPixmap.SP_ArrowRight),
+            ("resize", QStyle.StandardPixmap.SP_TitleBarMaxButton),
+        )
+        for key, icon in specs:
+            button = _SceneToolbarButton(key)
+            button.setIcon(self.style().standardIcon(icon))
+            button.clicked.connect(lambda checked=False, value=key: self._set_scene_mode_from_toolbar(value))
+            self._mode_group.addButton(button)
+            self._mode_buttons[key] = button
+            layout.addWidget(button)
+        return layout
+
+    def _set_plane_from_toolbar(self, plane: str) -> None:
+        index = self._plane_combo.findData(plane)
+        if index >= 0:
+            self._plane_combo.setCurrentIndex(index)
+
+    def _set_scene_tool_from_toolbar(self, tool: str) -> None:
+        index = self._scene_tool_combo.findData(tool)
+        if index >= 0:
+            self._scene_tool_combo.setCurrentIndex(index)
+
+    def _set_scene_mode_from_toolbar(self, mode: str) -> None:
+        index = self._scene_mode_combo.findData(mode)
+        if index >= 0:
+            self._scene_mode_combo.setCurrentIndex(index)
+
+    def _sync_toolbar_buttons(self) -> None:
+        for plane_key, button in self._plane_buttons.items():
+            button.setChecked(plane_key == self._plane)
+        for tool_key, button in self._tool_buttons.items():
+            button.setChecked(tool_key == self._scene_tool)
+        mode_enabled = self._scene_tool == "select"
+        for mode_key, button in self._mode_buttons.items():
+            button.setEnabled(mode_enabled)
+            button.setChecked(mode_key == self._scene_mode and mode_enabled)
 
     def _build_nudge_buttons(self) -> None:
         self._nudge_buttons: list[QPushButton] = []
@@ -695,6 +910,9 @@ class SceneCanvasPanel(QWidget):
         self._plane_label.setText(self._localization.text("editor.scene.plane"))
         self._scene_tool_label.setText(self._localization.text("editor.scene.tool"))
         self._scene_mode_label.setText(self._localization.text("editor.scene.mode"))
+        self._toolbar_plane_label.setText(self._localization.text("editor.scene.plane"))
+        self._toolbar_tool_label.setText(self._localization.text("editor.scene.tool"))
+        self._toolbar_mode_label.setText(self._localization.text("editor.scene.mode"))
         self._palette_title.setText(self._localization.text("editor.scene.palette"))
         self._entities_title.setText(self._localization.text("editor.scene.entities"))
         self._hint_label.setText(self._localization.text("editor.scene.hint"))
@@ -755,6 +973,8 @@ class SceneCanvasPanel(QWidget):
         index = self._scene_tool_combo.findData(current_tool)
         self._scene_tool_combo.setCurrentIndex(index if index >= 0 else 0)
         self._scene_tool_combo.blockSignals(False)
+        for tool_key, button in self._tool_buttons.items():
+            button.setText(self._localization.text(f"editor.scene.tool.{tool_key}"))
         self._scene_mode_combo.blockSignals(True)
         current_mode = self._scene_mode_combo.currentData() or self._scene_mode
         self._scene_mode_combo.clear()
@@ -769,9 +989,13 @@ class SceneCanvasPanel(QWidget):
         index = self._scene_mode_combo.findData(current_mode)
         self._scene_mode_combo.setCurrentIndex(index if index >= 0 else 0)
         self._scene_mode_combo.blockSignals(False)
+        for mode_key, button in self._mode_buttons.items():
+            button.setText(self._localization.text(f"editor.scene.mode.{mode_key}"))
         for button in self._palette_buttons:
             button.setText(self._localization.text(f"editor.scene.entity.{button.entity_kind}"))
         self._sync_palette_buttons()
+        self._sync_toolbar_buttons()
+        self._update_cursor_status()
         self._refresh_material_choices()
         self._refresh_waveform_choices()
         self.refresh_validation()
@@ -846,6 +1070,7 @@ class SceneCanvasPanel(QWidget):
 
     def _change_plane(self) -> None:
         self._plane = str(self._plane_combo.currentData() or "xy")
+        self._sync_toolbar_buttons()
         self._refresh_scene()
 
     def _change_scene_tool(self) -> None:
@@ -862,7 +1087,9 @@ class SceneCanvasPanel(QWidget):
         if self._scene_tool != "select":
             self._clear_preview_items()
         self._sync_palette_buttons()
+        self._sync_toolbar_buttons()
         self._refresh_resize_handles()
+        self._refresh_pointer_overlays()
 
     def _change_scene_mode(self) -> None:
         self._scene_mode = str(self._scene_mode_combo.currentData() or "move")
@@ -870,6 +1097,7 @@ class SceneCanvasPanel(QWidget):
         for (kind, _index), item in list(self._entity_items.items()):
             if kind == "geometry":
                 item.set_movable(geometry_movable)
+        self._sync_toolbar_buttons()
         self._refresh_resize_handles()
 
     def _fit_scene(self) -> None:
@@ -891,7 +1119,7 @@ class SceneCanvasPanel(QWidget):
     def _handle_empty_scene_click(self, scene_x: float, scene_y: float) -> None:
         if self._project is None:
             return
-        point = QPointF(scene_x, scene_y)
+        point = self._clamp_scene_point(QPointF(scene_x, scene_y))
         if self._scene_tool == "create":
             self._add_entity(self._active_creation_kind, point)
             return
@@ -918,6 +1146,7 @@ class SceneCanvasPanel(QWidget):
         self._selected_entity_ref = None
         self._clear_resize_handles()
         self._clear_preview_items()
+        self._clear_cursor_items()
         self._clear_measurement_items()
         self._entity_items.clear()
         with QSignalBlocker(self._entity_list):
@@ -927,6 +1156,7 @@ class SceneCanvasPanel(QWidget):
             self._scene.setSceneRect(QRectF(0, 0, 1, 1))
             self._update_rulers(1.0, 1.0)
             self._load_entity_details(None)
+            self._update_cursor_status()
             return
 
         width, height = self._plane_limits(self._project)
@@ -989,6 +1219,7 @@ class SceneCanvasPanel(QWidget):
         self._restore_selection(selection)
         self._refresh_resize_handles()
         self._fit_scene()
+        self._refresh_pointer_overlays()
 
     def _draw_grid(self, width: float, height: float) -> None:
         step = self._grid_step.value() if self._snap_to_grid.isChecked() else self._grid_spacing_for_scene(width, height)
@@ -1010,6 +1241,15 @@ class SceneCanvasPanel(QWidget):
             except RuntimeError:
                 continue
         self._preview_items.clear()
+
+    def _clear_cursor_items(self) -> None:
+        for item in self._cursor_items:
+            try:
+                if item.scene() is self._scene:
+                    self._scene.removeItem(item)
+            except RuntimeError:
+                continue
+        self._cursor_items.clear()
 
     def _clear_measurement_items(self) -> None:
         for item in self._measurement_items:
@@ -1042,15 +1282,17 @@ class SceneCanvasPanel(QWidget):
         geometry = self._project.model.geometry[self._selected_entity_ref.index]
         entity_ref = self._selected_entity_ref
         color = self._geometry_color(geometry)
-        for role, position in self._geometry_handle_positions(geometry):
+        for spec in self._geometry_handle_positions(geometry):
             handle = _SceneResizeHandle(
-                role,
+                spec.role,
+                handle_kind=spec.handle_kind,
                 color=color,
+                label=spec.label,
                 on_select=lambda ref=entity_ref: self._select_entity_from_scene(ref),
                 on_move=self._preview_geometry_resize,
                 on_release=self._resize_geometry_from_handle_release,
             )
-            handle.setPos(position)
+            handle.setPos(spec.position)
             self._scene.addItem(handle)
             self._resize_handles.append(handle)
 
@@ -1058,9 +1300,11 @@ class SceneCanvasPanel(QWidget):
         if self._measurement_start is None:
             self._measurement_start = point
             self._render_measurement(point, point)
+            self._update_cursor_status()
             return
         self._render_measurement(self._measurement_start, point)
         self._measurement_start = point
+        self._update_cursor_status()
 
     def _render_measurement(self, start: QPointF, end: QPointF) -> None:
         self._clear_measurement_items()
@@ -1075,20 +1319,119 @@ class SceneCanvasPanel(QWidget):
         distance = hypot(dx, dy)
         axes = self._plane_axes()
         label = QGraphicsSimpleTextItem(
-            self._localization.text(
-                "editor.scene.measure.distance",
-                distance=f"{distance:.4g}",
-                axis_x=axes[0],
-                axis_y=axes[1],
-                delta_x=f"{abs(dx):.4g}",
-                delta_y=f"{abs(dy):.4g}",
-            )
+            self._measurement_text(start, end)
         )
         label.setBrush(QBrush(QColor("#1e3a5f")))
         label.setPos((start.x() + end.x()) / 2, (start.y() + end.y()) / 2)
         label.setZValue(53)
         self._scene.addItem(label)
         self._measurement_items.append(label)
+
+    def _handle_pointer_move(self, scene_x: float, scene_y: float) -> None:
+        if self._project is None:
+            return
+        point = self._clamp_scene_point(QPointF(scene_x, scene_y))
+        self._cursor_scene_point = point
+        self._render_cursor_overlay(point)
+        if self._scene_tool == "measure" and self._measurement_start is not None:
+            self._render_measurement(self._measurement_start, point)
+        self._update_cursor_status()
+
+    def _handle_pointer_leave(self) -> None:
+        self._cursor_scene_point = None
+        self._clear_cursor_items()
+        self._update_cursor_status()
+
+    def _refresh_pointer_overlays(self) -> None:
+        self._clear_cursor_items()
+        if self._scene_tool != "measure":
+            self._clear_measurement_items()
+        if self._cursor_scene_point is not None and self._project is not None:
+            point = self._clamp_scene_point(self._cursor_scene_point)
+            self._cursor_scene_point = point
+            self._render_cursor_overlay(point)
+        if (
+            self._scene_tool == "measure"
+            and self._measurement_start is not None
+            and self._project is not None
+        ):
+            endpoint = self._cursor_scene_point or self._measurement_start
+            self._render_measurement(self._measurement_start, endpoint)
+        self._update_cursor_status()
+
+    def _clamp_scene_point(self, point: QPointF) -> QPointF:
+        rect = self._scene.sceneRect()
+        if rect.isNull():
+            return point
+        return QPointF(
+            max(rect.left(), min(point.x(), rect.right())),
+            max(rect.top(), min(point.y(), rect.bottom())),
+        )
+
+    def _measurement_text(self, start: QPointF, end: QPointF) -> str:
+        dx = end.x() - start.x()
+        dy = end.y() - start.y()
+        distance = hypot(dx, dy)
+        axes = self._plane_axes()
+        return self._localization.text(
+            "editor.scene.measure.distance",
+            distance=f"{distance:.4g}",
+            axis_x=axes[0],
+            axis_y=axes[1],
+            delta_x=f"{abs(dx):.4g}",
+            delta_y=f"{abs(dy):.4g}",
+        )
+
+    def _render_cursor_overlay(self, point: QPointF) -> None:
+        self._clear_cursor_items()
+        rect = self._scene.sceneRect()
+        if rect.isNull():
+            return
+        pen = QPen(QColor(37, 99, 235, 110), 0.0, Qt.PenStyle.DashLine)
+        pen.setCosmetic(True)
+        horizontal = QGraphicsLineItem(rect.left(), point.y(), rect.right(), point.y())
+        horizontal.setPen(pen)
+        horizontal.setZValue(44)
+        self._scene.addItem(horizontal)
+        self._cursor_items.append(horizontal)
+        vertical = QGraphicsLineItem(point.x(), rect.top(), point.x(), rect.bottom())
+        vertical.setPen(pen)
+        vertical.setZValue(44)
+        self._scene.addItem(vertical)
+        self._cursor_items.append(vertical)
+        marker = QGraphicsEllipseItem(point.x() - 0.006, point.y() - 0.006, 0.012, 0.012)
+        marker.setPen(QPen(QColor("#1d4ed8"), 0))
+        marker.setBrush(QBrush(QColor("#60a5fa")))
+        marker.setZValue(45)
+        self._scene.addItem(marker)
+        self._cursor_items.append(marker)
+        label = QGraphicsSimpleTextItem(self._cursor_position_text(point))
+        label.setBrush(QBrush(QColor("#284053")))
+        label.setPos(point.x() + 0.01, point.y() + 0.01)
+        label.setZValue(46)
+        self._scene.addItem(label)
+        self._cursor_items.append(label)
+
+    def _cursor_position_text(self, point: QPointF) -> str:
+        axis_x, axis_y = self._plane_axes()
+        return self._localization.text(
+            "editor.scene.cursor.position",
+            axis_x=axis_x,
+            axis_y=axis_y,
+            value_x=f"{point.x():.4g}",
+            value_y=f"{point.y():.4g}",
+        )
+
+    def _update_cursor_status(self) -> None:
+        if self._project is None or self._cursor_scene_point is None:
+            self._cursor_status_label.setText(
+                self._localization.text("editor.scene.cursor.idle")
+            )
+            return
+        text = self._cursor_position_text(self._cursor_scene_point)
+        if self._scene_tool == "measure" and self._measurement_start is not None:
+            text = f"{text} | {self._measurement_text(self._measurement_start, self._cursor_scene_point)}"
+        self._cursor_status_label.setText(text)
 
     def _preview_geometry_resize(self, role: str, point: QPointF) -> None:
         if self._selected_entity_ref is None or self._selected_entity_ref.kind != "geometry":
@@ -1668,7 +2011,7 @@ class SceneCanvasPanel(QWidget):
             return "y", "z"
         return "x", "y"
 
-    def _geometry_handle_positions(self, geometry: GeometryPrimitive) -> list[tuple[str, QPointF]]:
+    def _geometry_handle_positions(self, geometry: GeometryPrimitive) -> list[_SceneHandleSpec]:
         if geometry.kind == "box":
             lower = self._parameters_point(geometry.parameters.get("lower_left_m", {}))
             upper = self._parameters_point(geometry.parameters.get("upper_right_m", {}))
@@ -1676,24 +2019,61 @@ class SceneCanvasPanel(QWidget):
             right = max(lower.x(), upper.x())
             top = min(lower.y(), upper.y())
             bottom = max(lower.y(), upper.y())
+            middle_x = (left + right) / 2
+            middle_y = (top + bottom) / 2
+            axis_x, axis_y = self._plane_axes()
             return [
-                ("corner_tl", QPointF(left, top)),
-                ("corner_tr", QPointF(right, top)),
-                ("corner_bl", QPointF(left, bottom)),
-                ("corner_br", QPointF(right, bottom)),
+                _SceneHandleSpec("corner_tl", QPointF(left, top), "size"),
+                _SceneHandleSpec("corner_tr", QPointF(right, top), "size"),
+                _SceneHandleSpec("corner_bl", QPointF(left, bottom), "size"),
+                _SceneHandleSpec("corner_br", QPointF(right, bottom), "size"),
+                _SceneHandleSpec("edge_left", QPointF(left, middle_y), "size", axis_x),
+                _SceneHandleSpec("edge_right", QPointF(right, middle_y), "size", axis_x),
+                _SceneHandleSpec("edge_top", QPointF(middle_x, top), "size", axis_y),
+                _SceneHandleSpec("edge_bottom", QPointF(middle_x, bottom), "size", axis_y),
             ]
         if geometry.kind == "sphere":
             center = self._geometry_anchor_position(geometry)
             radius = float(geometry.parameters.get("radius_m", 0.0))
-            return [("radius", QPointF(center.x() + radius, center.y()))]
+            return [
+                _SceneHandleSpec("radius_e", QPointF(center.x() + radius, center.y()), "radius", "R"),
+                _SceneHandleSpec("radius_w", QPointF(center.x() - radius, center.y()), "radius", "R"),
+                _SceneHandleSpec("radius_n", QPointF(center.x(), center.y() - radius), "radius", "R"),
+                _SceneHandleSpec("radius_s", QPointF(center.x(), center.y() + radius), "radius", "R"),
+            ]
 
         start = self._parameters_point(geometry.parameters.get("start_m", {}))
         end = self._parameters_point(geometry.parameters.get("end_m", {}))
+        radius = float(geometry.parameters.get("radius_m", 0.0))
         if abs(start.x() - end.x()) < 1e-9 and abs(start.y() - end.y()) < 1e-9:
             center = self._geometry_anchor_position(geometry)
-            radius = float(geometry.parameters.get("radius_m", 0.0))
-            return [("radius", QPointF(center.x() + radius, center.y()))]
-        return [("start", start), ("end", end)]
+            return [
+                _SceneHandleSpec("radius_e", QPointF(center.x() + radius, center.y()), "radius", "R"),
+                _SceneHandleSpec("radius_w", QPointF(center.x() - radius, center.y()), "radius", "R"),
+                _SceneHandleSpec("radius_n", QPointF(center.x(), center.y() - radius), "radius", "R"),
+                _SceneHandleSpec("radius_s", QPointF(center.x(), center.y() + radius), "radius", "R"),
+            ]
+        delta_x = end.x() - start.x()
+        delta_y = end.y() - start.y()
+        length = max(hypot(delta_x, delta_y), 1e-9)
+        normal = QPointF(-delta_y / length, delta_x / length)
+        middle = QPointF((start.x() + end.x()) / 2, (start.y() + end.y()) / 2)
+        return [
+            _SceneHandleSpec("start", start, "endpoint", "A"),
+            _SceneHandleSpec("end", end, "endpoint", "B"),
+            _SceneHandleSpec(
+                "radius_pos",
+                QPointF(middle.x() + normal.x() * radius, middle.y() + normal.y() * radius),
+                "radius",
+                "R",
+            ),
+            _SceneHandleSpec(
+                "radius_neg",
+                QPointF(middle.x() - normal.x() * radius, middle.y() - normal.y() * radius),
+                "radius",
+                "R",
+            ),
+        ]
 
     def _resize_geometry_from_handle_release(self, role: str, point: QPointF) -> None:
         if self._selected_entity_ref is None or self._selected_entity_ref.kind != "geometry":
@@ -1729,7 +2109,12 @@ class SceneCanvasPanel(QWidget):
                 "y": abs(float(upper.get("y", 0.0)) - float(lower.get("y", 0.0))) / 2,
                 "z": abs(float(upper.get("z", 0.0)) - float(lower.get("z", 0.0))) / 2,
             }
-            for axis in (axis_a, axis_b):
+            axes_to_resize = (axis_a, axis_b)
+            if role in {"edge_left", "edge_right"}:
+                axes_to_resize = (axis_a,)
+            elif role in {"edge_top", "edge_bottom"}:
+                axes_to_resize = (axis_b,)
+            for axis in axes_to_resize:
                 margin = max(
                     min(getattr(center, axis), getattr(domain, axis) - getattr(center, axis)),
                     min_size,
@@ -1750,7 +2135,7 @@ class SceneCanvasPanel(QWidget):
             }
             return geometry
 
-        if geometry.kind == "sphere" or role == "radius":
+        if geometry.kind == "sphere":
             center = self._geometry_center(geometry)
             radius = max(
                 hypot(
@@ -1784,6 +2169,13 @@ class SceneCanvasPanel(QWidget):
             z=float(geometry.parameters.get("end_m", {}).get("z", 0.0)),
         )
         radius = max(float(geometry.parameters.get("radius_m", 0.0)), min_size)
+        if role.startswith("radius"):
+            distance = self._distance_to_projected_axis(start, end, vector, axis_a, axis_b)
+            geometry.parameters["radius_m"] = min(
+                max(distance, min_size),
+                self._max_cylinder_radius(start, end, domain, min_size),
+            )
+            return geometry
         target = copy.deepcopy(start if role == "start" else end)
         for axis in (axis_a, axis_b):
             margin_min = radius
@@ -1803,6 +2195,55 @@ class SceneCanvasPanel(QWidget):
         geometry.parameters["end_m"] = {"x": end.x, "y": end.y, "z": end.z}
         geometry.parameters["radius_m"] = radius
         return geometry
+
+    def _distance_to_projected_axis(
+        self,
+        start: Vector3,
+        end: Vector3,
+        point: Vector3,
+        axis_a: str,
+        axis_b: str,
+    ) -> float:
+        start_a = getattr(start, axis_a)
+        start_b = getattr(start, axis_b)
+        end_a = getattr(end, axis_a)
+        end_b = getattr(end, axis_b)
+        point_a = getattr(point, axis_a)
+        point_b = getattr(point, axis_b)
+        delta_a = end_a - start_a
+        delta_b = end_b - start_b
+        length_sq = delta_a * delta_a + delta_b * delta_b
+        if length_sq <= 1e-12:
+            return hypot(point_a - start_a, point_b - start_b)
+        ratio = ((point_a - start_a) * delta_a + (point_b - start_b) * delta_b) / length_sq
+        closest_a = start_a + ratio * delta_a
+        closest_b = start_b + ratio * delta_b
+        return hypot(point_a - closest_a, point_b - closest_b)
+
+    def _max_cylinder_radius(
+        self,
+        start: Vector3,
+        end: Vector3,
+        domain: Vector3,
+        min_size: float,
+    ) -> float:
+        return max(
+            min(
+                start.x,
+                domain.x - start.x,
+                end.x,
+                domain.x - end.x,
+                start.y,
+                domain.y - start.y,
+                end.y,
+                domain.y - end.y,
+                start.z,
+                domain.z - start.z,
+                end.z,
+                domain.z - end.z,
+            ),
+            min_size,
+        )
 
     def _selection_signature(self) -> tuple[str, int] | None:
         if self._selected_entity_ref is None:
