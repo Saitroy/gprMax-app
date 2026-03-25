@@ -287,8 +287,6 @@ class SimulationService:
             }:
                 if self._active_process is None:
                     stale_record = active_run
-                else:
-                    raise RuntimeError("A simulation run is already active.")
 
         if stale_record is not None:
             self._mark_run_as_stale(
@@ -368,6 +366,7 @@ class SimulationService:
                         "The active simulation run had no live process attached and was reset."
                     ),
                 )
+                return True
             return False
         process.cancel()
         return True
@@ -547,6 +546,7 @@ class SimulationService:
         with self._lock:
             active_run_id = self._state.active_run.run_id if self._state.active_run is not None else None
             has_live_process = self._active_process is not None
+        recovered_active_run: SimulationRunRecord | None = None
         for record in history:
             if record.status not in {SimulationStatus.PREPARING, SimulationStatus.RUNNING}:
                 recovered.append(record)
@@ -561,9 +561,16 @@ class SimulationService:
                 "The run was recovered from a stale in-progress state because no live process was attached."
             )
             self._run_repository.save(record)
+            if active_run_id == record.run_id:
+                recovered_active_run = record
             recovered.append(record)
         if not changed:
             return history
+        if recovered_active_run is not None:
+            with self._lock:
+                self._state.active_run = recovered_active_run
+                self._active_artifacts = None
+                self._active_process = None
         recovered.sort(key=lambda item: item.created_at, reverse=True)
         return recovered
 

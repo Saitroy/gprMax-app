@@ -935,7 +935,7 @@ class MainWindow(QMainWindow):
         )
         if readiness.configuration != configuration:
             self._simulation_view.set_configuration(readiness.configuration)
-            return
+            configuration = readiness.configuration
 
         if readiness.is_busy:
             summary = self._localization.text("simulation.readiness.busy")

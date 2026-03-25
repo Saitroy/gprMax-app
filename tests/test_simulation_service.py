@@ -263,6 +263,19 @@ class SimulationServiceTests(unittest.TestCase):
             self.assertEqual(loaded.status, SimulationStatus.CANCELLED)
             self.assertEqual(loaded.error_summary, "Run cancelled by user.")
 
+    def test_cancel_stale_run_without_live_process_resets_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Stale Cancel Demo", Path(temp_dir))
+            service, state, repository = self._create_service(project)
+
+            prepared = service.prepare_simulation_run(project, SimulationRunConfig())
+
+            self.assertTrue(service.cancel_simulation())
+            loaded = repository.load(prepared.record.metadata_path)
+
+            self.assertEqual(state.active_run.status, SimulationStatus.FAILED)
+            self.assertIn("no live process", loaded.error_summary.lower())
+
     def test_get_run_history_recovers_stale_running_records(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             project = default_project("Recovery Demo", Path(temp_dir))
@@ -278,12 +291,28 @@ class SimulationServiceTests(unittest.TestCase):
                 project,
                 run_repository=repository,
             )
+            state.active_run = stale_record
 
             history = service.get_run_history(project.root)
 
             self.assertEqual(history[0].status, SimulationStatus.FAILED)
             self.assertIn("stale", history[0].error_summary.lower())
             self.assertEqual(state.run_history[0].status, SimulationStatus.FAILED)
+            self.assertIsNotNone(state.active_run)
+            self.assertEqual(state.active_run.status, SimulationStatus.FAILED)
+
+    def test_start_while_run_is_active_raises_readiness_error(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Busy Demo", Path(temp_dir))
+            runner = _DeferredRunner()
+            service, _, _ = self._create_service(project, runner=runner)
+
+            service.start_simulation(project, SimulationRunConfig())
+
+            with self.assertRaises(SimulationReadinessError) as exc:
+                service.start_simulation(project, SimulationRunConfig())
+
+            self.assertIn("A simulation run is already active.", exc.exception.report.blocking_messages)
 
     def test_start_failure_resets_run_state_and_persists_error(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
