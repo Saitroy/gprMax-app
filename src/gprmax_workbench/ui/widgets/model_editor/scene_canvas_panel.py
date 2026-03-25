@@ -4,7 +4,7 @@ import copy
 from dataclasses import dataclass
 from math import ceil, floor, hypot, log10
 
-from PySide6.QtCore import QMimeData, QPointF, QRectF, QSignalBlocker, Qt, Signal
+from PySide6.QtCore import QMimeData, QPoint, QPointF, QRect, QRectF, QSignalBlocker, Qt, Signal
 from PySide6.QtGui import (
     QBrush,
     QColor,
@@ -37,6 +37,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMenu,
     QPushButton,
+    QRubberBand,
     QSizePolicy,
     QStackedWidget,
     QStyle,
@@ -75,7 +76,8 @@ class _SceneHandleSpec:
 
 @dataclass(frozen=True, slots=True)
 class _SceneHistoryContext:
-    selection: tuple[str, int] | None
+    selections: tuple[tuple[str, int], ...] = ()
+    primary: tuple[str, int] | None = None
 
 
 def _nice_step(value: float) -> float:
@@ -124,6 +126,7 @@ class _CanvasView(QGraphicsView):
     entity_dropped = Signal(str, float, float)
     empty_context_requested = Signal(float, float, object)
     empty_clicked = Signal(float, float)
+    selection_box_finished = Signal(float, float, float, float, object)
     pointer_moved = Signal(float, float)
     pointer_left = Signal()
 
@@ -141,6 +144,16 @@ class _CanvasView(QGraphicsView):
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
+        self._selection_enabled = False
+        self._selection_origin: QPoint | None = None
+        self._selection_modifiers = Qt.KeyboardModifier.NoModifier
+        self._selection_band = QRubberBand(QRubberBand.Shape.Rectangle, self.viewport())
+
+    def set_selection_enabled(self, enabled: bool) -> None:
+        self._selection_enabled = enabled
+        if not enabled:
+            self._selection_origin = None
+            self._selection_band.hide()
 
     def dragEnterEvent(self, event) -> None:
         if event.mimeData().hasText():
@@ -186,7 +199,41 @@ class _CanvasView(QGraphicsView):
             return
         super().contextMenuEvent(event)
 
+    def mousePressEvent(self, event) -> None:  # noqa: N802
+        if (
+            event.button() == Qt.MouseButton.LeftButton
+            and self._selection_enabled
+            and self.itemAt(event.pos()) is None
+        ):
+            self._selection_origin = event.pos()
+            self._selection_modifiers = event.modifiers()
+            self._selection_band.setGeometry(QRect(self._selection_origin, self._selection_origin))
+            self._selection_band.show()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
     def mouseReleaseEvent(self, event) -> None:  # noqa: N802
+        if event.button() == Qt.MouseButton.LeftButton and self._selection_origin is not None:
+            origin = QPoint(self._selection_origin)
+            rect = QRect(origin, event.pos()).normalized()
+            self._selection_origin = None
+            self._selection_band.hide()
+            if rect.width() >= 4 or rect.height() >= 4:
+                start = self.mapToScene(rect.topLeft())
+                end = self.mapToScene(rect.bottomRight())
+                self.selection_box_finished.emit(
+                    start.x(),
+                    start.y(),
+                    end.x(),
+                    end.y(),
+                    self._selection_modifiers,
+                )
+            else:
+                point = self.mapToScene(event.pos())
+                self.empty_clicked.emit(point.x(), point.y())
+            event.accept()
+            return
         if event.button() == Qt.MouseButton.LeftButton and self.itemAt(event.pos()) is None:
             point = self.mapToScene(event.pos())
             self.empty_clicked.emit(point.x(), point.y())
@@ -195,6 +242,10 @@ class _CanvasView(QGraphicsView):
     def mouseMoveEvent(self, event) -> None:  # noqa: N802
         point = self.mapToScene(event.position().toPoint())
         self.pointer_moved.emit(point.x(), point.y())
+        if self._selection_origin is not None:
+            self._selection_band.setGeometry(QRect(self._selection_origin, event.pos()).normalized())
+            event.accept()
+            return
         super().mouseMoveEvent(event)
 
     def leaveEvent(self, event) -> None:  # noqa: N802
@@ -382,15 +433,15 @@ class _SceneEntityItem(QGraphicsObject):
             )
 
     def mousePressEvent(self, event) -> None:
-        self._on_select(self.entity_ref)
         super().mousePressEvent(event)
+        self._on_select(self.entity_ref, event.modifiers())
 
     def mouseReleaseEvent(self, event) -> None:
         super().mouseReleaseEvent(event)
         self._on_release(self.entity_ref, self.scenePos())
 
     def contextMenuEvent(self, event) -> None:
-        self._on_select(self.entity_ref)
+        self._on_select(self.entity_ref, event.modifiers(), preserve_existing=True)
         self._on_context_menu(self.entity_ref, event.screenPos())
         event.accept()
 
@@ -505,6 +556,7 @@ class SceneCanvasPanel(QWidget):
         self._scene_mode = "move"
         self._active_creation_kind = "box"
         self._selected_entity_ref: _SceneEntityRef | None = None
+        self._selected_entity_refs: list[_SceneEntityRef] = []
         self._entity_items: dict[tuple[str, int], _SceneEntityItem] = {}
         self._resize_handles: list[_SceneResizeHandle] = []
         self._preview_items: list[QGraphicsItem] = []
@@ -512,6 +564,8 @@ class SceneCanvasPanel(QWidget):
         self._measurement_items: list[QGraphicsItem] = []
         self._measurement_start: QPointF | None = None
         self._cursor_scene_point: QPointF | None = None
+        self._drag_anchor_positions: dict[tuple[str, int], QPointF] = {}
+        self._selection_syncing = False
         self._loading = False
 
         self._plane_combo = QComboBox()
@@ -535,7 +589,8 @@ class SceneCanvasPanel(QWidget):
         self._fit_scene_button.setObjectName("SceneToolbarAction")
 
         self._entity_list = QListWidget()
-        self._entity_list.currentRowChanged.connect(self._select_entity_from_list)
+        self._entity_list.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
+        self._entity_list.itemSelectionChanged.connect(self._select_entities_from_list)
         self._status_label = build_status_label("")
         self._hint_label = QLabel()
         self._hint_label.setWordWrap(True)
@@ -546,6 +601,7 @@ class SceneCanvasPanel(QWidget):
         self._view.entity_dropped.connect(self._on_entity_dropped)
         self._view.empty_context_requested.connect(self._show_canvas_context_menu)
         self._view.empty_clicked.connect(self._handle_empty_scene_click)
+        self._view.selection_box_finished.connect(self._handle_selection_box)
         self._view.pointer_moved.connect(self._handle_pointer_move)
         self._view.pointer_left.connect(self._handle_pointer_leave)
         self._horizontal_ruler = _MetricRuler(Qt.Orientation.Horizontal)
@@ -1057,14 +1113,21 @@ class SceneCanvasPanel(QWidget):
         self._refresh_material_choices()
         self._refresh_waveform_choices()
         self.refresh_validation()
+        self._restore_selection(self._current_selection_context())
 
     def set_project(self, project: Project | None) -> None:
         self._loading = True
+        project_changed = project is not self._project
         self._project = project
+        if project_changed:
+            self._selected_entity_ref = None
+            self._selected_entity_refs = []
+            self._drag_anchor_positions = {}
         self._loading_domain(project)
         self._refresh_material_choices()
         self._refresh_waveform_choices()
         self._loading = False
+        self._view.set_selection_enabled(self._scene_tool == "select")
         self._refresh_scene()
         self.refresh_validation()
         self._refresh_history_controls()
@@ -1139,6 +1202,7 @@ class SceneCanvasPanel(QWidget):
             if self._scene_tool == "select"
             else QGraphicsView.DragMode.NoDrag
         )
+        self._view.set_selection_enabled(self._scene_tool == "select")
         self._scene_mode_combo.setEnabled(self._scene_tool == "select")
         if self._scene_tool != "measure":
             self._measurement_start = None
@@ -1184,12 +1248,15 @@ class SceneCanvasPanel(QWidget):
             return
         if self._scene_tool == "measure":
             self._update_measurement(point)
+            return
+        if self._scene_tool == "select":
+            self._apply_selection_signatures((), None)
 
     def _apply_domain_changes(self) -> None:
         project = self._model_editor_service.current_project()
         if project is None:
             return
-        selection = self._history_context(self._selection_signature())
+        selection = self._current_selection_context()
         self._model_editor_service.update_domain_size(
             Vector3(
                 self._domain_x.value(),
@@ -1205,8 +1272,10 @@ class SceneCanvasPanel(QWidget):
         self.model_changed.emit()
 
     def _refresh_scene(self) -> None:
-        selection = self._selection_signature()
+        selection = self._current_selection_context()
         self._selected_entity_ref = None
+        self._selected_entity_refs = []
+        self._drag_anchor_positions = {}
         self._clear_resize_handles()
         self._clear_preview_items()
         self._clear_cursor_items()
@@ -1218,7 +1287,7 @@ class SceneCanvasPanel(QWidget):
         if self._project is None:
             self._scene.setSceneRect(QRectF(0, 0, 1, 1))
             self._update_rulers(1.0, 1.0)
-            self._load_entity_details(None)
+            self._restore_selection(selection)
             self._update_cursor_status()
             return
 
@@ -1338,6 +1407,7 @@ class SceneCanvasPanel(QWidget):
             self._project is None
             or self._scene_tool != "select"
             or self._scene_mode != "resize"
+            or not self._has_single_selection()
             or self._selected_entity_ref is None
             or self._selected_entity_ref.kind != "geometry"
         ):
@@ -1497,7 +1567,11 @@ class SceneCanvasPanel(QWidget):
         self._cursor_status_label.setText(text)
 
     def _preview_geometry_resize(self, role: str, point: QPointF) -> None:
-        if self._selected_entity_ref is None or self._selected_entity_ref.kind != "geometry":
+        if (
+            not self._has_single_selection()
+            or self._selected_entity_ref is None
+            or self._selected_entity_ref.kind != "geometry"
+        ):
             return
         project = self._model_editor_service.require_current_project()
         geometry = copy.deepcopy(project.model.geometry[self._selected_entity_ref.index])
@@ -1563,25 +1637,65 @@ class SceneCanvasPanel(QWidget):
         list_item.setData(Qt.ItemDataRole.UserRole, entity_ref)
         self._entity_list.addItem(list_item)
 
-    def _select_entity_from_list(self, row: int) -> None:
-        if row < 0:
-            self._selected_entity_ref = None
-            self._load_entity_details(None)
+    def _select_entities_from_list(self) -> None:
+        if self._selection_syncing:
             return
-        entity_ref = self._entity_list.item(row).data(Qt.ItemDataRole.UserRole)
-        self._selected_entity_ref = entity_ref
-        stale_refs: list[tuple[str, int]] = []
-        for candidate_ref, item in list(self._entity_items.items()):
-            try:
-                item.setSelected(candidate_ref == (entity_ref.kind, entity_ref.index))
-            except RuntimeError:
-                stale_refs.append(candidate_ref)
-        for candidate_ref in stale_refs:
-            self._entity_items.pop(candidate_ref, None)
-        self._load_entity_details(entity_ref)
+        selected_signatures: list[tuple[str, int]] = []
+        primary_signature: tuple[str, int] | None = None
+        current_item = self._entity_list.currentItem()
+        if current_item is not None and current_item.isSelected():
+            entity_ref = current_item.data(Qt.ItemDataRole.UserRole)
+            primary_signature = self._entity_signature(entity_ref)
+        for row in range(self._entity_list.count()):
+            item = self._entity_list.item(row)
+            if not item.isSelected():
+                continue
+            entity_ref = item.data(Qt.ItemDataRole.UserRole)
+            signature = self._entity_signature(entity_ref)
+            selected_signatures.append(signature)
+            if primary_signature is None:
+                primary_signature = signature
+        self._apply_selection_signatures(tuple(selected_signatures), primary_signature)
 
-    def _select_entity_from_scene(self, entity_ref: _SceneEntityRef) -> None:
-        self._set_selected_row(entity_ref.kind, entity_ref.index)
+    def _select_entity_from_scene(
+        self,
+        entity_ref: _SceneEntityRef,
+        modifiers=Qt.KeyboardModifier.NoModifier,
+        *,
+        preserve_existing: bool = False,
+    ) -> None:
+        signature = self._entity_signature(entity_ref)
+        current_signatures = list(self._selected_signatures())
+        current_set = set(current_signatures)
+        has_multi_modifier = bool(
+            modifiers
+            & (
+                Qt.KeyboardModifier.ControlModifier
+                | Qt.KeyboardModifier.ShiftModifier
+            )
+        )
+        if preserve_existing:
+            if signature not in current_set:
+                current_signatures.append(signature)
+            next_signatures = tuple(current_signatures)
+        elif has_multi_modifier:
+            if signature in current_set:
+                next_signatures = tuple(
+                    candidate for candidate in current_signatures if candidate != signature
+                )
+            else:
+                current_signatures.append(signature)
+                next_signatures = tuple(current_signatures)
+        elif signature in current_set and len(current_signatures) > 1:
+            next_signatures = tuple(current_signatures)
+        else:
+            next_signatures = (signature,)
+        self._apply_selection_signatures(
+            next_signatures,
+            signature if signature in next_signatures else None,
+        )
+        if signature in set(self._selected_signatures()):
+            self._capture_drag_anchor_positions(signature)
 
     def _show_entity_context_menu(self, entity_ref: _SceneEntityRef, global_pos) -> None:
         menu = QMenu(self)
@@ -1591,7 +1705,6 @@ class SceneCanvasPanel(QWidget):
         action = menu.exec(global_pos)
         if action is None:
             return
-        self._set_selected_row(entity_ref.kind, entity_ref.index)
         if action == edit_action:
             self.edit_requested.emit(entity_ref.kind)
             return
@@ -1623,6 +1736,7 @@ class SceneCanvasPanel(QWidget):
     def _load_entity_details(self, entity_ref: _SceneEntityRef | None) -> None:
         self._loading = True
         self._selected_entity_ref = entity_ref
+        self._selected_entity_refs = [entity_ref] if entity_ref is not None else []
         enabled = entity_ref is not None
         for widget in (
             self._pos_x,
@@ -1635,6 +1749,7 @@ class SceneCanvasPanel(QWidget):
             *self._nudge_buttons,
         ):
             widget.setEnabled(enabled)
+        self._inspector_status.setText(self._localization.text("editor.scene.inspector_hint"))
         if entity_ref is None or self._project is None:
             self._selected_label.setText(self._localization.text("editor.scene.none_selected"))
             self._entity_kind_label.clear()
@@ -1660,6 +1775,47 @@ class SceneCanvasPanel(QWidget):
         self._loading = False
         self._refresh_resize_handles()
 
+    def _load_multi_selection_details(
+        self,
+        entity_refs: list[_SceneEntityRef],
+        primary_ref: _SceneEntityRef | None,
+    ) -> None:
+        self._loading = True
+        self._selected_entity_refs = list(entity_refs)
+        self._selected_entity_ref = primary_ref
+        for widget in (self._pos_x, self._pos_y, self._pos_z, self._apply_button):
+            widget.setEnabled(False)
+        for widget in (
+            self._nudge_step,
+            self._duplicate_button,
+            self._delete_button,
+            *self._nudge_buttons,
+        ):
+            widget.setEnabled(True)
+        self._selected_label.setText(
+            self._localization.text(
+                "editor.scene.multiple_selected",
+                count=len(entity_refs),
+            )
+        )
+        for spinbox in (self._pos_x, self._pos_y, self._pos_z):
+            spinbox.setValue(0.0)
+        entity_types = ", ".join(
+            sorted({self._entity_kind_text(entity_ref.kind) for entity_ref in entity_refs})
+        )
+        self._entity_kind_label.setText(
+            self._localization.text(
+                "editor.scene.multiple_selected_types",
+                entity_types=entity_types,
+            )
+        )
+        self._details_stack.setCurrentWidget(self._details_generic)
+        self._inspector_status.setText(
+            self._localization.text("editor.scene.multiple_selected_hint")
+        )
+        self._loading = False
+        self._refresh_resize_handles()
+
     def _on_entity_dropped(self, entity_kind: str, scene_x: float, scene_y: float) -> None:
         if self._project is None:
             return
@@ -1673,10 +1829,10 @@ class SceneCanvasPanel(QWidget):
     def _add_entity(self, entity_kind: str, point: QPointF) -> None:
         project = self._model_editor_service.require_current_project()
         vector = self._vector_from_scene_point(point)
-        selection_before = self._selection_signature()
+        selection_before = self._current_selection_context()
         created_selection: tuple[str, int] | None = None
         with self._model_editor_service.history_batch() as batch:
-            batch.undo_context = self._history_context(selection_before)
+            batch.undo_context = selection_before
             if entity_kind in {"box", "sphere", "cylinder"}:
                 index = self._model_editor_service.add_geometry(kind=entity_kind)
                 geometry = copy.deepcopy(project.model.geometry[index])
@@ -1709,10 +1865,15 @@ class SceneCanvasPanel(QWidget):
                 geometry_import.position_m = vector
                 self._model_editor_service.update_geometry_import(index, geometry_import)
                 created_selection = ("import", index)
-            batch.redo_context = self._history_context(created_selection)
+            batch.redo_context = self._selection_context(
+                (created_selection,) if created_selection is not None else (),
+                created_selection,
+            )
         self._refresh_scene()
         if created_selection is not None:
-            self._set_selected_row(created_selection[0], created_selection[1])
+            self._restore_selection(
+                self._selection_context((created_selection,), created_selection)
+            )
         self.refresh_validation()
         self._refresh_history_controls()
         self.model_changed.emit()
@@ -1720,24 +1881,50 @@ class SceneCanvasPanel(QWidget):
     def _move_entity_from_anchor(self, entity_ref: _SceneEntityRef, point: QPointF) -> None:
         if self._project is None:
             return
-        vector = self._vector_from_scene_point(point)
-        selection = self._history_context(self._selection_signature())
-        self._apply_entity_position(
-            entity_ref,
-            vector,
-            undo_context=selection,
-            redo_context=selection,
-        )
+        selection = self._current_selection_context()
+        selection_signatures = self._selected_signatures()
+        entity_signature = self._entity_signature(entity_ref)
+        if (
+            len(selection_signatures) > 1
+            and entity_signature in set(selection_signatures)
+            and entity_signature in self._drag_anchor_positions
+        ):
+            delta = point - self._drag_anchor_positions[entity_signature]
+            with self._model_editor_service.history_batch() as batch:
+                batch.undo_context = selection
+                batch.redo_context = selection
+                for signature in selection_signatures:
+                    selected_ref = self._entity_ref_for_signature(signature)
+                    if selected_ref is None:
+                        continue
+                    anchor = self._drag_anchor_positions.get(signature)
+                    if anchor is None:
+                        entity = self._entity_for_ref(selected_ref)
+                        anchor = self._project_point(
+                            self._entity_position(selected_ref, entity)
+                        )
+                    self._apply_entity_position(
+                        selected_ref,
+                        self._vector_from_scene_point(anchor + delta),
+                    )
+        else:
+            self._apply_entity_position(
+                entity_ref,
+                self._vector_from_scene_point(point),
+                undo_context=selection,
+                redo_context=selection,
+            )
+        self._drag_anchor_positions = {}
         self._refresh_scene()
-        self._set_selected_row(entity_ref.kind, entity_ref.index)
+        self._restore_selection(selection)
         self.refresh_validation()
         self._refresh_history_controls()
         self.model_changed.emit()
 
     def _apply_entity_changes(self) -> None:
-        if self._loading or self._selected_entity_ref is None:
+        if self._loading or not self._has_single_selection() or self._selected_entity_ref is None:
             return
-        selection = self._history_context(self._selection_signature())
+        selection = self._current_selection_context()
         with self._model_editor_service.history_batch() as batch:
             batch.undo_context = selection
             batch.redo_context = selection
@@ -1747,13 +1934,13 @@ class SceneCanvasPanel(QWidget):
                 Vector3(self._pos_x.value(), self._pos_y.value(), self._pos_z.value()),
             )
         self._refresh_scene()
-        self._set_selected_row(self._selected_entity_ref.kind, self._selected_entity_ref.index)
+        self._restore_selection(selection)
         self.refresh_validation()
         self._refresh_history_controls()
         self.model_changed.emit()
 
     def _apply_detail_changes(self) -> None:
-        if self._selected_entity_ref is None or self._project is None:
+        if not self._has_single_selection() or self._selected_entity_ref is None or self._project is None:
             return
         project = self._model_editor_service.require_current_project()
         entity_ref = self._selected_entity_ref
@@ -1809,140 +1996,122 @@ class SceneCanvasPanel(QWidget):
             self._model_editor_service.update_receiver(entity_ref.index, receiver)
 
     def _duplicate_selected(self) -> None:
-        if self._selected_entity_ref is None:
+        selected_signatures = self._selected_signatures()
+        if not selected_signatures:
             return
-        entity_ref = self._selected_entity_ref
-        selection_before = self._history_context(self._selection_signature())
-        if entity_ref.kind == "geometry":
-            new_index = self._model_editor_service.duplicate_geometry(
-                entity_ref.index,
-                undo_context=selection_before,
-                redo_context=self._history_context(("geometry", entity_ref.index + 1)),
+        selection_before = self._current_selection_context()
+        primary_before = self._primary_selection_signature()
+        created_by_signature: dict[tuple[str, int], tuple[str, int]] = {}
+        grouped_indices: dict[str, list[int]] = {}
+        for kind, index in selected_signatures:
+            grouped_indices.setdefault(kind, []).append(index)
+        with self._model_editor_service.history_batch() as batch:
+            batch.undo_context = selection_before
+            for kind, indices in grouped_indices.items():
+                offset = 0
+                for index in sorted(indices):
+                    current_index = index + offset
+                    if kind == "geometry":
+                        new_index = self._model_editor_service.duplicate_geometry(current_index)
+                    elif kind == "source":
+                        new_index = self._model_editor_service.duplicate_source(current_index)
+                    elif kind == "receiver":
+                        new_index = self._model_editor_service.duplicate_receiver(current_index)
+                    elif kind == "antenna":
+                        new_index = self._model_editor_service.duplicate_antenna_model(
+                            current_index
+                        )
+                    else:
+                        new_index = self._model_editor_service.duplicate_geometry_import(
+                            current_index
+                        )
+                    created_by_signature[(kind, index)] = (kind, new_index)
+                    offset += 1
+            created_selection = tuple(
+                created_by_signature[signature]
+                for signature in selected_signatures
+                if signature in created_by_signature
             )
-        elif entity_ref.kind == "source":
-            new_index = self._model_editor_service.duplicate_source(
-                entity_ref.index,
-                undo_context=selection_before,
-                redo_context=self._history_context(("source", entity_ref.index + 1)),
+            primary_selection = (
+                created_by_signature.get(primary_before)
+                if primary_before is not None
+                else None
             )
-        elif entity_ref.kind == "receiver":
-            new_index = self._model_editor_service.duplicate_receiver(
-                entity_ref.index,
-                undo_context=selection_before,
-                redo_context=self._history_context(("receiver", entity_ref.index + 1)),
-            )
-        elif entity_ref.kind == "antenna":
-            new_index = self._model_editor_service.duplicate_antenna_model(
-                entity_ref.index,
-                undo_context=selection_before,
-                redo_context=self._history_context(("antenna", entity_ref.index + 1)),
-            )
-        else:
-            new_index = self._model_editor_service.duplicate_geometry_import(
-                entity_ref.index,
-                undo_context=selection_before,
-                redo_context=self._history_context(("import", entity_ref.index + 1)),
+            if primary_selection is None and created_selection:
+                primary_selection = created_selection[-1]
+            batch.redo_context = self._selection_context(
+                created_selection,
+                primary_selection,
             )
         self._refresh_scene()
-        self._set_selected_row(entity_ref.kind, new_index)
+        self._restore_selection(
+            self._selection_context(created_selection, primary_selection)
+        )
         self.refresh_validation()
         self._refresh_history_controls()
         self.model_changed.emit()
 
     def _delete_selected(self) -> None:
-        if self._selected_entity_ref is None:
+        selected_signatures = self._selected_signatures()
+        if not selected_signatures:
             return
-        entity_ref = self._selected_entity_ref
-        selection_before = self._history_context(self._selection_signature())
-        if entity_ref.kind == "geometry":
-            next_index = (
-                min(entity_ref.index, len(self._project.model.geometry) - 2)
-                if self._project is not None and len(self._project.model.geometry) > 1
-                else None
+        selection_before = self._current_selection_context()
+        next_selection = self._selection_context()
+        if len(selected_signatures) == 1:
+            next_signature = self._next_selection_after_delete(selected_signatures[0])
+            next_selection = self._selection_context(
+                (next_signature,) if next_signature is not None else (),
+                next_signature,
             )
-            next_index = self._model_editor_service.delete_geometry(
-                entity_ref.index,
-                undo_context=selection_before,
-                redo_context=self._history_context(
-                    ("geometry", next_index) if next_index is not None else None
-                ),
-            )
-        elif entity_ref.kind == "source":
-            next_index = (
-                min(entity_ref.index, len(self._project.model.sources) - 2)
-                if self._project is not None and len(self._project.model.sources) > 1
-                else None
-            )
-            next_index = self._model_editor_service.delete_source(
-                entity_ref.index,
-                undo_context=selection_before,
-                redo_context=self._history_context(
-                    ("source", next_index) if next_index is not None else None
-                ),
-            )
-        elif entity_ref.kind == "receiver":
-            next_index = (
-                min(entity_ref.index, len(self._project.model.receivers) - 2)
-                if self._project is not None and len(self._project.model.receivers) > 1
-                else None
-            )
-            next_index = self._model_editor_service.delete_receiver(
-                entity_ref.index,
-                undo_context=selection_before,
-                redo_context=self._history_context(
-                    ("receiver", next_index) if next_index is not None else None
-                ),
-            )
-        elif entity_ref.kind == "antenna":
-            next_index = (
-                min(entity_ref.index, len(self._project.model.antenna_models) - 2)
-                if self._project is not None and len(self._project.model.antenna_models) > 1
-                else None
-            )
-            next_index = self._model_editor_service.delete_antenna_model(
-                entity_ref.index,
-                undo_context=selection_before,
-                redo_context=self._history_context(
-                    ("antenna", next_index) if next_index is not None else None
-                ),
-            )
-        else:
-            next_index = (
-                min(entity_ref.index, len(self._project.model.geometry_imports) - 2)
-                if self._project is not None and len(self._project.model.geometry_imports) > 1
-                else None
-            )
-            next_index = self._model_editor_service.delete_geometry_import(
-                entity_ref.index,
-                undo_context=selection_before,
-                redo_context=self._history_context(
-                    ("import", next_index) if next_index is not None else None
-                ),
-            )
+        grouped_indices: dict[str, list[int]] = {}
+        for kind, index in selected_signatures:
+            grouped_indices.setdefault(kind, []).append(index)
+        with self._model_editor_service.history_batch() as batch:
+            batch.undo_context = selection_before
+            batch.redo_context = next_selection
+            for kind, indices in grouped_indices.items():
+                for index in sorted(indices, reverse=True):
+                    if kind == "geometry":
+                        self._model_editor_service.delete_geometry(index)
+                    elif kind == "source":
+                        self._model_editor_service.delete_source(index)
+                    elif kind == "receiver":
+                        self._model_editor_service.delete_receiver(index)
+                    elif kind == "antenna":
+                        self._model_editor_service.delete_antenna_model(index)
+                    else:
+                        self._model_editor_service.delete_geometry_import(index)
         self._refresh_scene()
-        if next_index is not None:
-            self._set_selected_row(entity_ref.kind, next_index)
+        self._restore_selection(next_selection)
         self.refresh_validation()
         self._refresh_history_controls()
         self.model_changed.emit()
 
     def _nudge_selected(self, dx: int, dy: int, dz: int) -> None:
-        if self._selected_entity_ref is None:
+        selected_signatures = self._selected_signatures()
+        if not selected_signatures:
             return
         step = self._nudge_step.value()
-        selection = self._history_context(self._selection_signature())
-        self._apply_entity_position(
-            self._selected_entity_ref,
-            Vector3(
-                self._pos_x.value() + dx * step,
-                self._pos_y.value() + dy * step,
-                self._pos_z.value() + dz * step,
-            ),
-            undo_context=selection,
-            redo_context=selection,
-        )
+        selection = self._current_selection_context()
+        with self._model_editor_service.history_batch() as batch:
+            batch.undo_context = selection
+            batch.redo_context = selection
+            for signature in selected_signatures:
+                entity_ref = self._entity_ref_for_signature(signature)
+                if entity_ref is None:
+                    continue
+                entity = self._entity_for_ref(entity_ref)
+                position = self._entity_position(entity_ref, entity)
+                self._apply_entity_position(
+                    entity_ref,
+                    Vector3(
+                        position.x + dx * step,
+                        position.y + dy * step,
+                        position.z + dz * step,
+                    ),
+                )
         self._refresh_scene()
-        self._set_selected_row(self._selected_entity_ref.kind, self._selected_entity_ref.index)
+        self._restore_selection(selection)
         self.refresh_validation()
         self._refresh_history_controls()
         self.model_changed.emit()
@@ -2270,14 +2439,18 @@ class SceneCanvasPanel(QWidget):
         ]
 
     def _resize_geometry_from_handle_release(self, role: str, point: QPointF) -> None:
-        if self._selected_entity_ref is None or self._selected_entity_ref.kind != "geometry":
+        if (
+            not self._has_single_selection()
+            or self._selected_entity_ref is None
+            or self._selected_entity_ref.kind != "geometry"
+        ):
             return
         self._clear_preview_items()
         project = self._model_editor_service.require_current_project()
         geometry = copy.deepcopy(project.model.geometry[self._selected_entity_ref.index])
         vector = self._vector_from_scene_point(point)
         updated = self._resize_geometry(geometry, role, vector)
-        selection = self._history_context(self._selection_signature())
+        selection = self._current_selection_context()
         self._model_editor_service.update_geometry(
             self._selected_entity_ref.index,
             updated,
@@ -2285,7 +2458,7 @@ class SceneCanvasPanel(QWidget):
             redo_context=selection,
         )
         self._refresh_scene()
-        self._set_selected_row(self._selected_entity_ref.kind, self._selected_entity_ref.index)
+        self._restore_selection(selection)
         self.refresh_validation()
         self._refresh_history_controls()
         self.model_changed.emit()
@@ -2446,24 +2619,66 @@ class SceneCanvasPanel(QWidget):
             min_size,
         )
 
+    def _entity_signature(self, entity_ref: _SceneEntityRef) -> tuple[str, int]:
+        return entity_ref.kind, entity_ref.index
+
     def _selection_signature(self) -> tuple[str, int] | None:
         if self._selected_entity_ref is None:
             return None
-        return self._selected_entity_ref.kind, self._selected_entity_ref.index
+        return self._entity_signature(self._selected_entity_ref)
 
-    def _history_context(
+    def _selected_signatures(self) -> tuple[tuple[str, int], ...]:
+        if self._selected_entity_refs:
+            return tuple(self._entity_signature(entity_ref) for entity_ref in self._selected_entity_refs)
+        selection = self._selection_signature()
+        return (selection,) if selection is not None else ()
+
+    def _primary_selection_signature(self) -> tuple[str, int] | None:
+        return self._selection_signature()
+
+    def _has_single_selection(self) -> bool:
+        return len(self._selected_signatures()) == 1 and self._selected_entity_ref is not None
+
+    def _selection_context(
         self,
-        selection: tuple[str, int] | None,
+        selections: tuple[tuple[str, int], ...] = (),
+        primary: tuple[str, int] | None = None,
     ) -> _SceneHistoryContext:
-        return _SceneHistoryContext(selection=selection)
+        normalized: list[tuple[str, int]] = []
+        seen: set[tuple[str, int]] = set()
+        for signature in selections:
+            if signature in seen:
+                continue
+            normalized.append(signature)
+            seen.add(signature)
+        if primary is not None and primary not in seen:
+            normalized.append(primary)
+            seen.add(primary)
+        return _SceneHistoryContext(
+            selections=tuple(normalized),
+            primary=primary if primary in seen else None,
+        )
+
+    def _current_selection_context(self) -> _SceneHistoryContext:
+        return self._selection_context(
+            self._selected_signatures(),
+            self._primary_selection_signature(),
+        )
 
     def _selection_from_history_context(
         self,
         context: object | None,
-    ) -> tuple[str, int] | None:
+    ) -> _SceneHistoryContext:
         if isinstance(context, _SceneHistoryContext):
-            return context.selection
-        return self._selection_signature()
+            return self._selection_context(context.selections, context.primary)
+        if (
+            isinstance(context, tuple)
+            and len(context) == 2
+            and isinstance(context[0], str)
+            and isinstance(context[1], int)
+        ):
+            return self._selection_context((context,), context)
+        return self._current_selection_context()
 
     def _refresh_history_controls(self) -> None:
         enabled = self._project is not None
@@ -2519,19 +2734,163 @@ class SceneCanvasPanel(QWidget):
             return
         self._duplicate_selected()
 
-    def _restore_selection(self, signature: tuple[str, int] | None) -> None:
-        if signature is None:
-            self._load_entity_details(None)
-            return
-        self._set_selected_row(signature[0], signature[1])
+    def _restore_selection(self, context: _SceneHistoryContext) -> None:
+        self._apply_selection_signatures(context.selections, context.primary)
 
     def _set_selected_row(self, kind: str, index: int) -> None:
+        self._apply_selection_signatures(((kind, index),), (kind, index))
+
+    def _apply_selection_signatures(
+        self,
+        signatures: tuple[tuple[str, int], ...],
+        primary: tuple[str, int] | None,
+    ) -> None:
+        context = self._selection_context(signatures, primary)
+        target_set = set(context.selections)
+        resolved_refs: list[_SceneEntityRef] = []
+        self._selection_syncing = True
+        try:
+            with QSignalBlocker(self._entity_list):
+                self._entity_list.clearSelection()
+                current_item: QListWidgetItem | None = None
+                for row in range(self._entity_list.count()):
+                    item = self._entity_list.item(row)
+                    entity_ref = item.data(Qt.ItemDataRole.UserRole)
+                    signature = self._entity_signature(entity_ref)
+                    selected = signature in target_set
+                    item.setSelected(selected)
+                    if not selected:
+                        continue
+                    resolved_refs.append(entity_ref)
+                    if current_item is None or signature == context.primary:
+                        current_item = item
+                self._entity_list.setCurrentItem(current_item)
+        finally:
+            self._selection_syncing = False
+
+        stale_refs: list[tuple[str, int]] = []
+        for signature, item in list(self._entity_items.items()):
+            try:
+                item.setSelected(signature in target_set)
+            except RuntimeError:
+                stale_refs.append(signature)
+        for signature in stale_refs:
+            self._entity_items.pop(signature, None)
+
+        primary_ref = None
+        if context.primary is not None:
+            for entity_ref in resolved_refs:
+                if self._entity_signature(entity_ref) == context.primary:
+                    primary_ref = entity_ref
+                    break
+        if primary_ref is None and resolved_refs:
+            primary_ref = resolved_refs[-1]
+        self._drag_anchor_positions = {}
+        if not resolved_refs:
+            self._load_entity_details(None)
+            return
+        if len(resolved_refs) == 1:
+            self._load_entity_details(primary_ref)
+            return
+        self._load_multi_selection_details(resolved_refs, primary_ref)
+
+    def _entity_ref_for_signature(
+        self,
+        signature: tuple[str, int],
+    ) -> _SceneEntityRef | None:
         for row in range(self._entity_list.count()):
             entity_ref = self._entity_list.item(row).data(Qt.ItemDataRole.UserRole)
-            if entity_ref.kind == kind and entity_ref.index == index:
-                self._entity_list.setCurrentRow(row)
-                return
-        self._load_entity_details(None)
+            if self._entity_signature(entity_ref) == signature:
+                return entity_ref
+        return None
+
+    def _capture_drag_anchor_positions(
+        self,
+        primary_signature: tuple[str, int],
+    ) -> None:
+        if self._project is None or primary_signature not in set(self._selected_signatures()):
+            self._drag_anchor_positions = {}
+            return
+        anchors: dict[tuple[str, int], QPointF] = {}
+        for signature in self._selected_signatures():
+            entity_ref = self._entity_ref_for_signature(signature)
+            if entity_ref is None:
+                continue
+            entity = self._entity_for_ref(entity_ref)
+            anchors[signature] = self._project_point(self._entity_position(entity_ref, entity))
+        self._drag_anchor_positions = anchors
+
+    def _handle_selection_box(
+        self,
+        start_x: float,
+        start_y: float,
+        end_x: float,
+        end_y: float,
+        modifiers,
+    ) -> None:
+        if self._project is None or self._scene_tool != "select":
+            return
+        selection_rect = QRectF(QPointF(start_x, start_y), QPointF(end_x, end_y)).normalized()
+        hit_signatures: list[tuple[str, int]] = []
+        stale_refs: list[tuple[str, int]] = []
+        for row in range(self._entity_list.count()):
+            entity_ref = self._entity_list.item(row).data(Qt.ItemDataRole.UserRole)
+            signature = self._entity_signature(entity_ref)
+            item = self._entity_items.get(signature)
+            if item is None:
+                continue
+            try:
+                if item.sceneBoundingRect().intersects(selection_rect):
+                    hit_signatures.append(signature)
+            except RuntimeError:
+                stale_refs.append(signature)
+        for signature in stale_refs:
+            self._entity_items.pop(signature, None)
+        has_multi_modifier = bool(
+            modifiers
+            & (
+                Qt.KeyboardModifier.ControlModifier
+                | Qt.KeyboardModifier.ShiftModifier
+            )
+        )
+        if has_multi_modifier:
+            merged_signatures = list(self._selected_signatures())
+            existing = set(merged_signatures)
+            for signature in hit_signatures:
+                if signature in existing:
+                    continue
+                merged_signatures.append(signature)
+                existing.add(signature)
+            self._apply_selection_signatures(
+                tuple(merged_signatures),
+                hit_signatures[-1] if hit_signatures else self._primary_selection_signature(),
+            )
+            return
+        self._apply_selection_signatures(
+            tuple(hit_signatures),
+            hit_signatures[-1] if hit_signatures else None,
+        )
+
+    def _next_selection_after_delete(
+        self,
+        signature: tuple[str, int],
+    ) -> tuple[str, int] | None:
+        if self._project is None:
+            return None
+        kind, index = signature
+        if kind == "geometry":
+            count = len(self._project.model.geometry)
+        elif kind == "source":
+            count = len(self._project.model.sources)
+        elif kind == "receiver":
+            count = len(self._project.model.receivers)
+        elif kind == "antenna":
+            count = len(self._project.model.antenna_models)
+        else:
+            count = len(self._project.model.geometry_imports)
+        if count <= 1:
+            return None
+        return kind, min(index, count - 2)
 
     def _entity_for_ref(self, entity_ref: _SceneEntityRef):
         project = self._model_editor_service.require_current_project()

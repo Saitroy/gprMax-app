@@ -10,6 +10,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import QGraphicsItem
 from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import QPointF, Qt
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -555,6 +556,130 @@ class SceneCanvasPanelTests(unittest.TestCase):
             redone = project.model.geometry[geometry_index]
             self.assertAlmostEqual(redone.parameters["lower_left_m"]["x"], 0.0, places=6)
             self.assertAlmostEqual(redone.parameters["upper_right_m"]["x"], 1.0, places=6)
+
+    def test_box_selection_selects_multiple_entities(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Scene Demo", Path(temp_dir))
+            state = AppState(
+                current_project=project,
+                current_project_validation=validate_project(project),
+            )
+            editor = ModelEditorService(state)
+            validation = ValidationService(state)
+            first_index = editor.add_receiver()
+            second_index = editor.add_receiver()
+            project.model.receivers[first_index].position_m = Vector3(0.2, 0.2, 0.0)
+            project.model.receivers[second_index].position_m = Vector3(0.4, 0.4, 0.0)
+            panel = SceneCanvasPanel(LocalizationService("en"), editor, validation)
+
+            panel.set_project(project)
+            panel._handle_selection_box(0.12, 0.12, 0.48, 0.48, Qt.KeyboardModifier.NoModifier)  # noqa: SLF001
+
+            selected = {(entity.kind, entity.index) for entity in panel._selected_entity_refs}  # noqa: SLF001
+            self.assertEqual(selected, {("receiver", 0), ("receiver", 1)})
+            self.assertFalse(panel._apply_button.isEnabled())  # noqa: SLF001
+            self.assertTrue(panel._duplicate_button.isEnabled())  # noqa: SLF001
+            self.assertEqual(len(panel._entity_list.selectedItems()), 2)  # noqa: SLF001
+
+    def test_multi_delete_undo_restores_selection(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Scene Demo", Path(temp_dir))
+            state = AppState(
+                current_project=project,
+                current_project_validation=validate_project(project),
+            )
+            editor = ModelEditorService(state)
+            validation = ValidationService(state)
+            first_index = editor.add_receiver()
+            second_index = editor.add_receiver()
+            project.model.receivers[first_index].position_m = Vector3(0.2, 0.2, 0.0)
+            project.model.receivers[second_index].position_m = Vector3(0.4, 0.4, 0.0)
+            panel = SceneCanvasPanel(LocalizationService("en"), editor, validation)
+
+            panel.set_project(project)
+            panel._handle_selection_box(0.12, 0.12, 0.48, 0.48, Qt.KeyboardModifier.NoModifier)  # noqa: SLF001
+            panel._delete_selected()  # noqa: SLF001
+
+            self.assertEqual(len(project.model.receivers), 0)
+            self.assertEqual(panel._selected_entity_refs, [])  # noqa: SLF001
+
+            panel._undo_scene_change()  # noqa: SLF001
+
+            restored = {(entity.kind, entity.index) for entity in panel._selected_entity_refs}  # noqa: SLF001
+            self.assertEqual(len(project.model.receivers), 2)
+            self.assertEqual(restored, {("receiver", 0), ("receiver", 1)})
+
+    def test_multi_duplicate_selects_created_entities(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Scene Demo", Path(temp_dir))
+            state = AppState(
+                current_project=project,
+                current_project_validation=validate_project(project),
+            )
+            editor = ModelEditorService(state)
+            validation = ValidationService(state)
+            first_index = editor.add_receiver()
+            second_index = editor.add_receiver()
+            project.model.receivers[first_index].position_m = Vector3(0.2, 0.2, 0.0)
+            project.model.receivers[second_index].position_m = Vector3(0.4, 0.4, 0.0)
+            panel = SceneCanvasPanel(LocalizationService("en"), editor, validation)
+
+            panel.set_project(project)
+            panel._handle_selection_box(0.12, 0.12, 0.48, 0.48, Qt.KeyboardModifier.NoModifier)  # noqa: SLF001
+            panel._duplicate_selected()  # noqa: SLF001
+
+            self.assertEqual(len(project.model.receivers), 4)
+            selected = [(entity.kind, entity.index) for entity in panel._selected_entity_refs]  # noqa: SLF001
+            self.assertEqual(selected, [("receiver", 1), ("receiver", 3)])
+
+    def test_multi_nudge_moves_all_selected_entities(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Scene Demo", Path(temp_dir))
+            state = AppState(
+                current_project=project,
+                current_project_validation=validate_project(project),
+            )
+            editor = ModelEditorService(state)
+            validation = ValidationService(state)
+            first_index = editor.add_receiver()
+            second_index = editor.add_receiver()
+            project.model.receivers[first_index].position_m = Vector3(0.2, 0.2, 0.0)
+            project.model.receivers[second_index].position_m = Vector3(0.4, 0.4, 0.0)
+            panel = SceneCanvasPanel(LocalizationService("en"), editor, validation)
+
+            panel.set_project(project)
+            panel._handle_selection_box(0.12, 0.12, 0.48, 0.48, Qt.KeyboardModifier.NoModifier)  # noqa: SLF001
+            panel._nudge_step.setValue(0.05)  # noqa: SLF001
+            panel._nudge_selected(1, 0, 0)  # noqa: SLF001
+
+            self.assertAlmostEqual(project.model.receivers[0].position_m.x, 0.25, places=6)
+            self.assertAlmostEqual(project.model.receivers[1].position_m.x, 0.45, places=6)
+
+    def test_dragging_selected_entity_moves_whole_group(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Scene Demo", Path(temp_dir))
+            state = AppState(
+                current_project=project,
+                current_project_validation=validate_project(project),
+            )
+            editor = ModelEditorService(state)
+            validation = ValidationService(state)
+            first_index = editor.add_receiver()
+            second_index = editor.add_receiver()
+            project.model.receivers[first_index].position_m = Vector3(0.2, 0.2, 0.0)
+            project.model.receivers[second_index].position_m = Vector3(0.4, 0.4, 0.0)
+            panel = SceneCanvasPanel(LocalizationService("en"), editor, validation)
+
+            panel.set_project(project)
+            panel._handle_selection_box(0.12, 0.12, 0.48, 0.48, Qt.KeyboardModifier.NoModifier)  # noqa: SLF001
+            panel._capture_drag_anchor_positions(("receiver", 0))  # noqa: SLF001
+            entity_ref = panel._entity_ref_for_signature(("receiver", 0))  # noqa: SLF001
+            self.assertIsNotNone(entity_ref)
+
+            panel._move_entity_from_anchor(entity_ref, QPointF(0.3, 0.2))  # noqa: SLF001
+
+            self.assertAlmostEqual(project.model.receivers[0].position_m.x, 0.3, places=6)
+            self.assertAlmostEqual(project.model.receivers[1].position_m.x, 0.5, places=6)
 
 
 if __name__ == "__main__":
