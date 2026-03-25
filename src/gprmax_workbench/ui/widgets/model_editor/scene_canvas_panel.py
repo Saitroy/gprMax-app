@@ -5,7 +5,16 @@ from dataclasses import dataclass
 from math import ceil, floor, hypot, log10
 
 from PySide6.QtCore import QMimeData, QPointF, QRectF, QSignalBlocker, Qt, Signal
-from PySide6.QtGui import QBrush, QColor, QDrag, QPainter, QPainterPath, QPen
+from PySide6.QtGui import (
+    QBrush,
+    QColor,
+    QDrag,
+    QKeySequence,
+    QPainter,
+    QPainterPath,
+    QPen,
+    QShortcut,
+)
 from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
@@ -62,6 +71,11 @@ class _SceneHandleSpec:
     position: QPointF
     handle_kind: str
     label: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class _SceneHistoryContext:
+    selection: tuple[str, int] | None
 
 
 def _nice_step(value: float) -> float:
@@ -598,8 +612,16 @@ class SceneCanvasPanel(QWidget):
         self._toolbar_tool_label.setProperty("toolbarRole", "section")
         self._toolbar_mode_label = QLabel()
         self._toolbar_mode_label.setProperty("toolbarRole", "section")
+        self._toolbar_history_label = QLabel()
+        self._toolbar_history_label.setProperty("toolbarRole", "section")
         self._cursor_status_label = QLabel()
         self._cursor_status_label.setProperty("toolbarRole", "status")
+        self._undo_button = QPushButton()
+        self._undo_button.setObjectName("SceneToolbarAction")
+        self._undo_button.clicked.connect(self._undo_scene_change)
+        self._redo_button = QPushButton()
+        self._redo_button.setObjectName("SceneToolbarAction")
+        self._redo_button.clicked.connect(self._redo_scene_change)
         self._build_scene_toolbar()
 
         self._palette_buttons: list[_PaletteButton] = []
@@ -754,6 +776,7 @@ class SceneCanvasPanel(QWidget):
         self._build_nudge_buttons()
         self.retranslate_ui()
         self.set_project(None)
+        self._build_shortcuts()
 
     def _build_scene_toolbar(self) -> None:
         layout = QHBoxLayout(self._scene_toolbar)
@@ -762,6 +785,12 @@ class SceneCanvasPanel(QWidget):
         layout.addWidget(self._build_toolbar_section(self._toolbar_plane_label, self._build_plane_buttons()))
         layout.addWidget(self._build_toolbar_section(self._toolbar_tool_label, self._build_tool_buttons()))
         layout.addWidget(self._build_toolbar_section(self._toolbar_mode_label, self._build_mode_buttons()))
+        layout.addWidget(
+            self._build_toolbar_section(
+                self._toolbar_history_label,
+                self._build_history_buttons(),
+            )
+        )
         layout.addStretch(1)
         self._cursor_status_label.setMinimumWidth(250)
         layout.addWidget(self._cursor_status_label, 0, Qt.AlignmentFlag.AlignVCenter)
@@ -827,6 +856,31 @@ class SceneCanvasPanel(QWidget):
             layout.addWidget(button)
         return layout
 
+    def _build_history_buttons(self) -> QHBoxLayout:
+        layout = QHBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        self._undo_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowBack))
+        self._redo_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowForward))
+        layout.addWidget(self._undo_button)
+        layout.addWidget(self._redo_button)
+        return layout
+
+    def _build_shortcuts(self) -> None:
+        shortcuts = (
+            (QKeySequence.StandardKey.Undo, self._handle_undo_shortcut),
+            (QKeySequence.StandardKey.Redo, self._handle_redo_shortcut),
+            ("Ctrl+Y", self._handle_redo_shortcut),
+            (QKeySequence.StandardKey.Delete, self._handle_delete_shortcut),
+            ("Ctrl+D", self._handle_duplicate_shortcut),
+        )
+        self._shortcuts: list[QShortcut] = []
+        for key_sequence, handler in shortcuts:
+            shortcut = QShortcut(QKeySequence(key_sequence), self)
+            shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+            shortcut.activated.connect(handler)
+            self._shortcuts.append(shortcut)
+
     def _set_plane_from_toolbar(self, plane: str) -> None:
         index = self._plane_combo.findData(plane)
         if index >= 0:
@@ -851,6 +905,7 @@ class SceneCanvasPanel(QWidget):
         for mode_key, button in self._mode_buttons.items():
             button.setEnabled(mode_enabled)
             button.setChecked(mode_key == self._scene_mode and mode_enabled)
+        self._refresh_history_controls()
 
     def _build_nudge_buttons(self) -> None:
         self._nudge_buttons: list[QPushButton] = []
@@ -913,6 +968,7 @@ class SceneCanvasPanel(QWidget):
         self._toolbar_plane_label.setText(self._localization.text("editor.scene.plane"))
         self._toolbar_tool_label.setText(self._localization.text("editor.scene.tool"))
         self._toolbar_mode_label.setText(self._localization.text("editor.scene.mode"))
+        self._toolbar_history_label.setText(self._localization.text("editor.scene.history"))
         self._palette_title.setText(self._localization.text("editor.scene.palette"))
         self._entities_title.setText(self._localization.text("editor.scene.entities"))
         self._hint_label.setText(self._localization.text("editor.scene.hint"))
@@ -920,6 +976,8 @@ class SceneCanvasPanel(QWidget):
         self._grid_step_label_global.setText(self._localization.text("editor.scene.grid_step"))
         self._inspector_title.setText(self._localization.text("editor.scene.inspector"))
         self._apply_button.setText(self._localization.text("editor.scene.apply"))
+        self._undo_button.setText(self._localization.text("common.undo"))
+        self._redo_button.setText(self._localization.text("common.redo"))
         self._duplicate_button.setText(self._localization.text("common.duplicate"))
         self._delete_button.setText(self._localization.text("common.delete"))
         self._pos_x_label.setText(self._localization.text("editor.scene.position_x"))
@@ -1009,6 +1067,7 @@ class SceneCanvasPanel(QWidget):
         self._loading = False
         self._refresh_scene()
         self.refresh_validation()
+        self._refresh_history_controls()
 
     def _loading_domain(self, project: Project | None) -> None:
         enabled = project is not None
@@ -1031,11 +1090,11 @@ class SceneCanvasPanel(QWidget):
             if project is not None:
                 for material_id in self._model_editor_service.available_material_ids():
                     self._material_combo.addItem(material_id, material_id)
-        index = self._material_combo.findData(current_value)
-        if index >= 0:
-            self._material_combo.setCurrentIndex(index)
-        elif self._material_combo.count() > 0:
-            self._material_combo.setCurrentIndex(0)
+            index = self._material_combo.findData(current_value)
+            if index >= 0:
+                self._material_combo.setCurrentIndex(index)
+            elif self._material_combo.count() > 0:
+                self._material_combo.setCurrentIndex(0)
 
     def _refresh_waveform_choices(self) -> None:
         current_value = self._waveform_combo.currentData()
@@ -1049,9 +1108,9 @@ class SceneCanvasPanel(QWidget):
             if project is not None:
                 for waveform_id in self._model_editor_service.available_waveform_ids():
                     self._waveform_combo.addItem(waveform_id, waveform_id)
-        index = self._waveform_combo.findData(current_value)
-        if index >= 0:
-            self._waveform_combo.setCurrentIndex(index)
+            index = self._waveform_combo.findData(current_value)
+            if index >= 0:
+                self._waveform_combo.setCurrentIndex(index)
 
     def refresh_validation(self) -> None:
         prefixes = [
@@ -1130,15 +1189,19 @@ class SceneCanvasPanel(QWidget):
         project = self._model_editor_service.current_project()
         if project is None:
             return
+        selection = self._history_context(self._selection_signature())
         self._model_editor_service.update_domain_size(
             Vector3(
                 self._domain_x.value(),
                 self._domain_y.value(),
                 self._domain_z.value(),
-            )
+            ),
+            undo_context=selection,
+            redo_context=selection,
         )
         self._refresh_scene()
         self.refresh_validation()
+        self._refresh_history_controls()
         self.model_changed.emit()
 
     def _refresh_scene(self) -> None:
@@ -1610,64 +1673,83 @@ class SceneCanvasPanel(QWidget):
     def _add_entity(self, entity_kind: str, point: QPointF) -> None:
         project = self._model_editor_service.require_current_project()
         vector = self._vector_from_scene_point(point)
-        if entity_kind in {"box", "sphere", "cylinder"}:
-            index = self._model_editor_service.add_geometry(kind=entity_kind)
-            geometry = copy.deepcopy(project.model.geometry[index])
-            self._model_editor_service.update_geometry(index, self._move_geometry_to_anchor(geometry, vector))
-            self._refresh_scene()
-            self._set_selected_row("geometry", index)
-        elif entity_kind == "source":
-            index = self._model_editor_service.add_source()
-            source = copy.deepcopy(project.model.sources[index])
-            source.position_m = vector
-            self._model_editor_service.update_source(index, source)
-            self._refresh_scene()
-            self._set_selected_row("source", index)
-        elif entity_kind == "receiver":
-            index = self._model_editor_service.add_receiver()
-            receiver = copy.deepcopy(project.model.receivers[index])
-            receiver.position_m = vector
-            self._model_editor_service.update_receiver(index, receiver)
-            self._refresh_scene()
-            self._set_selected_row("receiver", index)
-        elif entity_kind == "antenna":
-            index = self._model_editor_service.add_antenna_model()
-            antenna = copy.deepcopy(project.model.antenna_models[index])
-            antenna.position_m = vector
-            self._model_editor_service.update_antenna_model(index, antenna)
-            self._refresh_scene()
-            self._set_selected_row("antenna", index)
-        elif entity_kind == "import":
-            index = self._model_editor_service.add_geometry_import()
-            geometry_import = copy.deepcopy(project.model.geometry_imports[index])
-            geometry_import.position_m = vector
-            self._model_editor_service.update_geometry_import(index, geometry_import)
-            self._refresh_scene()
-            self._set_selected_row("import", index)
+        selection_before = self._selection_signature()
+        created_selection: tuple[str, int] | None = None
+        with self._model_editor_service.history_batch() as batch:
+            batch.undo_context = self._history_context(selection_before)
+            if entity_kind in {"box", "sphere", "cylinder"}:
+                index = self._model_editor_service.add_geometry(kind=entity_kind)
+                geometry = copy.deepcopy(project.model.geometry[index])
+                self._model_editor_service.update_geometry(
+                    index,
+                    self._move_geometry_to_anchor(geometry, vector),
+                )
+                created_selection = ("geometry", index)
+            elif entity_kind == "source":
+                index = self._model_editor_service.add_source()
+                source = copy.deepcopy(project.model.sources[index])
+                source.position_m = vector
+                self._model_editor_service.update_source(index, source)
+                created_selection = ("source", index)
+            elif entity_kind == "receiver":
+                index = self._model_editor_service.add_receiver()
+                receiver = copy.deepcopy(project.model.receivers[index])
+                receiver.position_m = vector
+                self._model_editor_service.update_receiver(index, receiver)
+                created_selection = ("receiver", index)
+            elif entity_kind == "antenna":
+                index = self._model_editor_service.add_antenna_model()
+                antenna = copy.deepcopy(project.model.antenna_models[index])
+                antenna.position_m = vector
+                self._model_editor_service.update_antenna_model(index, antenna)
+                created_selection = ("antenna", index)
+            elif entity_kind == "import":
+                index = self._model_editor_service.add_geometry_import()
+                geometry_import = copy.deepcopy(project.model.geometry_imports[index])
+                geometry_import.position_m = vector
+                self._model_editor_service.update_geometry_import(index, geometry_import)
+                created_selection = ("import", index)
+            batch.redo_context = self._history_context(created_selection)
+        self._refresh_scene()
+        if created_selection is not None:
+            self._set_selected_row(created_selection[0], created_selection[1])
         self.refresh_validation()
+        self._refresh_history_controls()
         self.model_changed.emit()
 
     def _move_entity_from_anchor(self, entity_ref: _SceneEntityRef, point: QPointF) -> None:
         if self._project is None:
             return
         vector = self._vector_from_scene_point(point)
-        self._apply_entity_position(entity_ref, vector)
+        selection = self._history_context(self._selection_signature())
+        self._apply_entity_position(
+            entity_ref,
+            vector,
+            undo_context=selection,
+            redo_context=selection,
+        )
         self._refresh_scene()
         self._set_selected_row(entity_ref.kind, entity_ref.index)
         self.refresh_validation()
+        self._refresh_history_controls()
         self.model_changed.emit()
 
     def _apply_entity_changes(self) -> None:
         if self._loading or self._selected_entity_ref is None:
             return
-        self._apply_detail_changes()
-        self._apply_entity_position(
-            self._selected_entity_ref,
-            Vector3(self._pos_x.value(), self._pos_y.value(), self._pos_z.value()),
-        )
+        selection = self._history_context(self._selection_signature())
+        with self._model_editor_service.history_batch() as batch:
+            batch.undo_context = selection
+            batch.redo_context = selection
+            self._apply_detail_changes()
+            self._apply_entity_position(
+                self._selected_entity_ref,
+                Vector3(self._pos_x.value(), self._pos_y.value(), self._pos_z.value()),
+            )
         self._refresh_scene()
         self._set_selected_row(self._selected_entity_ref.kind, self._selected_entity_ref.index)
         self.refresh_validation()
+        self._refresh_history_controls()
         self.model_changed.emit()
 
     def _apply_detail_changes(self) -> None:
@@ -1730,45 +1812,125 @@ class SceneCanvasPanel(QWidget):
         if self._selected_entity_ref is None:
             return
         entity_ref = self._selected_entity_ref
+        selection_before = self._history_context(self._selection_signature())
         if entity_ref.kind == "geometry":
-            new_index = self._model_editor_service.duplicate_geometry(entity_ref.index)
+            new_index = self._model_editor_service.duplicate_geometry(
+                entity_ref.index,
+                undo_context=selection_before,
+                redo_context=self._history_context(("geometry", entity_ref.index + 1)),
+            )
         elif entity_ref.kind == "source":
-            new_index = self._model_editor_service.duplicate_source(entity_ref.index)
+            new_index = self._model_editor_service.duplicate_source(
+                entity_ref.index,
+                undo_context=selection_before,
+                redo_context=self._history_context(("source", entity_ref.index + 1)),
+            )
         elif entity_ref.kind == "receiver":
-            new_index = self._model_editor_service.duplicate_receiver(entity_ref.index)
+            new_index = self._model_editor_service.duplicate_receiver(
+                entity_ref.index,
+                undo_context=selection_before,
+                redo_context=self._history_context(("receiver", entity_ref.index + 1)),
+            )
         elif entity_ref.kind == "antenna":
-            new_index = self._model_editor_service.duplicate_antenna_model(entity_ref.index)
+            new_index = self._model_editor_service.duplicate_antenna_model(
+                entity_ref.index,
+                undo_context=selection_before,
+                redo_context=self._history_context(("antenna", entity_ref.index + 1)),
+            )
         else:
-            new_index = self._model_editor_service.duplicate_geometry_import(entity_ref.index)
+            new_index = self._model_editor_service.duplicate_geometry_import(
+                entity_ref.index,
+                undo_context=selection_before,
+                redo_context=self._history_context(("import", entity_ref.index + 1)),
+            )
         self._refresh_scene()
         self._set_selected_row(entity_ref.kind, new_index)
         self.refresh_validation()
+        self._refresh_history_controls()
         self.model_changed.emit()
 
     def _delete_selected(self) -> None:
         if self._selected_entity_ref is None:
             return
         entity_ref = self._selected_entity_ref
+        selection_before = self._history_context(self._selection_signature())
         if entity_ref.kind == "geometry":
-            next_index = self._model_editor_service.delete_geometry(entity_ref.index)
+            next_index = (
+                min(entity_ref.index, len(self._project.model.geometry) - 2)
+                if self._project is not None and len(self._project.model.geometry) > 1
+                else None
+            )
+            next_index = self._model_editor_service.delete_geometry(
+                entity_ref.index,
+                undo_context=selection_before,
+                redo_context=self._history_context(
+                    ("geometry", next_index) if next_index is not None else None
+                ),
+            )
         elif entity_ref.kind == "source":
-            next_index = self._model_editor_service.delete_source(entity_ref.index)
+            next_index = (
+                min(entity_ref.index, len(self._project.model.sources) - 2)
+                if self._project is not None and len(self._project.model.sources) > 1
+                else None
+            )
+            next_index = self._model_editor_service.delete_source(
+                entity_ref.index,
+                undo_context=selection_before,
+                redo_context=self._history_context(
+                    ("source", next_index) if next_index is not None else None
+                ),
+            )
         elif entity_ref.kind == "receiver":
-            next_index = self._model_editor_service.delete_receiver(entity_ref.index)
+            next_index = (
+                min(entity_ref.index, len(self._project.model.receivers) - 2)
+                if self._project is not None and len(self._project.model.receivers) > 1
+                else None
+            )
+            next_index = self._model_editor_service.delete_receiver(
+                entity_ref.index,
+                undo_context=selection_before,
+                redo_context=self._history_context(
+                    ("receiver", next_index) if next_index is not None else None
+                ),
+            )
         elif entity_ref.kind == "antenna":
-            next_index = self._model_editor_service.delete_antenna_model(entity_ref.index)
+            next_index = (
+                min(entity_ref.index, len(self._project.model.antenna_models) - 2)
+                if self._project is not None and len(self._project.model.antenna_models) > 1
+                else None
+            )
+            next_index = self._model_editor_service.delete_antenna_model(
+                entity_ref.index,
+                undo_context=selection_before,
+                redo_context=self._history_context(
+                    ("antenna", next_index) if next_index is not None else None
+                ),
+            )
         else:
-            next_index = self._model_editor_service.delete_geometry_import(entity_ref.index)
+            next_index = (
+                min(entity_ref.index, len(self._project.model.geometry_imports) - 2)
+                if self._project is not None and len(self._project.model.geometry_imports) > 1
+                else None
+            )
+            next_index = self._model_editor_service.delete_geometry_import(
+                entity_ref.index,
+                undo_context=selection_before,
+                redo_context=self._history_context(
+                    ("import", next_index) if next_index is not None else None
+                ),
+            )
         self._refresh_scene()
         if next_index is not None:
             self._set_selected_row(entity_ref.kind, next_index)
         self.refresh_validation()
+        self._refresh_history_controls()
         self.model_changed.emit()
 
     def _nudge_selected(self, dx: int, dy: int, dz: int) -> None:
         if self._selected_entity_ref is None:
             return
         step = self._nudge_step.value()
+        selection = self._history_context(self._selection_signature())
         self._apply_entity_position(
             self._selected_entity_ref,
             Vector3(
@@ -1776,13 +1938,23 @@ class SceneCanvasPanel(QWidget):
                 self._pos_y.value() + dy * step,
                 self._pos_z.value() + dz * step,
             ),
+            undo_context=selection,
+            redo_context=selection,
         )
         self._refresh_scene()
         self._set_selected_row(self._selected_entity_ref.kind, self._selected_entity_ref.index)
         self.refresh_validation()
+        self._refresh_history_controls()
         self.model_changed.emit()
 
-    def _apply_entity_position(self, entity_ref: _SceneEntityRef, vector: Vector3) -> None:
+    def _apply_entity_position(
+        self,
+        entity_ref: _SceneEntityRef,
+        vector: Vector3,
+        *,
+        undo_context: object | None = None,
+        redo_context: object | None = None,
+    ) -> None:
         if self._project is None:
             return
         snapped = self._snap_vector(vector)
@@ -1793,27 +1965,49 @@ class SceneCanvasPanel(QWidget):
             self._model_editor_service.update_geometry(
                 entity_ref.index,
                 self._move_geometry_to_anchor(geometry, constrained),
+                undo_context=undo_context,
+                redo_context=redo_context,
             )
             return
         constrained = self._clamp_vector_to_domain(snapped)
         if entity_ref.kind == "source":
             source = copy.deepcopy(project.model.sources[entity_ref.index])
             source.position_m = constrained
-            self._model_editor_service.update_source(entity_ref.index, source)
+            self._model_editor_service.update_source(
+                entity_ref.index,
+                source,
+                undo_context=undo_context,
+                redo_context=redo_context,
+            )
             return
         if entity_ref.kind == "receiver":
             receiver = copy.deepcopy(project.model.receivers[entity_ref.index])
             receiver.position_m = constrained
-            self._model_editor_service.update_receiver(entity_ref.index, receiver)
+            self._model_editor_service.update_receiver(
+                entity_ref.index,
+                receiver,
+                undo_context=undo_context,
+                redo_context=redo_context,
+            )
             return
         if entity_ref.kind == "antenna":
             antenna = copy.deepcopy(project.model.antenna_models[entity_ref.index])
             antenna.position_m = constrained
-            self._model_editor_service.update_antenna_model(entity_ref.index, antenna)
+            self._model_editor_service.update_antenna_model(
+                entity_ref.index,
+                antenna,
+                undo_context=undo_context,
+                redo_context=redo_context,
+            )
             return
         geometry_import = copy.deepcopy(project.model.geometry_imports[entity_ref.index])
         geometry_import.position_m = constrained
-        self._model_editor_service.update_geometry_import(entity_ref.index, geometry_import)
+        self._model_editor_service.update_geometry_import(
+            entity_ref.index,
+            geometry_import,
+            undo_context=undo_context,
+            redo_context=redo_context,
+        )
 
     def _geometry_anchor_position(self, geometry: GeometryPrimitive) -> QPointF:
         return self._project_point(self._geometry_center(geometry))
@@ -2083,10 +2277,17 @@ class SceneCanvasPanel(QWidget):
         geometry = copy.deepcopy(project.model.geometry[self._selected_entity_ref.index])
         vector = self._vector_from_scene_point(point)
         updated = self._resize_geometry(geometry, role, vector)
-        self._model_editor_service.update_geometry(self._selected_entity_ref.index, updated)
+        selection = self._history_context(self._selection_signature())
+        self._model_editor_service.update_geometry(
+            self._selected_entity_ref.index,
+            updated,
+            undo_context=selection,
+            redo_context=selection,
+        )
         self._refresh_scene()
         self._set_selected_row(self._selected_entity_ref.kind, self._selected_entity_ref.index)
         self.refresh_validation()
+        self._refresh_history_controls()
         self.model_changed.emit()
 
     def _resize_geometry(
@@ -2249,6 +2450,74 @@ class SceneCanvasPanel(QWidget):
         if self._selected_entity_ref is None:
             return None
         return self._selected_entity_ref.kind, self._selected_entity_ref.index
+
+    def _history_context(
+        self,
+        selection: tuple[str, int] | None,
+    ) -> _SceneHistoryContext:
+        return _SceneHistoryContext(selection=selection)
+
+    def _selection_from_history_context(
+        self,
+        context: object | None,
+    ) -> tuple[str, int] | None:
+        if isinstance(context, _SceneHistoryContext):
+            return context.selection
+        return self._selection_signature()
+
+    def _refresh_history_controls(self) -> None:
+        enabled = self._project is not None
+        self._undo_button.setEnabled(enabled and self._model_editor_service.can_undo())
+        self._redo_button.setEnabled(enabled and self._model_editor_service.can_redo())
+
+    def _undo_scene_change(self) -> None:
+        result = self._model_editor_service.undo()
+        if not result.applied:
+            return
+        self._loading_domain(self._project)
+        self._refresh_material_choices()
+        self._refresh_waveform_choices()
+        self._refresh_scene()
+        self._restore_selection(self._selection_from_history_context(result.context))
+        self.refresh_validation()
+        self._refresh_history_controls()
+        self.model_changed.emit()
+
+    def _redo_scene_change(self) -> None:
+        result = self._model_editor_service.redo()
+        if not result.applied:
+            return
+        self._loading_domain(self._project)
+        self._refresh_material_choices()
+        self._refresh_waveform_choices()
+        self._refresh_scene()
+        self._restore_selection(self._selection_from_history_context(result.context))
+        self.refresh_validation()
+        self._refresh_history_controls()
+        self.model_changed.emit()
+
+    def _focus_blocks_scene_shortcut(self) -> bool:
+        return isinstance(self.focusWidget(), QLineEdit)
+
+    def _handle_undo_shortcut(self) -> None:
+        if self._focus_blocks_scene_shortcut():
+            return
+        self._undo_scene_change()
+
+    def _handle_redo_shortcut(self) -> None:
+        if self._focus_blocks_scene_shortcut():
+            return
+        self._redo_scene_change()
+
+    def _handle_delete_shortcut(self) -> None:
+        if self._focus_blocks_scene_shortcut():
+            return
+        self._delete_selected()
+
+    def _handle_duplicate_shortcut(self) -> None:
+        if self._focus_blocks_scene_shortcut():
+            return
+        self._duplicate_selected()
 
     def _restore_selection(self, signature: tuple[str, int] | None) -> None:
         if signature is None:

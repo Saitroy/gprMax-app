@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import sys
 import tempfile
 import unittest
@@ -146,6 +147,86 @@ class ModelEditorServiceTests(unittest.TestCase):
             self.assertEqual(project.model.antenna_models[0].identifier, "ant_1")
             self.assertEqual(project.model.python_blocks, ["print('hello')"])
             self.assertEqual(project.advanced_input_overrides, ["#src_steps: 0.002 0 0"])
+
+    def test_history_batch_undo_and_redo_restore_receiver(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Editor Demo", Path(temp_dir))
+            state = AppState(
+                current_project=project,
+                current_project_validation=validate_project(project),
+            )
+            service = ModelEditorService(state)
+
+            with service.history_batch() as batch:
+                batch.undo_context = "before"
+                index = service.add_receiver()
+                receiver = copy.deepcopy(project.model.receivers[index])
+                receiver.position_m = Vector3(0.3, 0.4, 0.05)
+                service.update_receiver(index, receiver)
+                batch.redo_context = "after"
+
+            self.assertEqual(len(project.model.receivers), 1)
+            undo_result = service.undo()
+
+            self.assertTrue(undo_result.applied)
+            self.assertEqual(undo_result.context, "before")
+            self.assertEqual(len(project.model.receivers), 0)
+
+            redo_result = service.redo()
+
+            self.assertTrue(redo_result.applied)
+            self.assertEqual(redo_result.context, "after")
+            self.assertEqual(len(project.model.receivers), 1)
+            self.assertAlmostEqual(project.model.receivers[0].position_m.x, 0.3)
+            self.assertAlmostEqual(project.model.receivers[0].position_m.y, 0.4)
+
+    def test_history_clean_state_tracks_save_undo_redo_and_branching(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Editor Demo", Path(temp_dir))
+            state = AppState(
+                current_project=project,
+                current_project_validation=validate_project(project),
+            )
+            service = ModelEditorService(state)
+
+            service.add_material()
+            state.current_project_dirty = False
+
+            self.assertTrue(service.can_undo())
+            undo_result = service.undo()
+
+            self.assertTrue(undo_result.applied)
+            self.assertTrue(state.current_project_dirty)
+
+            redo_result = service.redo()
+
+            self.assertTrue(redo_result.applied)
+            self.assertFalse(state.current_project_dirty)
+
+            service.undo()
+            service.add_receiver()
+
+            self.assertTrue(state.current_project_dirty)
+            self.assertFalse(service.can_redo())
+
+    def test_history_batch_rolls_back_when_exception_escapes(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Editor Demo", Path(temp_dir))
+            state = AppState(
+                current_project=project,
+                current_project_validation=validate_project(project),
+            )
+            service = ModelEditorService(state)
+
+            with self.assertRaisesRegex(RuntimeError, "boom"):
+                with service.history_batch():
+                    service.add_receiver()
+                    raise RuntimeError("boom")
+
+            self.assertEqual(project.model.receivers, [])
+            self.assertFalse(service.can_undo())
+            self.assertFalse(service.can_redo())
+            self.assertFalse(state.current_project_dirty)
 
 
 if __name__ == "__main__":

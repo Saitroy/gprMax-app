@@ -329,6 +329,8 @@ _TRANSLATIONS["ru"].update(
     {
         "app.name": "GPRMax Workbench",
         "common.add": "Добавить",
+        "common.undo": "Отменить",
+        "common.redo": "Повторить",
         "common.duplicate": "Дублировать",
         "common.delete": "Удалить",
         "common.save": "Сохранить",
@@ -656,6 +658,8 @@ _TRANSLATIONS["en"].update(
     {
         "app.name": "GPRMax Workbench",
         "common.add": "Add",
+        "common.undo": "Undo",
+        "common.redo": "Redo",
         "common.duplicate": "Duplicate",
         "common.delete": "Delete",
         "common.save": "Save",
@@ -1391,6 +1395,7 @@ _TRANSLATIONS["ru"].update(
     {
         "editor.scene.snap": "Привязка к сетке",
         "editor.scene.grid_step": "Шаг сетки, м",
+        "editor.scene.history": "История",
         "editor.scene.inspector": "Инспектор сцены",
         "editor.scene.apply": "Применить позицию",
         "editor.scene.nudge_step": "Шаг сдвига, м",
@@ -1421,6 +1426,7 @@ _TRANSLATIONS["en"].update(
     {
         "editor.scene.snap": "Snap to grid",
         "editor.scene.grid_step": "Grid step, m",
+        "editor.scene.history": "History",
         "editor.scene.inspector": "Scene inspector",
         "editor.scene.apply": "Apply position",
         "editor.scene.nudge_step": "Nudge step, m",

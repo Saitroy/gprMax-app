@@ -455,6 +455,107 @@ class SceneCanvasPanelTests(unittest.TestCase):
             self.assertAlmostEqual(upper["x"], 1.0, places=6)
             self.assertAlmostEqual(upper["y"], 1.0, places=6)
 
+    def test_undo_redo_restores_created_receiver(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Scene Demo", Path(temp_dir))
+            state = AppState(
+                current_project=project,
+                current_project_validation=validate_project(project),
+            )
+            editor = ModelEditorService(state)
+            validation = ValidationService(state)
+            panel = SceneCanvasPanel(LocalizationService("en"), editor, validation)
+
+            panel.set_project(project)
+            panel._scene_tool_combo.setCurrentIndex(panel._scene_tool_combo.findData("create"))  # noqa: SLF001
+            panel._handle_palette_click("receiver")  # noqa: SLF001
+            panel._handle_empty_scene_click(0.25, 0.35)  # noqa: SLF001
+
+            self.assertEqual(len(project.model.receivers), 1)
+            self.assertTrue(panel._undo_button.isEnabled())  # noqa: SLF001
+            self.assertFalse(panel._redo_button.isEnabled())  # noqa: SLF001
+
+            panel._undo_scene_change()  # noqa: SLF001
+
+            self.assertEqual(len(project.model.receivers), 0)
+            self.assertFalse(panel._undo_button.isEnabled())  # noqa: SLF001
+            self.assertTrue(panel._redo_button.isEnabled())  # noqa: SLF001
+
+            panel._redo_scene_change()  # noqa: SLF001
+
+            self.assertEqual(len(project.model.receivers), 1)
+            self.assertAlmostEqual(project.model.receivers[0].position_m.x, 0.25)
+            self.assertAlmostEqual(project.model.receivers[0].position_m.y, 0.35)
+
+    def test_undo_delete_restores_selection(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Scene Demo", Path(temp_dir))
+            state = AppState(
+                current_project=project,
+                current_project_validation=validate_project(project),
+            )
+            editor = ModelEditorService(state)
+            validation = ValidationService(state)
+            receiver_index = editor.add_receiver()
+            panel = SceneCanvasPanel(LocalizationService("en"), editor, validation)
+
+            panel.set_project(project)
+            panel._set_selected_row("receiver", receiver_index)  # noqa: SLF001
+            panel._delete_selected()  # noqa: SLF001
+
+            self.assertEqual(len(project.model.receivers), 0)
+
+            panel._undo_scene_change()  # noqa: SLF001
+
+            self.assertEqual(len(project.model.receivers), 1)
+            self.assertIsNotNone(panel._selected_entity_ref)  # noqa: SLF001
+            self.assertEqual(panel._selected_entity_ref.kind, "receiver")  # noqa: SLF001
+            self.assertEqual(panel._selected_entity_ref.index, 0)  # noqa: SLF001
+
+    def test_undo_redo_restores_resized_geometry(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Scene Demo", Path(temp_dir))
+            project.model.domain.size_m = Vector3(1.0, 1.0, 0.1)
+            project.model.materials = [
+                MaterialDefinition(identifier="soil", relative_permittivity=4.0, conductivity=0.001)
+            ]
+            state = AppState(
+                current_project=project,
+                current_project_validation=validate_project(project),
+            )
+            editor = ModelEditorService(state)
+            validation = ValidationService(state)
+            geometry_index = editor.add_geometry("box")
+            geometry = project.model.geometry[geometry_index]
+            geometry.material_ids = ["soil"]
+            geometry.parameters["lower_left_m"] = {"x": 0.4, "y": 0.4, "z": 0.02}
+            geometry.parameters["upper_right_m"] = {"x": 0.6, "y": 0.6, "z": 0.08}
+            original = (
+                geometry.parameters["lower_left_m"].copy(),
+                geometry.parameters["upper_right_m"].copy(),
+            )
+            panel = SceneCanvasPanel(LocalizationService("en"), editor, validation)
+
+            panel.set_project(project)
+            panel._set_selected_row("geometry", geometry_index)  # noqa: SLF001
+            panel._scene_mode_combo.setCurrentIndex(panel._scene_mode_combo.findData("resize"))  # noqa: SLF001
+            panel._resize_geometry_from_handle_release("corner_br", panel._scene.sceneRect().bottomRight())  # noqa: SLF001
+
+            resized = project.model.geometry[geometry_index]
+            self.assertNotEqual(resized.parameters["lower_left_m"], original[0])
+
+            panel._undo_scene_change()  # noqa: SLF001
+
+            restored = project.model.geometry[geometry_index]
+            self.assertEqual(restored.parameters["lower_left_m"], original[0])
+            self.assertEqual(restored.parameters["upper_right_m"], original[1])
+
+            panel._redo_scene_change()  # noqa: SLF001
+
+            redone = project.model.geometry[geometry_index]
+            self.assertAlmostEqual(redone.parameters["lower_left_m"]["x"], 0.0, places=6)
+            self.assertAlmostEqual(redone.parameters["upper_right_m"]["x"], 1.0, places=6)
+
 
 if __name__ == "__main__":
     unittest.main()
