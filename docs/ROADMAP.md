@@ -2,275 +2,336 @@
 
 ## Русский
 
-## Stage 0: Discovery и архитектура
+### Статус
 
-Поставки:
+`GPRMax Workbench` остаётся продуктом в активной разработке.
 
-- проанализировать `gprMax` и исторический `gprMax-Designer`;
-- определить архитектуру, структуру проекта и начальные technical decisions;
-- задокументировать product direction и engineering direction.
+Что уже заложено:
 
-Критерии выхода:
+- Stages 0-5 достигнуты на уровне foundation/MVP: архитектура, project model, persistence, guided editor, simulation runner и results viewer уже существуют;
+- проект уже пригоден для раннего тестирования и итеративной доработки;
+- packaging для Windows и bundled runtime остаются отложенными задачами, а не ближайшим приоритетом.
 
-- архитектура и integration strategy задокументированы;
-- initial decisions сформулированы явно и доступны для review.
+Текущий продуктовый фокус:
 
-## Stage 1: Skeleton и app shell
+- `simulation workflow`
+- `scene editor`
+- `result analysis`
 
-Поставки:
+Главный принцип текущего цикла: сначала сделать сильный пользовательский путь `собрал сцену -> запустил расчёт -> понял результат`, и только потом переходить к packaging/distribution work.
 
-- layout репозитория и packaging metadata;
-- запускаемая PySide6 application shell;
-- главное окно со стабильной top-level navigation;
-- placeholder views для welcome, model editor, runs, results и settings;
-- application context, logging bootstrap и service skeletons.
+### Ближайший roadmap: 8-12 недель
 
-Критерии выхода:
+## Milestone 1: Reliable Simulation Workflow
 
-- desktop app открывается и позволяет переключаться между screens;
-- codebase имеет чистую baseline для итеративной разработки.
+Window:
 
-## Stage 2: Project model, persistence и settings
+- Weeks 1-2
 
-Поставки:
+GitHub milestone:
 
-- versioned project manifest format;
-- flows create/open/save, подключённые к UI;
-- recent projects с persisted metadata;
-- scaffolding структуры директорий проекта;
-- typed essential project model, выровненная с docs `gprMax`;
-- validation правил уровня persistence;
-- persistence application settings.
+- `v0.4 - Simulation Workflow Hardening`
 
-Критерии выхода:
+Epics:
 
-- пользователь может создавать и повторно открывать проекты без ручной работы с raw files.
+- `simulation-preflight-and-readiness`
+- `run-lifecycle-and-recovery`
+- `run-snapshot-and-reproducibility`
+- `simulation-integration-smoke-suite`
+- `validation-and-error-copy`
 
-## Stage 3: `gprMax` integration layer и runner
+Scope:
 
-Поставки:
+- preflight перед запуском: runtime health, validation state, path checks, disk/output checks;
+- более надёжные сценарии `start / cancel / retry / rerun from history`;
+- сохранение точного generated input, run config и command line для каждого run;
+- улучшенные user-facing ошибки вместо слишком технических сообщений;
+- integration smoke tests на сценариях success, cancel, timeout, broken runtime, missing output, failed merge.
 
-- subprocess adapter для `gprMax`;
-- input generation service и writer;
-- run configuration model;
-- stdout/stderr capture с live UI updates;
-- run history и per-run metadata manifests;
-- validation перед запуском;
-- failure reporting и cancellation.
+Exit criteria:
 
-Критерии выхода:
+- новый пользователь может создать проект, запустить расчёт, отменить или повторить его без CLI;
+- по каждому run видно, что именно было запущено;
+- сбои объясняются через UI достаточно ясно, чтобы пользователь понял следующий шаг.
 
-- проект может запускать реальный `gprMax` run из GUI и сохранять artifacts.
+## Milestone 2: Scene Editor Core UX
 
-## Stage 4: Model Editor MVP
+Window:
 
-Поставки:
+- Weeks 3-5
 
-- guided forms для core model parameters;
-- materials, waveforms, sources, receivers и focused geometry subset;
-- validation и sensible defaults;
-- generated input preview;
-- wiring с project state, persistence и existing simulation runner.
+GitHub milestone:
 
-Критерии выхода:
+- `v0.5 - Scene Editor Core UX`
 
-- непограммист может собрать базовую модель без ручного написания input-файла.
+Epics:
 
-## Stage 5: Results Viewer MVP
+- `scene-undo-redo`
+- `scene-multi-select-and-group-actions`
+- `scene-keyboard-workflow`
+- `scene-precision-editing`
+- `scene-3d-navigation-foundation`
 
-Поставки:
+Scope:
 
-- run-centric results browser по проекту и run;
-- HDF5 result reader layer;
-- metadata summary и visibility artifacts;
-- A-scan plotting;
-- bounded B-scan preview flow;
-- открытие result folder и artifacts из UI.
+- полноценный `undo/redo` для scene actions и inspector edits;
+- multi-select, marquee selection, group move/delete/duplicate;
+- keyboard workflow: delete, duplicate, undo/redo, nudge, mode switching, fit;
+- axis locking, proportional resize, stronger snapping, exact dimension editing from canvas actions;
+- depth/slice control и лучшее соответствие 2D plane editing реальной 3D-модели.
 
-Критерии выхода:
+Exit criteria:
 
-- пользователь может inspect run outputs и понять, где именно записаны artifacts.
+- типичная модель собирается через canvas быстрее и безопаснее, чем через raw input;
+- пользователь не боится редактировать сцену, потому что любое действие обратимо;
+- editor поддерживает как быстрые визуальные правки, так и точное числовое редактирование.
 
-## Stage 6: Advanced mode
+## Milestone 3: Results Analysis V2
 
-Поставки:
+Window:
 
-- raw input editor и diff/preview с generated input;
-- advanced run options;
-- более глубокие post-processing и power-user results workflows;
-- expert settings без деградации guided flow.
+- Weeks 6-8
 
-Критерии выхода:
+GitHub milestone:
 
-- power users сохраняют широкий контроль над возможностями `gprMax`.
+- `v0.6 - Results Analysis V2`
 
-## Stage 7: Packaging и installer
+Epics:
 
-Поставки:
+- `ascan-analysis-tools`
+- `bscan-visual-controls`
+- `results-comparison-workflow`
+- `results-traceability`
+- `reporting-and-export`
 
-- standalone build pipeline;
-- Windows installer;
-- первая стратегия bundling/runtime management для `gprMax`.
+Scope:
 
-Критерии выхода:
+- для A-scan: cursors, delta measurements, peak picking, FFT/spectrum, export CSV/PNG;
+- для B-scan: gain, contrast, colormap presets, time-zero/background controls;
+- side-by-side и overlay compare workflows для разных run'ов;
+- явная связь results с run config, generated input и metadata;
+- экспорт изображений, графиков и компактных summary для отчётов и issue reports.
 
-- новый пользователь может установить и открыть приложение без ручной настройки Python.
+Exit criteria:
 
-## Stage 8: Documentation, tests и release preparation
+- пользователь может не только открыть output, но и реально анализировать его внутри приложения;
+- сравнение run-to-run становится встроенной возможностью, а не ручной работой во внешних инструментах;
+- результаты можно удобно экспортировать для публикаций, отчётов и bug reports.
 
-Поставки:
+## Milestone 4: OSS Readiness and Stabilization
 
-- developer docs и contributor guidance;
-- расширенные unit/integration tests;
-- release checklist и baseline CI.
+Window:
 
-Критерии выхода:
+- Weeks 9-10
 
-- проект готов к внешним контрибьюторам и early adopters.
+GitHub milestone:
+
+- `v0.7 - OSS Readiness and Stabilization`
+
+Epics:
+
+- `quality-gates-and-ci`
+- `sample-projects-and-guides`
+- `project-format-stability`
+- `supportability`
+
+Scope:
+
+- CI с `tests`, lint и type checks;
+- 2-3 example projects и короткие user workflows в документации;
+- manifest versioning и foundation для migration hooks;
+- crash/log bundle, issue templates и воспроизводимый bug-report checklist.
+
+Exit criteria:
+
+- внешний пользователь может быстро понять, как начать работу;
+- внешний контрибьютор может локально поднять проект и внести изменение без скрытого контекста;
+- продукт лучше переживает эволюцию project format и пользовательские сбои.
+
+### Что осознанно отложено
+
+- Windows packaging и installer;
+- bundled engine distribution;
+- широкое покрытие редких/edge-case `gprMax` commands до стабилизации core workflow;
+- крупный архитектурный rewrite без давления реальных user scenarios.
+
+### Suggested GitHub Labels / Milestones
+
+- `v0.4 - Simulation Workflow Hardening`
+- `v0.5 - Scene Editor Core UX`
+- `v0.6 - Results Analysis V2`
+- `v0.7 - OSS Readiness and Stabilization`
+
+Cross-milestone epics:
+
+- `guided-editor-command-coverage`
+- `project-migration-and-compatibility`
+- `user-facing-diagnostics-and-recovery`
 
 ## English
 
-## Stage 0: Discovery and architecture
+### Status
 
-Deliverables:
+`GPRMax Workbench` is still under active development.
 
-- analyze `gprMax` and the historical `gprMax-Designer`;
-- define architecture, project structure, and initial technical decisions;
-- document product and engineering direction.
+What is already in place:
 
-Exit criteria:
+- Stages 0-5 exist at a foundation/MVP level: architecture, project model, persistence, guided editor, simulation runner, and results viewer are already present;
+- the project is already usable for early testing and iterative refinement;
+- Windows packaging and bundled runtime work are intentionally deferred and are not the current top priority.
 
-- architecture and integration strategy are documented;
-- initial decisions are explicit and reviewable.
+Current product focus:
 
-## Stage 1: Skeleton and app shell
+- `simulation workflow`
+- `scene editor`
+- `result analysis`
 
-Deliverables:
+The guiding principle of the current cycle is to make the core user path strong first: `build a scene -> run a simulation -> understand the result`, and only then move on to packaging and distribution work.
 
-- repository layout and packaging metadata;
-- runnable PySide6 application shell;
-- main window with stable top-level navigation;
-- placeholder views for welcome, model editor, runs, results, and settings;
-- application context, logging bootstrap, and service skeletons.
+### Near-term roadmap: 8-12 weeks
 
-Exit criteria:
+## Milestone 1: Reliable Simulation Workflow
 
-- desktop app opens and navigates between screens;
-- codebase has a clean baseline for iterative work.
+Window:
 
-## Stage 2: Project model, persistence, and settings
+- Weeks 1-2
 
-Deliverables:
+GitHub milestone:
 
-- versioned project manifest format;
-- create/open/save flows connected to the UI;
-- recent projects with persisted metadata;
-- project directory scaffolding;
-- typed essential project model aligned with `gprMax` docs;
-- project validation for persistence-stage rules;
-- application settings persistence.
+- `v0.4 - Simulation Workflow Hardening`
 
-Exit criteria:
+Epics:
 
-- users can create and reopen projects without touching raw files.
+- `simulation-preflight-and-readiness`
+- `run-lifecycle-and-recovery`
+- `run-snapshot-and-reproducibility`
+- `simulation-integration-smoke-suite`
+- `validation-and-error-copy`
 
-## Stage 3: `gprMax` integration layer and runner
+Scope:
 
-Deliverables:
-
-- subprocess adapter for `gprMax`;
-- input generation service and writer;
-- run configuration model;
-- stdout/stderr capture with live UI updates;
-- run history and per-run metadata manifests;
-- validation before launch;
-- failure reporting and cancellation.
+- preflight checks before launch: runtime health, validation state, paths, disk/output checks;
+- more reliable `start / cancel / retry / rerun from history` flows;
+- persist exact generated input, run config, and command line for every run;
+- improve user-facing failures instead of exposing overly technical errors;
+- add integration smoke tests for success, cancel, timeout, broken runtime, missing output, and failed merge scenarios.
 
 Exit criteria:
 
-- a project can launch a real `gprMax` run from the GUI and preserve artifacts.
+- a new user can create a project, launch a simulation, cancel or retry it without CLI usage;
+- every run clearly shows what was launched;
+- failures are explained well enough through the UI for the user to know what to do next.
 
-## Stage 4: Model editor MVP
+## Milestone 2: Scene Editor Core UX
 
-Deliverables:
+Window:
 
-- guided forms for core model parameters;
-- materials, waveforms, sources, receivers, and focused geometry subset;
-- validation and sensible defaults;
-- generated input preview;
-- wiring to project state, persistence, and the existing simulation runner.
+- Weeks 3-5
 
-Exit criteria:
+GitHub milestone:
 
-- non-programmer users can build a basic model without hand-writing input.
+- `v0.5 - Scene Editor Core UX`
 
-## Stage 5: Results viewer MVP
+Epics:
 
-Deliverables:
+- `scene-undo-redo`
+- `scene-multi-select-and-group-actions`
+- `scene-keyboard-workflow`
+- `scene-precision-editing`
+- `scene-3d-navigation-foundation`
 
-- run-centric results browser by project and run;
-- HDF5 result reader layer;
-- metadata summary and artifact visibility;
-- A-scan plotting;
-- bounded B-scan preview flow;
-- open result folder and artifacts from UI.
+Scope:
 
-Exit criteria:
-
-- users can inspect run outputs and identify where artifacts were written.
-
-## Stage 6: Advanced mode
-
-Deliverables:
-
-- raw input editor and diff/preview with generated input;
-- advanced run options;
-- deeper post-processing and power-user results workflows;
-- expert settings without degrading the guided flow.
+- full `undo/redo` for scene actions and inspector edits;
+- multi-select, marquee selection, group move/delete/duplicate;
+- keyboard workflow for delete, duplicate, undo/redo, nudge, mode switching, and fit;
+- axis locking, proportional resize, stronger snapping, and exact dimension editing from canvas interactions;
+- depth/slice controls and better mapping between 2D plane editing and the underlying 3D model.
 
 Exit criteria:
 
-- power users retain broad control over `gprMax` features.
+- a typical model can be built through the canvas faster and more safely than through raw input;
+- users are not afraid to edit the scene because every action is reversible;
+- the editor supports both quick visual manipulation and precise numeric editing.
 
-## Stage 7: Packaging and installer
+## Milestone 3: Results Analysis V2
 
-Deliverables:
+Window:
 
-- standalone build pipeline;
-- Windows installer;
-- first strategy for bundling or managing the `gprMax` runtime.
+- Weeks 6-8
+
+GitHub milestone:
+
+- `v0.6 - Results Analysis V2`
+
+Epics:
+
+- `ascan-analysis-tools`
+- `bscan-visual-controls`
+- `results-comparison-workflow`
+- `results-traceability`
+- `reporting-and-export`
+
+Scope:
+
+- for A-scan: cursors, delta measurements, peak picking, FFT/spectrum, CSV/PNG export;
+- for B-scan: gain, contrast, colormap presets, time-zero/background controls;
+- side-by-side and overlay comparison workflows across runs;
+- explicit links from results back to run configuration, generated input, and metadata;
+- export images, plots, and compact summaries for reports and issue reports.
 
 Exit criteria:
 
-- a new user can install and open the application without manual Python setup.
+- users can meaningfully analyze outputs inside the app, not just open them;
+- run-to-run comparison becomes a built-in workflow instead of a manual external step;
+- results can be exported cleanly for publications, reports, and bug reports.
 
-## Stage 8: Documentation, tests, and release preparation
+## Milestone 4: OSS Readiness and Stabilization
 
-Deliverables:
+Window:
 
-- developer docs and contributor guidance;
-- expanded unit and integration tests;
-- release checklist and CI baseline.
+- Weeks 9-10
+
+GitHub milestone:
+
+- `v0.7 - OSS Readiness and Stabilization`
+
+Epics:
+
+- `quality-gates-and-ci`
+- `sample-projects-and-guides`
+- `project-format-stability`
+- `supportability`
+
+Scope:
+
+- CI with `tests`, linting, and type checks;
+- 2-3 example projects and short user workflows in the documentation;
+- manifest versioning and a foundation for migration hooks;
+- crash/log bundles, issue templates, and a reproducible bug-report checklist.
 
 Exit criteria:
 
-- the project is ready for external contributors and early adopters.
-# Stage 6
+- external users can understand how to start quickly;
+- external contributors can get the project running locally and contribute without hidden context;
+- the product handles project format evolution and user failures more safely.
 
-## Русский
+### Explicitly deferred
 
-- bundled-first runtime foundation;
-- engine resolution layer;
-- installer-oriented path management;
-- runtime diagnostics and capability reporting;
-- settings UI as runtime/health screen;
-- foundation for future installer and release engineering.
+- Windows packaging and installer work;
+- bundled engine distribution;
+- broad coverage of rare or edge-case `gprMax` commands before the core workflow is stable;
+- large architectural rewrites without pressure from real user scenarios.
 
-## English
+### Suggested GitHub Labels / Milestones
 
-- bundled-first runtime foundation;
-- engine resolution layer;
-- installer-oriented path management;
-- runtime diagnostics and capability reporting;
-- settings UI as a runtime/health screen;
-- foundation for future installer and release engineering.
+- `v0.4 - Simulation Workflow Hardening`
+- `v0.5 - Scene Editor Core UX`
+- `v0.6 - Results Analysis V2`
+- `v0.7 - OSS Readiness and Stabilization`
+
+Cross-milestone epics:
+
+- `guided-editor-command-coverage`
+- `project-migration-and-compatibility`
+- `user-facing-diagnostics-and-recovery`

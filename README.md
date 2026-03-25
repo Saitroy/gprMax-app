@@ -6,6 +6,8 @@
 
 Проект ориентирован на геофизиков, инженеров, исследователей, преподавателей и студентов, которым нужна вычислительная мощность `gprMax`, но без обязательной работы через CLI, ручного написания input-файлов и самостоятельной сборки Python-окружения.
 
+> Статус: приложение находится в активной разработке. Оно уже пригодно для раннего тестирования, но ещё не является feature-complete, и интерфейсы, workflow и формат project data могут меняться между релизами.
+
 ### Цели
 
 - сделать создание проектов и запуск симуляций доступными для непограммистов;
@@ -127,6 +129,8 @@ python -m unittest discover -s tests
 `GPRMax Workbench` is a modern desktop GUI for `gprMax` built with Python and PySide6.
 
 The project targets geophysicists, engineers, researchers, teachers, and students who need the power of `gprMax` without forcing them to work through raw CLI flows, handwritten input files, or Python environment setup.
+
+> Status: the application is still under active development. It is already usable for early testing, but it is not yet feature-complete, and the UI, workflows, and project data format may still change between releases.
 
 ### Goals
 
