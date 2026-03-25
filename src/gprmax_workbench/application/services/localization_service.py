@@ -156,6 +156,7 @@ _EXTERNAL_EXACT_TRANSLATIONS_RU: dict[str, str] = {
     "B-scan preview is unavailable for the selected receiver/component in this run.": "B-scan preview недоступен для выбранного приёмника/компонента в этом запуске.",
     "Built B-scan preview by stacking individual output files.": "B-scan preview построен путём объединения отдельных output-файлов.",
     "A simulation run is already active.": "Симуляция уже запущена.",
+    "Simulation is not ready to run.": "Симуляция пока не готова к запуску.",
     "Run artifacts were not created.": "Артефакты запуска не были созданы.",
     "gprMax exited with a non-zero status code.": "gprMax завершился с ненулевым кодом возврата.",
     "Simulation preparation failed.": "Не удалось подготовить симуляцию.",
@@ -167,6 +168,10 @@ _EXTERNAL_EXACT_TRANSLATIONS_RU: dict[str, str] = {
     "MPI execution is unavailable because the base gprMax runtime is not healthy.": "MPI-запуск недоступен, потому что базовый runtime gprMax сейчас недоступен или повреждён.",
     "GPU execution is not available in the current runtime. Disable 'Use GPU' or install pycuda support in the bundled engine.": "Запуск на GPU недоступен в текущем runtime. Отключите «Использовать GPU» или добавьте поддержку pycuda во встроенное ядро.",
     "MPI execution is not available in the current runtime. Disable MPI or install mpi4py support in the bundled engine.": "MPI-запуск недоступен в текущем runtime. Отключите MPI или добавьте поддержку mpi4py во встроенное ядро.",
+    "Run cancelled by user.": "Запуск отменён пользователем.",
+    "A previous simulation run was left in a stale running state and has been reset.": "Предыдущий запуск остался в устаревшем состоянии выполнения и был сброшен.",
+    "The active simulation run had no live process attached and was reset.": "У активного запуска не было привязанного живого процесса, состояние сброшено.",
+    "The run was recovered from a stale in-progress state because no live process was attached.": "Запуск был восстановлен из устаревшего незавершённого состояния, потому что живой процесс не был привязан.",
 }
 
 _EXTERNAL_PATTERN_TRANSLATIONS_RU: list[
@@ -194,6 +199,9 @@ _EXTERNAL_PATTERN_TRANSLATIONS_RU: list[
     (re.compile(r"^Python executable not found: (.+)$"), "external.python_not_found", lambda match: {"path": match.group(1)}),
     (re.compile(r"^Timed out while checking the gprMax runtime\\.$"), "external.runtime_probe_timeout", _identity_builder),
     (re.compile(r"^gprMax module '(.+)' is not available in (.+)\.$"), "external.gprmax_module_missing", lambda match: {"module_name": match.group(1), "runtime": match.group(2)}),
+    (re.compile(r"^Path is not writable: (.+) \\((.+)\\)$"), "external.path_not_writable", lambda match: {"path": match.group(1), "detail": match.group(2)}),
+    (re.compile(r"^Could not inspect free disk space for (.+): (.+)$"), "external.disk_space_probe_failed", lambda match: {"path": match.group(1), "detail": match.group(2)}),
+    (re.compile(r"^Free disk space is very low in the project location: (.+) bytes remaining\\.$"), "external.disk_space_low", lambda match: {"bytes_remaining": match.group(1)}),
 ]
 
 _TRANSLATIONS["ru"].update(
@@ -1436,5 +1444,45 @@ _TRANSLATIONS["en"].update(
         "editor.advanced.move_up": "Move up",
         "editor.advanced.move_down": "Move down",
         "editor.advanced.delete_block": "Delete block",
+    }
+)
+
+_TRANSLATIONS["ru"].update(
+    {
+        "simulation.readiness_label": "Готовность к запуску",
+        "simulation.action.retry": "Повторить запуск",
+        "simulation.readiness.ready": "Готово к запуску",
+        "simulation.readiness.not_ready": "Запуск недоступен",
+        "simulation.readiness.busy": "Идёт другой запуск",
+        "simulation.readiness.no_project": "Нет проекта для запуска",
+        "simulation.metric.readiness": "Готовность",
+        "external.path_not_writable": "Путь недоступен для записи: {path} ({detail})",
+        "external.disk_space_probe_failed": "Не удалось проверить свободное место на диске для {path}: {detail}",
+        "external.disk_space_low": "В каталоге проекта почти не осталось места на диске: {bytes_remaining} байт(а) свободно.",
+    }
+)
+
+_TRANSLATIONS["en"].update(
+    {
+        "simulation.readiness_label": "Run readiness",
+        "simulation.action.retry": "Retry Run",
+        "simulation.readiness.ready": "Ready to run",
+        "simulation.readiness.not_ready": "Not ready to run",
+        "simulation.readiness.busy": "Another run is active",
+        "simulation.readiness.no_project": "No project selected",
+        "simulation.metric.readiness": "Readiness",
+        "external.path_not_writable": "Path is not writable: {path} ({detail})",
+        "external.disk_space_probe_failed": "Could not inspect free disk space for {path}: {detail}",
+        "external.disk_space_low": "Free disk space is very low in the project location: {bytes_remaining} bytes remaining.",
+    }
+)
+
+_EXTERNAL_EXACT_TRANSLATIONS_RU.update(
+    {
+        "Run cancelled by user.": "Запуск отменён пользователем.",
+        "Simulation is not ready to run.": "Симуляция пока не готова к запуску.",
+        "A previous simulation run was left in a stale running state and has been reset.": "Предыдущий запуск остался в устаревшем состоянии выполнения и был сброшен.",
+        "The active simulation run had no live process attached and was reset.": "У активного запуска не было привязанного живого процесса, состояние сброшено.",
+        "The run was recovered from a stale in-progress state because no live process was attached.": "Запуск был восстановлен из устаревшего незавершённого состояния, потому что живой процесс не был привязан.",
     }
 )

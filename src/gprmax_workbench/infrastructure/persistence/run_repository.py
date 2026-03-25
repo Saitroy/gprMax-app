@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from ...domain.execution_status import SimulationMode, SimulationStatus
-from ...domain.gprmax_config import SimulationRunConfig
+from ...domain.gprmax_config import GprMaxRuntimeConfig, SimulationRunConfig
 from ...domain.simulation import RUN_SCHEMA_NAME, RUN_SCHEMA_VERSION, SimulationRunRecord
 
 
@@ -34,9 +34,24 @@ class RunRepository:
             "combined_log_path": str(run_record.combined_log_path),
             "metadata_path": str(run_record.metadata_path),
             "command": list(run_record.command),
+            "runtime": {
+                "python_executable": (
+                    getattr(run_record.runtime, "python_executable", "")
+                    if run_record.runtime is not None
+                    else ""
+                ),
+                "module_name": (
+                    getattr(run_record.runtime, "module_name", "")
+                    if run_record.runtime is not None
+                    else ""
+                ),
+                "label": run_record.runtime_label,
+            },
             "exit_code": run_record.exit_code,
             "error_summary": run_record.error_summary,
             "output_files": list(run_record.output_files),
+            "preflight_messages": list(run_record.preflight_messages),
+            "input_sha256": run_record.input_sha256,
             "configuration": {
                 "mode": run_record.configuration.mode.value,
                 "use_gpu": run_record.configuration.use_gpu,
@@ -71,6 +86,7 @@ class RunRepository:
     def load(self, metadata_path: Path) -> SimulationRunRecord:
         payload = json.loads(metadata_path.read_text(encoding="utf-8"))
         configuration_payload = payload.get("configuration", {})
+        runtime_payload = payload.get("runtime", {})
         base_dir = metadata_path.parent
         return SimulationRunRecord(
             run_id=str(payload["run_id"]),
@@ -103,9 +119,13 @@ class RunRepository:
             ),
             metadata_path=_deserialize_path(payload["metadata_path"], base_dir=base_dir),
             command=[str(item) for item in payload.get("command", [])],
+            runtime=_deserialize_runtime(runtime_payload),
+            runtime_label=str(runtime_payload.get("label", "")),
             exit_code=payload.get("exit_code"),
             error_summary=str(payload.get("error_summary", "")),
             output_files=[str(item) for item in payload.get("output_files", [])],
+            preflight_messages=[str(item) for item in payload.get("preflight_messages", [])],
+            input_sha256=str(payload.get("input_sha256", "")),
             configuration=SimulationRunConfig(
                 mode=SimulationMode(configuration_payload.get("mode", "normal")),
                 use_gpu=bool(configuration_payload.get("use_gpu", False)),
@@ -143,3 +163,16 @@ def _deserialize_path(value: Any, *, base_dir: Path) -> Path:
     if raw.is_absolute():
         return raw
     return (base_dir / raw).resolve()
+
+
+def _deserialize_runtime(payload: Any) -> GprMaxRuntimeConfig | None:
+    if not isinstance(payload, dict):
+        return None
+    python_executable = str(payload.get("python_executable", "")).strip()
+    if not python_executable:
+        return None
+    module_name = str(payload.get("module_name", "gprMax")).strip() or "gprMax"
+    return GprMaxRuntimeConfig(
+        python_executable=python_executable,
+        module_name=module_name,
+    )

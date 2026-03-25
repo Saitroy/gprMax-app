@@ -38,9 +38,11 @@ class SimulationView(QWidget):
     preview_requested = Signal()
     export_requested = Signal()
     start_requested = Signal()
+    retry_requested = Signal()
     cancel_requested = Signal()
     open_run_directory_requested = Signal()
     open_output_directory_requested = Signal()
+    configuration_changed = Signal()
 
     def __init__(
         self,
@@ -52,6 +54,9 @@ class SimulationView(QWidget):
         super().__init__(parent)
         self._localization = localization
         self._card_headings: dict[str, QLabel] = {}
+        self._start_allowed = False
+        self._run_in_progress = False
+        self._has_retry_target = False
 
         self._title = QLabel()
         self._title.setObjectName("ViewTitle")
@@ -61,6 +66,7 @@ class SimulationView(QWidget):
         self._subtitle.setWordWrap(True)
 
         self._runtime_label = QLabel(runtime_label)
+        self._readiness_state_label = QLabel()
         self._project_state_label = QLabel()
         self._status_label = QLabel()
         self._validation_label = QLabel()
@@ -70,6 +76,7 @@ class SimulationView(QWidget):
         self._section_nav.currentRowChanged.connect(self._on_section_changed)
         self._section_stack = QStackedWidget()
 
+        self._readiness_tile = MetricTile()
         self._mode_tile = MetricTile()
         self._runs_tile = MetricTile()
         self._activity_tile = MetricTile()
@@ -77,12 +84,12 @@ class SimulationView(QWidget):
         self._mode_combo = QComboBox()
         self._mode_combo.addItem("", SimulationMode.NORMAL.value)
         self._mode_combo.addItem("", SimulationMode.GEOMETRY_ONLY.value)
-        self._mode_combo.currentIndexChanged.connect(self._refresh_configuration_summary)
+        self._mode_combo.currentIndexChanged.connect(self._on_configuration_widget_changed)
 
         self._num_runs_spinbox = QSpinBox()
         self._num_runs_spinbox.setRange(1, 1_000_000)
         self._num_runs_spinbox.setValue(1)
-        self._num_runs_spinbox.valueChanged.connect(self._refresh_configuration_summary)
+        self._num_runs_spinbox.valueChanged.connect(self._on_configuration_widget_changed)
 
         self._restart_spinbox = QSpinBox()
         self._restart_spinbox.setRange(0, 1_000_000)
@@ -98,6 +105,13 @@ class SimulationView(QWidget):
         self._mpi_no_spawn_checkbox = QCheckBox()
         self._extra_args_edit = QLineEdit()
         self._extra_args_edit.setPlaceholderText("")
+        self._restart_spinbox.valueChanged.connect(self._on_configuration_widget_changed)
+        self._mpi_tasks_spinbox.valueChanged.connect(self._on_configuration_widget_changed)
+        self._geometry_fixed_checkbox.toggled.connect(self._on_configuration_widget_changed)
+        self._write_processed_checkbox.toggled.connect(self._on_configuration_widget_changed)
+        self._benchmark_checkbox.toggled.connect(self._on_configuration_widget_changed)
+        self._mpi_no_spawn_checkbox.toggled.connect(self._on_configuration_widget_changed)
+        self._extra_args_edit.textChanged.connect(self._on_configuration_widget_changed)
 
         self._preview_text = QPlainTextEdit()
         self._preview_text.setReadOnly(True)
@@ -108,6 +122,7 @@ class SimulationView(QWidget):
         self._log_text.setPlaceholderText("")
 
         self._run_history = QListWidget()
+        self._run_history.currentRowChanged.connect(lambda _row: self._update_action_state())
 
         self._preview_button = QPushButton()
         self._preview_button.clicked.connect(self.preview_requested.emit)
@@ -118,6 +133,9 @@ class SimulationView(QWidget):
         self._start_button = QPushButton()
         self._start_button.setObjectName("PrimaryButton")
         self._start_button.clicked.connect(self.start_requested.emit)
+
+        self._retry_button = QPushButton()
+        self._retry_button.clicked.connect(self.retry_requested.emit)
 
         self._cancel_button = QPushButton()
         self._cancel_button.clicked.connect(self.cancel_requested.emit)
@@ -130,6 +148,7 @@ class SimulationView(QWidget):
 
         self._action_bar = FlowLayout(horizontal_spacing=10, vertical_spacing=10)
         self._action_bar.addWidget(self._start_button)
+        self._action_bar.addWidget(self._retry_button)
         self._action_bar.addWidget(self._preview_button)
         self._action_bar.addWidget(self._export_button)
         self._action_bar.addWidget(self._cancel_button)
@@ -137,6 +156,7 @@ class SimulationView(QWidget):
         self._action_bar.addWidget(self._open_output_button)
 
         metrics_row = FlowLayout(horizontal_spacing=12, vertical_spacing=12)
+        metrics_row.addWidget(self._readiness_tile)
         metrics_row.addWidget(self._mode_tile)
         metrics_row.addWidget(self._runs_tile)
         metrics_row.addWidget(self._activity_tile)
@@ -230,6 +250,11 @@ class SimulationView(QWidget):
 
         self.retranslate_ui()
         self._section_nav.setCurrentRow(0)
+        self.set_readiness_state(
+            summary=self._localization.text("simulation.readiness.no_project"),
+            caption=runtime_label,
+            start_allowed=False,
+        )
         self.set_run_state(None, [])
         self.set_project_state(project_name=None, is_dirty=False)
         self._refresh_configuration_summary()
@@ -291,6 +316,11 @@ class SimulationView(QWidget):
 
     def set_runtime_label(self, runtime_label: str) -> None:
         self._runtime_label.setText(runtime_label)
+        self._readiness_tile.set_content(
+            eyebrow=self._localization.text("simulation.metric.readiness"),
+            value=self._readiness_state_label.text(),
+            caption=runtime_label,
+        )
 
     def set_project_state(self, *, project_name: str | None, is_dirty: bool) -> None:
         if project_name is None:
@@ -319,6 +349,22 @@ class SimulationView(QWidget):
             return
         self._validation_label.setText("\n".join(messages))
 
+    def set_readiness_state(
+        self,
+        *,
+        summary: str,
+        caption: str = "",
+        start_allowed: bool,
+    ) -> None:
+        self._readiness_state_label.setText(summary)
+        self._start_allowed = start_allowed
+        self._readiness_tile.set_content(
+            eyebrow=self._localization.text("simulation.metric.readiness"),
+            value=summary,
+            caption=caption or self._runtime_label.text(),
+        )
+        self._update_action_state()
+
     def set_input_preview(self, preview_text: str) -> None:
         self._preview_text.setPlainText(preview_text)
 
@@ -337,21 +383,19 @@ class SimulationView(QWidget):
             self._status_label.setText(
                 self._localization.text("simulation.run_state.none")
             )
-            self._cancel_button.setEnabled(False)
-            self._start_button.setEnabled(True)
+            self._run_in_progress = False
         else:
-            self._status_label.setText(
-                self._localization.text(
-                    "simulation.run_state.active",
-                    run_id=active_run.run_id,
-                    status=self._localization.simulation_status_text(
-                        active_run.status.value
-                    ),
-                )
+            status_text = self._localization.text(
+                "simulation.run_state.active",
+                run_id=active_run.run_id,
+                status=self._localization.simulation_status_text(
+                    active_run.status.value
+                ),
             )
-            is_running = active_run.status.value in {"preparing", "running"}
-            self._cancel_button.setEnabled(is_running)
-            self._start_button.setEnabled(not is_running)
+            if active_run.error_summary and active_run.status.value in {"failed", "cancelled"}:
+                status_text = f"{status_text} | {active_run.error_summary}"
+            self._status_label.setText(status_text)
+            self._run_in_progress = active_run.status.value in {"preparing", "running"}
         self._activity_tile.set_content(
             eyebrow=self._localization.text("simulation.metric.activity"),
             value=self._status_label.text(),
@@ -371,6 +415,8 @@ class SimulationView(QWidget):
                 self._run_history.setCurrentItem(item)
         if self._run_history.currentItem() is None and self._run_history.count() > 0:
             self._run_history.setCurrentRow(0)
+        self._has_retry_target = bool(history)
+        self._update_action_state()
 
     def selected_run_id(self) -> str | None:
         item = self._run_history.currentItem()
@@ -382,9 +428,13 @@ class SimulationView(QWidget):
     def _build_runtime_widget(self) -> QWidget:
         widget = QWidget()
         layout = QFormLayout(widget)
+        self._runtime_row_label = QLabel()
+        self._readiness_row_label = QLabel()
         self._project_state_row_label = QLabel()
         self._run_state_row_label = QLabel()
         self._messages_row_label = QLabel()
+        layout.addRow(self._runtime_row_label, self._runtime_label)
+        layout.addRow(self._readiness_row_label, self._readiness_state_label)
         layout.addRow(self._project_state_row_label, self._project_state_label)
         layout.addRow(self._run_state_row_label, self._status_label)
         layout.addRow(self._messages_row_label, self._validation_label)
@@ -482,6 +532,7 @@ class SimulationView(QWidget):
             self._localization.text("simulation.action.export")
         )
         self._start_button.setText(self._localization.text("simulation.action.start"))
+        self._retry_button.setText(self._localization.text("simulation.action.retry"))
         self._cancel_button.setText(
             self._localization.text("simulation.action.cancel")
         )
@@ -490,6 +541,10 @@ class SimulationView(QWidget):
         )
         self._open_output_button.setText(
             self._localization.text("simulation.action.open_output")
+        )
+        self._runtime_row_label.setText(self._localization.text("simulation.runtime"))
+        self._readiness_row_label.setText(
+            self._localization.text("simulation.readiness_label")
         )
         self._project_state_row_label.setText(
             self._localization.text("simulation.project_state_label")
@@ -510,6 +565,11 @@ class SimulationView(QWidget):
         self._refresh_configuration_summary()
 
     def _refresh_configuration_summary(self) -> None:
+        self._readiness_tile.set_content(
+            eyebrow=self._localization.text("simulation.metric.readiness"),
+            value=self._readiness_state_label.text(),
+            caption=self._runtime_label.text(),
+        )
         self._mode_tile.set_content(
             eyebrow=self._localization.text("simulation.metric.mode"),
             value=self._localization.simulation_mode_text(
@@ -526,6 +586,15 @@ class SimulationView(QWidget):
             eyebrow=self._localization.text("simulation.metric.activity"),
             value=activity_value,
         )
+
+    def _on_configuration_widget_changed(self, *_args) -> None:
+        self._refresh_configuration_summary()
+        self.configuration_changed.emit()
+
+    def _update_action_state(self) -> None:
+        self._start_button.setEnabled(self._start_allowed and not self._run_in_progress)
+        self._cancel_button.setEnabled(self._run_in_progress)
+        self._retry_button.setEnabled(self._has_retry_target and not self._run_in_progress)
 
     def _refresh_responsive_layout(self) -> None:
         wide = self.width() >= 1120

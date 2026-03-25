@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 from ..application.services.project_service import ProjectValidationError
 from ..application.services.simulation_service import (
     SimulationPreparationError,
+    SimulationReadinessError,
     SimulationRuntimeCapabilityError,
 )
 from .dialogs.new_project_dialog import NewProjectDialog
@@ -156,7 +157,11 @@ class MainWindow(QMainWindow):
         self._simulation_view.preview_requested.connect(self._on_preview_input)
         self._simulation_view.export_requested.connect(self._on_export_input)
         self._simulation_view.start_requested.connect(self._on_start_run)
+        self._simulation_view.retry_requested.connect(self._on_retry_run)
         self._simulation_view.cancel_requested.connect(self._on_cancel_run)
+        self._simulation_view.configuration_changed.connect(
+            self._refresh_simulation_readiness
+        )
         self._simulation_view.open_run_directory_requested.connect(
             self._on_open_run_directory
         )
@@ -238,6 +243,7 @@ class MainWindow(QMainWindow):
         self._save_project_action.setEnabled(project is not None)
         self._update_window_title()
         self._refresh_simulation_runtime_state()
+        self._refresh_simulation_readiness()
 
     def retranslate_ui(self) -> None:
         self._file_menu.setTitle(self._localization.text("menu.file"))
@@ -719,6 +725,18 @@ class MainWindow(QMainWindow):
                 message,
             )
             return
+        except SimulationReadinessError as exc:
+            translated = [
+                self._localization.translate_message(message)
+                for message in exc.report.blocking_messages
+            ]
+            self._simulation_view.set_validation_messages(translated)
+            QMessageBox.warning(
+                self,
+                self._localization.text("message.start_run.title"),
+                "\n".join(translated),
+            )
+            return
         except Exception as exc:
             LOGGER.exception("Failed to start simulation")
             QMessageBox.warning(
@@ -733,6 +751,23 @@ class MainWindow(QMainWindow):
             self._localization.text("status.run_started", run_id=run_record.run_id),
             6000,
         )
+
+    def _on_retry_run(self) -> None:
+        project = self._current_project_or_warn()
+        if project is None:
+            return
+
+        target_run = self._resolve_target_run(default_to_active=True)
+        if target_run is None:
+            QMessageBox.information(
+                self,
+                self._localization.text("message.start_run.title"),
+                self._localization.text("simulation.no_run_prepared"),
+            )
+            return
+
+        self._simulation_view.set_configuration(target_run.configuration)
+        self._on_start_run()
 
     def _on_cancel_run(self) -> None:
         cancelled = self._context.simulation_service.cancel_simulation()
@@ -800,6 +835,7 @@ class MainWindow(QMainWindow):
         self._results_view.refresh_project(project.root)
         self._refresh_welcome_summary()
         self._update_window_title()
+        self._refresh_simulation_readiness()
         self._last_polled_run_state = current_run_state
 
         if (
@@ -812,6 +848,18 @@ class MainWindow(QMainWindow):
             self._context.results_service.focus_run(active_run.run_id)
             self._results_view.refresh_project(project.root)
             self._show_results_page()
+        elif (
+            previous_run_state is not None
+            and current_run_state is not None
+            and previous_run_state[0] == current_run_state[0]
+            and previous_run_state[1] in {"preparing", "running"}
+            and current_run_state[1] in {"failed", "cancelled"}
+            and active_run is not None
+            and active_run.error_summary
+        ):
+            self._simulation_view.set_validation_messages(
+                [self._localization.translate_message(active_run.error_summary)]
+            )
 
     def _resolve_target_run(
         self,
@@ -857,6 +905,69 @@ class MainWindow(QMainWindow):
                 str(exc),
             )
             return None
+
+    def _refresh_simulation_readiness(self) -> None:
+        project = self._context.workspace_service.state.current_project
+        runtime_label = self._context.simulation_service.runtime_label()
+        if project is None:
+            self._simulation_view.set_readiness_state(
+                summary=self._localization.text("simulation.readiness.no_project"),
+                caption=runtime_label,
+                start_allowed=False,
+            )
+            self._simulation_view.set_validation_messages([])
+            return
+
+        try:
+            configuration = self._simulation_view.current_configuration()
+        except SimulationConfigurationError as exc:
+            self._simulation_view.set_readiness_state(
+                summary=self._localization.text("simulation.readiness.not_ready"),
+                caption=runtime_label,
+                start_allowed=False,
+            )
+            self._simulation_view.set_validation_messages([str(exc)])
+            return
+
+        readiness = self._context.simulation_service.assess_run_readiness(
+            project,
+            configuration,
+        )
+        if readiness.configuration != configuration:
+            self._simulation_view.set_configuration(readiness.configuration)
+            return
+
+        if readiness.is_busy:
+            summary = self._localization.text("simulation.readiness.busy")
+        elif readiness.is_ready:
+            summary = self._localization.text("simulation.readiness.ready")
+        else:
+            summary = self._localization.text("simulation.readiness.not_ready")
+
+        self._simulation_view.set_readiness_state(
+            summary=summary,
+            caption=runtime_label,
+            start_allowed=readiness.is_ready,
+        )
+
+        messages = [
+            f"{self._localization.severity_text(issue.severity.value)}: "
+            f"{issue.path} - {self._localization.translate_message(issue.message)}"
+            for issue in readiness.validation.issues
+        ]
+        messages.extend(
+            self._localization.translate_message(message)
+            for message in readiness.runtime_messages
+        )
+        messages.extend(
+            self._localization.translate_message(message)
+            for message in readiness.blocking_messages
+        )
+        messages.extend(
+            self._localization.translate_message(message)
+            for message in readiness.warning_messages
+        )
+        self._simulation_view.set_validation_messages(messages)
 
     def _show_about_dialog(self) -> None:
         QMessageBox.information(

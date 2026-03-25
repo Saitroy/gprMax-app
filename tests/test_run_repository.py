@@ -10,7 +10,7 @@ import json
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from gprmax_workbench.domain.execution_status import SimulationStatus
-from gprmax_workbench.domain.gprmax_config import SimulationRunConfig
+from gprmax_workbench.domain.gprmax_config import GprMaxRuntimeConfig, SimulationRunConfig
 from gprmax_workbench.domain.simulation import SimulationRunRecord
 from gprmax_workbench.infrastructure.persistence.run_repository import RunRepository
 
@@ -39,8 +39,15 @@ class RunRepositoryTests(unittest.TestCase):
                 metadata_path=metadata_path,
                 configuration=SimulationRunConfig(),
                 command=["python", "-m", "gprMax", "simulation.in"],
+                runtime=GprMaxRuntimeConfig(
+                    python_executable=sys.executable,
+                    module_name="gprMax",
+                ),
+                runtime_label=f"{sys.executable} -m gprMax",
                 exit_code=0,
                 output_files=["output/model.out"],
+                preflight_messages=["Bundled engine ready."],
+                input_sha256="abc123",
             )
 
             repository = RunRepository()
@@ -51,6 +58,12 @@ class RunRepositoryTests(unittest.TestCase):
             self.assertEqual(loaded.status, SimulationStatus.COMPLETED)
             self.assertEqual(loaded.command[-1], "simulation.in")
             self.assertEqual(loaded.output_files, ["output/model.out"])
+            self.assertIsNotNone(loaded.runtime)
+            self.assertEqual(loaded.runtime.python_executable, sys.executable)
+            self.assertEqual(loaded.runtime.module_name, "gprMax")
+            self.assertEqual(loaded.runtime_label, f"{sys.executable} -m gprMax")
+            self.assertEqual(loaded.preflight_messages, ["Bundled engine ready."])
+            self.assertEqual(loaded.input_sha256, "abc123")
 
     def test_load_resolves_relative_paths_from_metadata_directory(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

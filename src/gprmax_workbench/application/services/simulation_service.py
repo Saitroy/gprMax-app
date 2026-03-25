@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import logging
+import shutil
 import subprocess
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -18,6 +20,7 @@ from ...domain.simulation import (
     PreparedSimulationRun,
     RunArtifacts,
     SimulationLogSnapshot,
+    SimulationReadinessReport,
     SimulationRunRecord,
 )
 from ...domain.validation import ValidationResult
@@ -69,6 +72,8 @@ class SimulationService:
         project: Project,
         configuration: SimulationRunConfig,
     ) -> PreparedSimulationRun:
+        readiness = self.assess_run_readiness(project, configuration)
+        configuration = readiness.configuration
         preview = self._input_generation_service.build_input_preview(
             project=project,
             configuration=configuration,
@@ -93,12 +98,21 @@ class SimulationService:
             ),
             configuration=configuration,
             status=SimulationStatus.PREPARING,
+            input_text=preview.text,
+            preflight_messages=(
+                readiness.blocking_messages
+                + readiness.warning_messages
+                + readiness.runtime_messages
+            ),
         )
         return PreparedSimulationRun(
             record=record,
             input_text=preview.text,
             preview_text=preview.text,
-            validation_messages=preview.warnings,
+            validation_messages=readiness.blocking_messages
+            + readiness.warning_messages
+            + readiness.runtime_messages
+            + preview.warnings,
         )
 
     def export_input(
@@ -122,6 +136,68 @@ class SimulationService:
         return self._input_generation_service.validate_before_run(
             project,
             effective_configuration,
+        )
+
+    def assess_run_readiness(
+        self,
+        project: Project,
+        configuration: SimulationRunConfig,
+    ) -> SimulationReadinessReport:
+        effective_configuration = self.suggest_run_configuration(project, configuration)
+        validation = self.validate_before_run(project, effective_configuration)
+        runtime_ok, runtime_message = self.runtime_probe()
+        blocking_messages: list[str] = []
+        warning_messages: list[str] = []
+        runtime_messages: list[str] = []
+
+        for issue in validation.warnings:
+            warning_messages.append(f"{issue.path}: {issue.message}")
+
+        if not runtime_ok and runtime_message:
+            blocking_messages.append(runtime_message)
+
+        if self._runtime_info_provider is not None:
+            runtime_info = self._runtime_info_provider()
+            if not runtime_info.is_healthy:
+                blocking_messages.append("The base gprMax runtime is not healthy.")
+            for diagnostic in runtime_info.diagnostics:
+                if diagnostic:
+                    runtime_messages.append(diagnostic)
+
+        capability_message = self._execution_capability_message(effective_configuration)
+        if capability_message:
+            blocking_messages.append(capability_message)
+
+        path_messages, path_warnings = self._path_and_disk_messages(project.root)
+        blocking_messages.extend(path_messages)
+        warning_messages.extend(path_warnings)
+
+        with self._lock:
+            active_run = self._state.active_run
+            active_process = self._active_process
+        is_busy = bool(
+            active_run is not None
+            and active_run.status in {SimulationStatus.PREPARING, SimulationStatus.RUNNING}
+            and active_process is not None
+        )
+        if is_busy:
+            blocking_messages.append("A simulation run is already active.")
+
+        is_ready = (
+            validation.is_valid
+            and runtime_ok
+            and not blocking_messages
+        )
+        return SimulationReadinessReport(
+            configuration=effective_configuration,
+            is_ready=is_ready,
+            validation=validation,
+            runtime_probe_ok=runtime_ok,
+            runtime_probe_message=runtime_message,
+            is_busy=is_busy,
+            blocking_messages=blocking_messages,
+            warning_messages=warning_messages,
+            runtime_messages=runtime_messages,
         )
 
     def suggest_run_configuration(
@@ -151,10 +227,12 @@ class SimulationService:
         project: Project,
         configuration: SimulationRunConfig,
     ) -> PreparedSimulationRun:
-        configuration = self.suggest_run_configuration(project, configuration)
-        validation = self.validate_before_run(project, configuration)
-        if not validation.is_valid:
-            raise SimulationPreparationError(validation)
+        readiness = self.assess_run_readiness(project, configuration)
+        configuration = readiness.configuration
+        if not readiness.validation.is_valid:
+            raise SimulationPreparationError(readiness.validation)
+        if readiness.blocking_messages:
+            raise SimulationReadinessError(readiness)
 
         artifacts = self._artifact_store.create_artifacts(
             project_root=project.root,
@@ -171,6 +249,8 @@ class SimulationService:
             artifacts=artifacts,
             configuration=configuration,
             status=SimulationStatus.PREPARING,
+            input_text=generated.text,
+            preflight_messages=readiness.warning_messages + readiness.runtime_messages,
         )
         self._run_repository.save(record)
 
@@ -188,7 +268,9 @@ class SimulationService:
             record=record,
             input_text=generated.text,
             preview_text=generated.text,
-            validation_messages=generated.warnings,
+            validation_messages=readiness.warning_messages
+            + readiness.runtime_messages
+            + generated.warnings,
         )
 
     def start_simulation(
@@ -196,18 +278,34 @@ class SimulationService:
         project: Project,
         configuration: SimulationRunConfig,
     ) -> SimulationRunRecord:
-        configuration = self.suggest_run_configuration(project, configuration)
+        stale_record: SimulationRunRecord | None = None
         with self._lock:
-            if self._state.active_run is not None and self._state.active_run.status in {
+            active_run = self._state.active_run
+            if active_run is not None and active_run.status in {
                 SimulationStatus.PREPARING,
                 SimulationStatus.RUNNING,
             }:
-                raise RuntimeError("A simulation run is already active.")
+                if self._active_process is None:
+                    stale_record = active_run
+                else:
+                    raise RuntimeError("A simulation run is already active.")
 
-        runtime_ok, runtime_message = self.runtime_probe()
-        if not runtime_ok:
-            raise RuntimeError(runtime_message)
-        self._validate_execution_capabilities(configuration)
+        if stale_record is not None:
+            self._mark_run_as_stale(
+                stale_record,
+                reason=(
+                    "A previous simulation run was left in a stale running state and has been reset."
+                ),
+            )
+
+        readiness = self.assess_run_readiness(project, configuration)
+        configuration = readiness.configuration
+        if readiness.is_busy:
+            raise SimulationReadinessError(readiness)
+        if not readiness.validation.is_valid:
+            raise SimulationPreparationError(readiness.validation)
+        if readiness.blocking_messages:
+            raise SimulationReadinessError(readiness)
 
         prepared = self.prepare_simulation_run(project, configuration)
         record = prepared.record
@@ -242,14 +340,11 @@ class SimulationService:
                 ),
             )
         except FileNotFoundError as exc:
-            record.status = SimulationStatus.FAILED
-            record.finished_at = datetime.now(tz=UTC)
-            record.error_summary = str(exc)
-            self._run_repository.save(record)
-            with self._lock:
-                self._state.active_run = record
-                self._state.run_history = self._merge_history(record)
+            self._finalize_immediate_failure(record, str(exc))
             raise RuntimeError(str(exc)) from exc
+        except Exception as exc:
+            self._finalize_immediate_failure(record, str(exc))
+            raise
 
         with self._lock:
             self._active_process = process
@@ -261,7 +356,18 @@ class SimulationService:
     def cancel_simulation(self) -> bool:
         with self._lock:
             process = self._active_process
+            active_run = self._state.active_run
         if process is None:
+            if active_run is not None and active_run.status in {
+                SimulationStatus.PREPARING,
+                SimulationStatus.RUNNING,
+            }:
+                self._mark_run_as_stale(
+                    active_run,
+                    reason=(
+                        "The active simulation run had no live process attached and was reset."
+                    ),
+                )
             return False
         process.cancel()
         return True
@@ -273,7 +379,7 @@ class SimulationService:
     def get_run_history(self, project_root: Path | None) -> list[SimulationRunRecord]:
         if project_root is None:
             return []
-        history = self._run_repository.load_history(project_root)
+        history = self._recover_stale_history(project_root)
         with self._lock:
             self._state.run_history = history
         return history
@@ -343,6 +449,8 @@ class SimulationService:
         artifacts: RunArtifacts,
         configuration: SimulationRunConfig,
         status: SimulationStatus,
+        input_text: str,
+        preflight_messages: list[str] | None = None,
     ) -> SimulationRunRecord:
         return SimulationRunRecord(
             run_id=artifacts.run_directory.name,
@@ -358,7 +466,106 @@ class SimulationService:
             combined_log_path=artifacts.combined_log_path,
             metadata_path=artifacts.metadata_path,
             configuration=configuration,
+            runtime=self._adapter.runtime_config(),
+            runtime_label=self._adapter.describe_runtime(),
+            preflight_messages=list(preflight_messages or []),
+            input_sha256=self._hash_input_text(input_text),
         )
+
+    def _hash_input_text(self, input_text: str) -> str:
+        return hashlib.sha256(input_text.encode("utf-8")).hexdigest()
+
+    def _execution_capability_message(
+        self,
+        configuration: SimulationRunConfig,
+    ) -> str | None:
+        if self._runtime_info_provider is None:
+            return None
+
+        runtime_info = self._runtime_info_provider()
+        if configuration.use_gpu and not runtime_info.is_capability_ready("gpu"):
+            return (
+                "GPU execution is not available in the current runtime. "
+                "Disable 'Use GPU' or install pycuda support in the bundled engine."
+            )
+        if configuration.mpi_tasks and not runtime_info.is_capability_ready("mpi"):
+            return (
+                "MPI execution is not available in the current runtime. "
+                "Disable MPI or install mpi4py support in the bundled engine."
+            )
+        return None
+
+    def _path_and_disk_messages(self, project_root: Path) -> tuple[list[str], list[str]]:
+        blocking: list[str] = []
+        warnings: list[str] = []
+        for directory in (project_root, project_root / "runs", project_root / "generated"):
+            try:
+                directory.mkdir(parents=True, exist_ok=True)
+            except OSError as exc:
+                blocking.append(f"Path is not writable: {directory} ({exc})")
+
+        try:
+            free_space = shutil.disk_usage(project_root).free
+        except OSError as exc:
+            warnings.append(f"Could not inspect free disk space for {project_root}: {exc}")
+        else:
+            if free_space < 10 * 1024 * 1024:
+                warnings.append(
+                    f"Free disk space is very low in the project location: {free_space} bytes remaining."
+                )
+
+        return blocking, warnings
+
+    def _finalize_immediate_failure(self, record: SimulationRunRecord, error_summary: str) -> None:
+        record.status = SimulationStatus.FAILED
+        record.finished_at = datetime.now(tz=UTC)
+        record.error_summary = error_summary
+        self._run_repository.save(record)
+        with self._lock:
+            self._active_process = None
+            self._active_artifacts = None
+            self._state.active_run = record
+            self._state.run_history = self._merge_history(record)
+
+    def _mark_run_as_stale(self, record: SimulationRunRecord, *, reason: str) -> SimulationRunRecord:
+        record.status = SimulationStatus.FAILED
+        record.finished_at = record.finished_at or datetime.now(tz=UTC)
+        record.error_summary = reason
+        self._run_repository.save(record)
+        with self._lock:
+            if self._state.active_run is not None and self._state.active_run.run_id == record.run_id:
+                self._state.active_run = record
+            self._active_process = None
+            self._active_artifacts = None
+            self._state.run_history = self._merge_history(record)
+        return record
+
+    def _recover_stale_history(self, project_root: Path) -> list[SimulationRunRecord]:
+        history = self._run_repository.load_history(project_root)
+        recovered: list[SimulationRunRecord] = []
+        changed = False
+        with self._lock:
+            active_run_id = self._state.active_run.run_id if self._state.active_run is not None else None
+            has_live_process = self._active_process is not None
+        for record in history:
+            if record.status not in {SimulationStatus.PREPARING, SimulationStatus.RUNNING}:
+                recovered.append(record)
+                continue
+            if has_live_process and active_run_id == record.run_id:
+                recovered.append(record)
+                continue
+            changed = True
+            record.status = SimulationStatus.FAILED
+            record.finished_at = record.finished_at or datetime.now(tz=UTC)
+            record.error_summary = (
+                "The run was recovered from a stale in-progress state because no live process was attached."
+            )
+            self._run_repository.save(record)
+            recovered.append(record)
+        if not changed:
+            return history
+        recovered.sort(key=lambda item: item.created_at, reverse=True)
+        return recovered
 
     def _handle_stdout(self, run_id: str, chunk: str) -> None:
         with self._lock:
@@ -402,6 +609,7 @@ class SimulationService:
 
         if cancelled:
             record.status = SimulationStatus.CANCELLED
+            record.error_summary = "Run cancelled by user."
         elif exit_code == 0:
             record.status = SimulationStatus.COMPLETED
             self._maybe_merge_batch_outputs(record, artifacts)
@@ -543,20 +751,9 @@ class SimulationService:
         self,
         configuration: SimulationRunConfig,
     ) -> None:
-        if self._runtime_info_provider is None:
-            return
-
-        runtime_info = self._runtime_info_provider()
-        if configuration.use_gpu and not runtime_info.is_capability_ready("gpu"):
-            raise SimulationRuntimeCapabilityError(
-                "GPU execution is not available in the current runtime. "
-                "Disable 'Use GPU' or install pycuda support in the bundled engine."
-            )
-        if configuration.mpi_tasks and not runtime_info.is_capability_ready("mpi"):
-            raise SimulationRuntimeCapabilityError(
-                "MPI execution is not available in the current runtime. "
-                "Disable MPI or install mpi4py support in the bundled engine."
-            )
+        message = self._execution_capability_message(configuration)
+        if message is not None:
+            raise SimulationRuntimeCapabilityError(message)
 
 
 class SimulationPreparationError(ValueError):
@@ -570,3 +767,10 @@ class SimulationPreparationError(ValueError):
 
 class SimulationRuntimeCapabilityError(RuntimeError):
     """Raised when the selected run configuration requires unavailable runtime features."""
+
+
+class SimulationReadinessError(RuntimeError):
+    def __init__(self, report: SimulationReadinessReport) -> None:
+        self.report = report
+        message = "; ".join(report.blocking_messages)
+        super().__init__(message or "Simulation is not ready to run.")

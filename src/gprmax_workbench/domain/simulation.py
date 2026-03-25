@@ -5,10 +5,11 @@ from datetime import datetime
 from pathlib import Path
 
 from .execution_status import SimulationStatus
-from .gprmax_config import SimulationRunConfig
+from .gprmax_config import GprMaxRuntimeConfig, SimulationRunConfig
+from .validation import ValidationResult
 
 RUN_SCHEMA_NAME = "gprmax-workbench-run"
-RUN_SCHEMA_VERSION = 1
+RUN_SCHEMA_VERSION = 2
 
 
 @dataclass(slots=True)
@@ -22,6 +23,19 @@ class RunArtifacts:
     stdout_log_path: Path
     stderr_log_path: Path
     combined_log_path: Path
+
+
+@dataclass(slots=True)
+class SimulationReadinessReport:
+    configuration: SimulationRunConfig
+    is_ready: bool
+    validation: ValidationResult = field(default_factory=ValidationResult)
+    runtime_probe_ok: bool = True
+    runtime_probe_message: str = ""
+    is_busy: bool = False
+    blocking_messages: list[str] = field(default_factory=list)
+    warning_messages: list[str] = field(default_factory=list)
+    runtime_messages: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -40,11 +54,15 @@ class SimulationRunRecord:
     metadata_path: Path
     configuration: SimulationRunConfig
     command: list[str] = field(default_factory=list)
+    runtime: GprMaxRuntimeConfig | None = None
+    runtime_label: str = ""
     started_at: datetime | None = None
     finished_at: datetime | None = None
     exit_code: int | None = None
     error_summary: str = ""
     output_files: list[str] = field(default_factory=list)
+    preflight_messages: list[str] = field(default_factory=list)
+    input_sha256: str = ""
 
     @property
     def duration_seconds(self) -> float | None:
