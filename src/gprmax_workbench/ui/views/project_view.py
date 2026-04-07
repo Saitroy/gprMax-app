@@ -168,6 +168,7 @@ class ProjectView(QWidget):
         self.retranslate_ui()
         self._section_nav.setCurrentRow(0)
         self.set_project(None, None, False, None)
+        self._refresh_responsive_layout()
 
     def set_project(
         self,
@@ -290,6 +291,11 @@ class ProjectView(QWidget):
         self._advanced_panel.retranslate_ui()
         self._preview_panel.retranslate_ui()
         self.set_project(self._current_project, self._validation_service.current_validation(), self._is_dirty, self._project_file)
+        self._refresh_responsive_layout()
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._refresh_responsive_layout()
 
     def _retranslate_sections(self) -> None:
         current_row = self._section_nav.currentRow()
@@ -305,6 +311,14 @@ class ProjectView(QWidget):
         if row < 0:
             return
         self._section_stack.setCurrentIndex(row)
+
+    def _refresh_responsive_layout(self) -> None:
+        if self.width() < 1160:
+            self._content_splitter.setOrientation(Qt.Orientation.Vertical)
+            self._content_splitter.setSizes([220, 760])
+            return
+        self._content_splitter.setOrientation(Qt.Orientation.Horizontal)
+        self._content_splitter.setSizes([230, 980])
 
     def _on_scene_edit_requested(self, entity_kind: str) -> None:
         target_key = {

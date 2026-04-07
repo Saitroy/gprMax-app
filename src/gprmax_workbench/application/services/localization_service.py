@@ -231,6 +231,58 @@ _TRANSLATIONS["ru"].update(
     }
 )
 
+_TRANSLATIONS["ru"].update(
+    {
+        "project.explorer.title": "\u041f\u0440\u043e\u0435\u043a\u0442",
+        "project.explorer.scene": "\u0421\u0446\u0435\u043d\u0430",
+        "project.explorer.project_group": "\u041c\u043e\u0434\u0435\u043b\u044c",
+        "project.explorer.run_group": "\u0420\u0430\u0441\u0447\u0451\u0442",
+        "project.explorer.results_group": "\u0420\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u044b",
+        "project.explorer.overview": "\u041e\u0431\u0437\u043e\u0440 \u043c\u043e\u0434\u0435\u043b\u0438",
+        "project.explorer.simulation_settings": "\u041f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u044b \u0440\u0430\u0441\u0447\u0451\u0442\u0430",
+        "project.tab.console": "\u041a\u043e\u043d\u0441\u043e\u043b\u044c",
+        "project.tab.preview": "Input Preview",
+        "project.tab.results": "\u0420\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u044b",
+        "project.tab.model": "\u0414\u0430\u043d\u043d\u044b\u0435 \u043c\u043e\u0434\u0435\u043b\u0438",
+        "statusbar.state.no_project": "\u0411\u0435\u0437 \u043f\u0440\u043e\u0435\u043a\u0442\u0430",
+        "statusbar.state.run": "\u0421\u043e\u0441\u0442\u043e\u044f\u043d\u0438\u0435: {status}",
+        "statusbar.state.attention": "\u041e\u0448\u0438\u0431\u043a\u0438 \u0432 \u043c\u043e\u0434\u0435\u043b\u0438",
+        "statusbar.state.warnings": "\u0415\u0441\u0442\u044c \u043f\u0440\u0435\u0434\u0443\u043f\u0440\u0435\u0436\u0434\u0435\u043d\u0438\u044f",
+        "statusbar.state.ready": "\u0413\u043e\u0442\u043e\u0432\u043e",
+        "statusbar.grid.empty": "Grid: -",
+        "statusbar.grid": "Grid: {nx} x {ny} x {nz}",
+        "statusbar.timestep.empty": "dt: -",
+        "statusbar.timestep": "dt~{timestep} | window {window}",
+        "statusbar.runtime": "Engine: {runtime}",
+    }
+)
+
+_TRANSLATIONS["en"].update(
+    {
+        "project.explorer.title": "Project Explorer",
+        "project.explorer.scene": "Scene",
+        "project.explorer.project_group": "Model",
+        "project.explorer.run_group": "Simulation",
+        "project.explorer.results_group": "Results",
+        "project.explorer.overview": "Model Overview",
+        "project.explorer.simulation_settings": "Simulation Settings",
+        "project.tab.console": "Console Output",
+        "project.tab.preview": "Input Preview",
+        "project.tab.results": "Results",
+        "project.tab.model": "Model Data",
+        "statusbar.state.no_project": "No project",
+        "statusbar.state.run": "State: {status}",
+        "statusbar.state.attention": "Model issues",
+        "statusbar.state.warnings": "Warnings present",
+        "statusbar.state.ready": "Ready",
+        "statusbar.grid.empty": "Grid: -",
+        "statusbar.grid": "Grid: {nx} x {ny} x {nz}",
+        "statusbar.timestep.empty": "dt: -",
+        "statusbar.timestep": "dt~{timestep} | window {window}",
+        "statusbar.runtime": "Engine: {runtime}",
+    }
+)
+
 _EXTERNAL_EXACT_TRANSLATIONS_RU.update(
     {
         "Using bundled engine from the installation directory.": "Используется встроенное ядро из каталога установки.",

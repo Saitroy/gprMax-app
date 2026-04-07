@@ -38,6 +38,7 @@ from PySide6.QtWidgets import (
     QMenu,
     QPushButton,
     QRubberBand,
+    QScrollArea,
     QSizePolicy,
     QStackedWidget,
     QStyle,
@@ -138,7 +139,7 @@ class _CanvasView(QGraphicsView):
         self.setRenderHints(
             QPainter.RenderHint.Antialiasing | QPainter.RenderHint.TextAntialiasing
         )
-        self.setMinimumHeight(420)
+        self.setMinimumHeight(360)
         self.setFrameShape(QFrame.Shape.NoFrame)
         self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -567,6 +568,8 @@ class SceneCanvasPanel(QWidget):
         self._drag_anchor_positions: dict[tuple[str, int], QPointF] = {}
         self._selection_syncing = False
         self._loading = False
+        self._workbench_mode = False
+        self._auxiliary_sidebar_widget: QWidget | None = None
 
         self._plane_combo = QComboBox()
         self._plane_combo.currentIndexChanged.connect(self._change_plane)
@@ -681,10 +684,13 @@ class SceneCanvasPanel(QWidget):
         self._build_scene_toolbar()
 
         self._palette_buttons: list[_PaletteButton] = []
-        palette = QWidget()
-        palette_layout = QVBoxLayout(palette)
-        palette_layout.setContentsMargins(0, 0, 0, 0)
+        self._palette_card = QFrame()
+        self._palette_card.setObjectName("ViewCard")
+        palette_layout = QVBoxLayout(self._palette_card)
+        palette_layout.setContentsMargins(12, 12, 12, 12)
+        palette_layout.setSpacing(10)
         self._palette_title = QLabel()
+        self._palette_title.setObjectName("SectionTitle")
         palette_layout.addWidget(self._palette_title)
         buttons_layout = FlowLayout(horizontal_spacing=8, vertical_spacing=8)
         for entity_kind in ("box", "sphere", "cylinder", "source", "receiver", "antenna", "import"):
@@ -776,6 +782,7 @@ class SceneCanvasPanel(QWidget):
 
         domain_card = QFrame()
         domain_card.setObjectName("ViewCard")
+        self._domain_card = domain_card
         domain_layout = QVBoxLayout(domain_card)
         domain_layout.setContentsMargins(12, 12, 12, 12)
         domain_layout.setSpacing(10)
@@ -789,23 +796,44 @@ class SceneCanvasPanel(QWidget):
         domain_actions.addWidget(self._apply_domain_button)
         domain_layout.addLayout(domain_actions)
 
-        side_panel = QWidget()
-        side_layout = QVBoxLayout(side_panel)
-        side_layout.setContentsMargins(0, 0, 0, 0)
+        self._entities_card = QFrame()
+        self._entities_card.setObjectName("ViewCard")
+        entities_layout = QVBoxLayout(self._entities_card)
+        entities_layout.setContentsMargins(12, 12, 12, 12)
+        entities_layout.setSpacing(10)
         self._plane_label = QLabel()
         snap_form = QFormLayout()
         self._grid_step_label_global = QLabel()
         snap_form.addRow("", self._snap_to_grid)
         snap_form.addRow(self._grid_step_label_global, self._grid_step)
-        side_layout.addLayout(snap_form)
-        side_layout.addWidget(self._hint_label)
-        side_layout.addWidget(domain_card)
-        side_layout.addWidget(palette)
         self._entities_title = QLabel()
-        side_layout.addWidget(self._entities_title)
-        side_layout.addWidget(self._entity_list, 1)
-        side_layout.addWidget(inspector)
-        side_layout.addWidget(self._status_label)
+        self._entities_title.setObjectName("SectionTitle")
+        entities_layout.addWidget(self._entities_title)
+        entities_layout.addWidget(self._entity_list, 1)
+
+        self._side_panel = QWidget()
+        self._side_layout = QVBoxLayout(self._side_panel)
+        self._side_layout.setContentsMargins(0, 0, 0, 0)
+        self._side_layout.setSpacing(12)
+        self._side_layout.addLayout(snap_form)
+        self._side_layout.addWidget(self._hint_label)
+        self._side_layout.addWidget(domain_card)
+        self._side_layout.addWidget(self._palette_card)
+        self._side_layout.addWidget(inspector)
+        self._side_layout.addWidget(self._entities_card, 1)
+        self._side_layout.addWidget(self._status_label)
+
+        self._side_scroll = QScrollArea()
+        self._side_scroll.setWidgetResizable(True)
+        self._side_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self._side_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._side_scroll.setWidget(self._side_panel)
+        self._side_scroll.setMinimumWidth(280)
+        self._side_scroll.setMaximumWidth(380)
+        self._side_scroll.setSizePolicy(
+            QSizePolicy.Policy.Preferred,
+            QSizePolicy.Policy.Expanding,
+        )
 
         view_shell = QWidget()
         view_shell_layout = QGridLayout(view_shell)
@@ -814,7 +842,7 @@ class SceneCanvasPanel(QWidget):
         view_shell_layout.setVerticalSpacing(12)
         view_shell_layout.addWidget(self._scene_toolbar, 0, 0, 1, 2)
         corner = QLabel()
-        corner.setMinimumSize(64, 34)
+        corner.setMinimumSize(52, 32)
         corner.setStyleSheet("background:#edf3f7; border: 1px solid #c7d2db;")
         view_shell_layout.addWidget(corner, 1, 0)
         view_shell_layout.addWidget(self._horizontal_ruler, 1, 1)
@@ -826,8 +854,8 @@ class SceneCanvasPanel(QWidget):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(16)
-        layout.addWidget(side_panel, 0)
         layout.addWidget(view_shell, 1)
+        layout.addWidget(self._side_scroll, 0)
 
         self._build_nudge_buttons()
         self.retranslate_ui()
@@ -848,7 +876,7 @@ class SceneCanvasPanel(QWidget):
             )
         )
         layout.addStretch(1)
-        self._cursor_status_label.setMinimumWidth(250)
+        self._cursor_status_label.setMinimumWidth(180)
         layout.addWidget(self._cursor_status_label, 0, Qt.AlignmentFlag.AlignVCenter)
         self._fit_scene_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DesktopIcon))
         layout.addWidget(self._fit_scene_button, 0, Qt.AlignmentFlag.AlignVCenter)
@@ -1131,6 +1159,23 @@ class SceneCanvasPanel(QWidget):
         self._refresh_scene()
         self.refresh_validation()
         self._refresh_history_controls()
+
+    def set_workbench_mode(self, enabled: bool) -> None:
+        self._workbench_mode = enabled
+        self._entities_card.setVisible(not enabled)
+        self._hint_label.setVisible(not enabled)
+
+    def set_auxiliary_sidebar_widget(self, widget: QWidget | None) -> None:
+        if self._auxiliary_sidebar_widget is widget:
+            return
+        if self._auxiliary_sidebar_widget is not None:
+            self._side_layout.removeWidget(self._auxiliary_sidebar_widget)
+            self._auxiliary_sidebar_widget.hide()
+        self._auxiliary_sidebar_widget = widget
+        if widget is None:
+            return
+        self._side_layout.insertWidget(0, widget)
+        widget.show()
 
     def _loading_domain(self, project: Project | None) -> None:
         enabled = project is not None

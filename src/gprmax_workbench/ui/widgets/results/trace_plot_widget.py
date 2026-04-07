@@ -30,7 +30,7 @@ class TracePlotWidget(QWidget):
         self._chart.setPlotAreaBackgroundBrush(QColor("#ffffff"))
         self._chart_view = QChartView(self._chart)
         self._chart_view.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        self._chart_view.setMinimumHeight(320)
+        self._chart_view.setMinimumHeight(260)
         self._chart_view.setSizePolicy(
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Expanding,
@@ -38,7 +38,7 @@ class TracePlotWidget(QWidget):
         self._message = QLabel()
         self._message.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._message.setWordWrap(True)
-        self._message.setMinimumHeight(320)
+        self._message.setMinimumHeight(260)
         self._message.setSizePolicy(
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Expanding,

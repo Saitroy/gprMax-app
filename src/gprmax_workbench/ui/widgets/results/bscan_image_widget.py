@@ -38,7 +38,7 @@ class _BscanCanvas(QWidget):
         self._source_pixmap = QPixmap()
         self._display_pixmap = QPixmap()
         self._dataset: BscanDataset | None = None
-        self.setMinimumHeight(340)
+        self.setMinimumHeight(280)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
     def set_payload(self, dataset: BscanDataset, pixmap: QPixmap) -> None:

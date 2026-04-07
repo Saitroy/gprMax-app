@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QScrollArea,
     QSizePolicy,
+    QSplitter,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
@@ -109,6 +110,7 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle(self._localization.text("window.title.base"))
         self.resize(1440, 920)
+        self.setMinimumSize(920, 680)
 
         self._connect_signals()
         self._create_actions()
@@ -184,15 +186,21 @@ class MainWindow(QMainWindow):
 
     def _build_ui(self) -> None:
         central = QWidget()
-        layout = QHBoxLayout(central)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(20)
+        layout = QVBoxLayout(central)
+        layout.setContentsMargins(16, 16, 16, 12)
+        layout.setSpacing(0)
 
         sidebar = self._build_sidebar()
         content = self._build_content_area()
 
-        layout.addWidget(sidebar, 0)
-        layout.addWidget(content, 1)
+        self._shell_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self._shell_splitter.setChildrenCollapsible(False)
+        self._shell_splitter.addWidget(sidebar)
+        self._shell_splitter.addWidget(content)
+        self._shell_splitter.setStretchFactor(0, 0)
+        self._shell_splitter.setStretchFactor(1, 1)
+
+        layout.addWidget(self._shell_splitter, 1)
 
         self.setCentralWidget(central)
         self.statusBar().showMessage(self._localization.text("status.stage_ready"))
@@ -217,11 +225,17 @@ class MainWindow(QMainWindow):
                 project_name=project.metadata.name,
                 is_dirty=workspace.state.current_project_dirty,
             )
+            if (
+                self._stack.currentIndex()
+                == self._page_index_by_title_key["page.welcome.title"]
+            ):
+                self._show_project_page()
         else:
             self._simulation_view.set_project_state(project_name=None, is_dirty=False)
             workspace.state.run_history = []
             self._last_polled_run_state = None
             self._simulation_configuration_project_root = None
+            self._show_welcome_page()
 
         self._welcome_view.set_current_project(project)
         self._welcome_view.set_recent_projects(workspace.state.recent_projects)
@@ -294,7 +308,9 @@ class MainWindow(QMainWindow):
         frame = QFrame()
         frame.setObjectName("Sidebar")
         self._sidebar = frame
-        frame.setFixedWidth(self._sidebar_width_for_window(self.width() or 1440))
+        frame.setMinimumWidth(220)
+        frame.setMaximumWidth(300)
+        frame.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
 
         layout = QVBoxLayout(frame)
         layout.setContentsMargins(18, 18, 18, 18)
@@ -337,12 +353,16 @@ class MainWindow(QMainWindow):
             return
 
         available = screen.availableGeometry()
-        target_width = min(1440, max(960, available.width() - 80))
-        target_height = min(920, max(700, available.height() - 96))
+        target_width = min(1400, max(980, available.width() - 80))
+        target_height = min(900, max(700, available.height() - 96))
         target_width = min(target_width, available.width())
         target_height = min(target_height, available.height())
         self.resize(target_width, target_height)
-        self._sidebar.setFixedWidth(self._sidebar_width_for_window(target_width))
+        if hasattr(self, "_shell_splitter"):
+            sidebar_width = self._sidebar_width_for_window(target_width)
+            self._shell_splitter.setSizes(
+                [sidebar_width, max(640, target_width - sidebar_width - 32)]
+            )
 
         centered_x = available.x() + max(0, (available.width() - target_width) // 2)
         centered_y = available.y() + max(0, (available.height() - target_height) // 2)
@@ -350,11 +370,6 @@ class MainWindow(QMainWindow):
 
     def _sidebar_width_for_window(self, window_width: int) -> int:
         return max(220, min(300, int(window_width * 0.19)))
-
-    def resizeEvent(self, event) -> None:  # noqa: N802
-        super().resizeEvent(event)
-        if hasattr(self, "_sidebar"):
-            self._sidebar.setFixedWidth(self._sidebar_width_for_window(self.width()))
 
     def _build_content_stack(self) -> QWidget:
         for page in self._pages:
@@ -423,6 +438,9 @@ class MainWindow(QMainWindow):
 
     def _show_project_page(self) -> None:
         self._show_page(self._page_index_by_title_key["page.project.title"])
+
+    def _show_welcome_page(self) -> None:
+        self._show_page(self._page_index_by_title_key["page.welcome.title"])
 
     def _show_results_page(self) -> None:
         self._show_page(self._page_index_by_title_key["page.results.title"])

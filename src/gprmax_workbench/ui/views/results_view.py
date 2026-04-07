@@ -45,6 +45,7 @@ class ResultsView(QWidget):
         results_service: ResultsService,
         trace_service: TraceService,
         bscan_service: BscanService,
+        embedded: bool = False,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -52,6 +53,7 @@ class ResultsView(QWidget):
         self._results_service = results_service
         self._trace_service = trace_service
         self._bscan_service = bscan_service
+        self._embedded = embedded
         self._project_root: Path | None = None
         self._run_summaries: dict[str, RunResultSummary] = {}
         self._metadata_cache: dict[str, ResultMetadata] = {}
@@ -93,7 +95,7 @@ class ResultsView(QWidget):
         toolbar.addWidget(self._open_selected_file_button)
 
         left_panel = self._build_card("results.card.runs", self._run_list)
-        left_panel.setMinimumWidth(260)
+        left_panel.setMinimumWidth(220)
 
         self._summary_panel = ResultSummaryPanel(localization)
         summary_card = self._build_card("results.card.summary", self._summary_panel)
@@ -115,7 +117,7 @@ class ResultsView(QWidget):
         self._bottom_splitter.setSizes([320, 960])
 
         plot_card = self._build_card("results.card.plot", self._tabs)
-        plot_card.setMinimumHeight(520)
+        plot_card.setMinimumHeight(320 if embedded else 420)
         plot_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         self._page_splitter = QSplitter(Qt.Orientation.Vertical)
@@ -124,13 +126,14 @@ class ResultsView(QWidget):
         self._page_splitter.setStretchFactor(0, 4)
         self._page_splitter.setStretchFactor(1, 2)
         self._page_splitter.setChildrenCollapsible(False)
-        self._page_splitter.setSizes([700, 320])
+        self._page_splitter.setSizes([560 if embedded else 620, 280])
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(18)
-        layout.addWidget(self._title)
-        layout.addWidget(self._subtitle)
+        layout.setSpacing(12 if embedded else 18)
+        if not embedded:
+            layout.addWidget(self._title)
+            layout.addWidget(self._subtitle)
         layout.addLayout(toolbar)
         layout.addWidget(self._page_splitter, 1)
 
@@ -205,7 +208,7 @@ class ResultsView(QWidget):
         self._ascan_receiver_combo = QComboBox()
         self._ascan_receiver_combo.currentIndexChanged.connect(self._on_ascan_receiver_changed)
         self._ascan_component_list = QListWidget()
-        self._ascan_component_list.setMinimumHeight(120)
+        self._ascan_component_list.setMinimumHeight(96)
         self._ascan_component_list.itemChanged.connect(self._on_ascan_component_item_changed)
         self._show_unmerged_checkbox = QCheckBox()
         self._show_unmerged_checkbox.setVisible(False)
@@ -869,6 +872,10 @@ class ResultsView(QWidget):
             Qt.Orientation.Horizontal if self.width() >= 1180 else Qt.Orientation.Vertical
         )
         self._bottom_splitter.setOrientation(main_orientation)
+        if main_orientation == Qt.Orientation.Horizontal:
+            self._bottom_splitter.setSizes([260, 900])
+            return
+        self._bottom_splitter.setSizes([260, 540])
 
     def _sync_run_selection(self) -> None:
         selected_run_id = self._results_service.viewer_state.selected_run_id

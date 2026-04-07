@@ -597,12 +597,20 @@ class SimulationView(QWidget):
         self._retry_button.setEnabled(self._has_retry_target and not self._run_in_progress)
 
     def _refresh_responsive_layout(self) -> None:
-        wide = self.width() >= 1120
+        wide = self.width() >= 1160
         top_orientation = Qt.Orientation.Horizontal if wide else Qt.Orientation.Vertical
         self._top_splitter.setOrientation(top_orientation)
-        self._content_splitter.setOrientation(
-            Qt.Orientation.Horizontal if self.width() >= 1080 else Qt.Orientation.Vertical
-        )
+        if wide:
+            self._top_splitter.setSizes([520, 520])
+        else:
+            self._top_splitter.setSizes([300, 520])
+
+        if self.width() >= 1100:
+            self._content_splitter.setOrientation(Qt.Orientation.Horizontal)
+            self._content_splitter.setSizes([240, 980])
+            return
+        self._content_splitter.setOrientation(Qt.Orientation.Vertical)
+        self._content_splitter.setSizes([180, 820])
 
     def _retranslate_sections(self) -> None:
         current_row = self._section_nav.currentRow()
