@@ -867,23 +867,42 @@ class SceneCanvasPanel(QWidget):
         self._build_shortcuts()
 
     def _build_scene_toolbar(self) -> None:
-        layout = QHBoxLayout(self._scene_toolbar)
-        layout.setContentsMargins(14, 12, 14, 12)
-        layout.setSpacing(14)
-        layout.addWidget(self._build_toolbar_section(self._toolbar_plane_label, self._build_plane_buttons()))
-        layout.addWidget(self._build_toolbar_section(self._toolbar_tool_label, self._build_tool_buttons()))
-        layout.addWidget(self._build_toolbar_section(self._toolbar_mode_label, self._build_mode_buttons()))
-        layout.addWidget(
-            self._build_toolbar_section(
-                self._toolbar_history_label,
-                self._build_history_buttons(),
-            )
+        self._scene_toolbar_layout = QHBoxLayout(self._scene_toolbar)
+        self._scene_toolbar_layout.setContentsMargins(14, 12, 14, 12)
+        self._scene_toolbar_layout.setSpacing(14)
+        self._toolbar_plane_section = self._build_toolbar_section(
+            self._toolbar_plane_label,
+            self._build_plane_buttons(),
         )
-        layout.addStretch(1)
+        self._toolbar_tool_section = self._build_toolbar_section(
+            self._toolbar_tool_label,
+            self._build_tool_buttons(),
+        )
+        self._toolbar_mode_section = self._build_toolbar_section(
+            self._toolbar_mode_label,
+            self._build_mode_buttons(),
+        )
+        self._toolbar_history_section = self._build_toolbar_section(
+            self._toolbar_history_label,
+            self._build_history_buttons(),
+        )
+        self._scene_toolbar_layout.addWidget(self._toolbar_plane_section)
+        self._scene_toolbar_layout.addWidget(self._toolbar_tool_section)
+        self._scene_toolbar_layout.addWidget(self._toolbar_mode_section)
+        self._scene_toolbar_layout.addWidget(self._toolbar_history_section)
+        self._scene_toolbar_layout.addStretch(1)
         self._cursor_status_label.setMinimumWidth(180)
-        layout.addWidget(self._cursor_status_label, 0, Qt.AlignmentFlag.AlignVCenter)
+        self._scene_toolbar_layout.addWidget(
+            self._cursor_status_label,
+            0,
+            Qt.AlignmentFlag.AlignVCenter,
+        )
         self._fit_scene_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DesktopIcon))
-        layout.addWidget(self._fit_scene_button, 0, Qt.AlignmentFlag.AlignVCenter)
+        self._scene_toolbar_layout.addWidget(
+            self._fit_scene_button,
+            0,
+            Qt.AlignmentFlag.AlignVCenter,
+        )
 
     def _build_toolbar_section(self, title: QLabel, content_layout: QHBoxLayout) -> QWidget:
         wrapper = QWidget()
@@ -901,6 +920,7 @@ class SceneCanvasPanel(QWidget):
         for plane_key, label in (("xy", "XY"), ("xz", "XZ"), ("yz", "YZ")):
             button = _SceneToolbarButton(plane_key)
             button.setText(label)
+            button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
             button.clicked.connect(
                 lambda checked=False, key=plane_key: self._set_plane_from_toolbar(key)
             )
