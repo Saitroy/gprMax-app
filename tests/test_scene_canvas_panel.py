@@ -354,6 +354,31 @@ class SceneCanvasPanelTests(unittest.TestCase):
             )
             self.assertFalse(panel._cursor_status_label.isVisible())  # noqa: SLF001
 
+    def test_scene_sidebar_uses_resizable_splitter(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Scene Demo", Path(temp_dir))
+            state = AppState(
+                current_project=project,
+                current_project_validation=validate_project(project),
+            )
+            editor = ModelEditorService(state)
+            validation = ValidationService(state)
+            panel = SceneCanvasPanel(LocalizationService("ru"), editor, validation)
+
+            panel.set_project(project)
+            panel.resize(1200, 700)
+            panel.show()
+            self._app.processEvents()  # noqa: SLF001
+
+            initial_sizes = panel._workspace_splitter.sizes()  # noqa: SLF001
+            panel._workspace_splitter.setSizes([700, 420])  # noqa: SLF001
+            self._app.processEvents()  # noqa: SLF001
+            updated_sizes = panel._workspace_splitter.sizes()  # noqa: SLF001
+
+            self.assertEqual(panel._workspace_splitter.orientation(), Qt.Orientation.Horizontal)  # noqa: SLF001
+            self.assertGreater(updated_sizes[1], initial_sizes[1])
+            self.assertFalse(panel._workspace_splitter.childrenCollapsible())  # noqa: SLF001
+
     def test_create_tool_adds_selected_entity_at_click_position(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             project = default_project("Scene Demo", Path(temp_dir))
