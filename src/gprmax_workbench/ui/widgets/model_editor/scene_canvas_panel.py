@@ -871,9 +871,12 @@ class SceneCanvasPanel(QWidget):
         self._refresh_toolbar_compact_mode()
 
     def _build_scene_toolbar(self) -> None:
-        self._scene_toolbar_layout = QHBoxLayout(self._scene_toolbar)
-        self._scene_toolbar_layout.setContentsMargins(14, 12, 14, 12)
-        self._scene_toolbar_layout.setSpacing(14)
+        self._scene_toolbar_layout = FlowLayout(
+            self._scene_toolbar,
+            margin=12,
+            horizontal_spacing=12,
+            vertical_spacing=8,
+        )
         self._toolbar_plane_section = self._build_toolbar_section(
             self._toolbar_plane_label,
             self._build_plane_buttons(),
@@ -894,18 +897,13 @@ class SceneCanvasPanel(QWidget):
         self._scene_toolbar_layout.addWidget(self._toolbar_tool_section)
         self._scene_toolbar_layout.addWidget(self._toolbar_mode_section)
         self._scene_toolbar_layout.addWidget(self._toolbar_history_section)
-        self._scene_toolbar_layout.addStretch(1)
         self._cursor_status_label.setMinimumWidth(180)
         self._scene_toolbar_layout.addWidget(
             self._cursor_status_label,
-            0,
-            Qt.AlignmentFlag.AlignVCenter,
         )
         self._fit_scene_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DesktopIcon))
         self._scene_toolbar_layout.addWidget(
             self._fit_scene_button,
-            0,
-            Qt.AlignmentFlag.AlignVCenter,
         )
 
     def _build_toolbar_section(self, title: QLabel, content_layout: QHBoxLayout) -> QWidget:
