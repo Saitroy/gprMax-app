@@ -743,6 +743,11 @@ class SceneCanvasPanel(QWidget):
         self._size_z_label = QLabel()
         self._radius_label = QLabel()
         self._inspector_status = QLabel()
+        self._inspector_status.setWordWrap(True)
+        self._inspector_status.setSizePolicy(
+            QSizePolicy.Policy.Preferred,
+            QSizePolicy.Policy.Minimum,
+        )
         self._material_combo = QComboBox()
         self._waveform_combo = QComboBox()
         self._axis_combo = QComboBox()
