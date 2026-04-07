@@ -377,8 +377,29 @@ QTreeWidget#ProjectExplorer::item:hover:!selected {
 QSplitter::handle {
     background: transparent;
 }
-QSplitter::handle:hover {
-    background: #d9e2e9;
+QSplitter::handle:horizontal {
+    width: 10px;
+    margin: 0 2px;
+    border-left: 1px solid #c7d2db;
+    border-right: 1px solid #f6f9fb;
+    background: rgba(231, 238, 243, 0.68);
+}
+QSplitter::handle:vertical {
+    height: 10px;
+    margin: 2px 0;
+    border-top: 1px solid #c7d2db;
+    border-bottom: 1px solid #f6f9fb;
+    background: rgba(231, 238, 243, 0.68);
+}
+QSplitter::handle:hover:horizontal,
+QSplitter::handle:pressed:horizontal {
+    border-left-color: #70879b;
+    background: rgba(214, 226, 235, 0.95);
+}
+QSplitter::handle:hover:vertical,
+QSplitter::handle:pressed:vertical {
+    border-top-color: #70879b;
+    background: rgba(214, 226, 235, 0.95);
 }
 QFrame#WorkbenchSidebar {
     background: #fbfcfd;
