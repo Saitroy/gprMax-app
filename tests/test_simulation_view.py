@@ -108,14 +108,14 @@ class SimulationViewTests(unittest.TestCase):
         self._app.processEvents()
         original_sizes = view._top_splitter.sizes()  # noqa: SLF001
 
-        view._top_splitter.setSizes([300, 820])  # noqa: SLF001
-        view._on_top_splitter_moved(300, 1)  # noqa: SLF001
+        view._top_splitter.setSizes([250, 750])  # noqa: SLF001
+        view._on_top_splitter_moved(250, 1)  # noqa: SLF001
         view._refresh_responsive_layout()  # noqa: SLF001
         self._app.processEvents()
 
         resized_sizes = view._top_splitter.sizes()  # noqa: SLF001
-        self.assertLess(resized_sizes[0], original_sizes[0] - 40)
-        self.assertLess(abs(resized_sizes[0] - 300), 80)
+        self.assertLess(resized_sizes[0], original_sizes[0] - 100)
+        self.assertLess(abs(resized_sizes[0] - 250), 40)
 
     def test_manual_content_splitter_resize_survives_responsive_refresh(self) -> None:
         view = SimulationView(

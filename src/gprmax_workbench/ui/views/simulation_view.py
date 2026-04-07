@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QPlainTextEdit,
     QPushButton,
+    QSizePolicy,
     QSplitter,
     QSpinBox,
     QStackedWidget,
@@ -71,14 +72,21 @@ class SimulationView(QWidget):
 
         self._runtime_label = QLabel(runtime_label)
         self._readiness_state_label = QLabel()
+        self._readiness_state_label.setWordWrap(True)
         self._project_state_label = QLabel()
+        self._project_state_label.setWordWrap(True)
         self._status_label = QLabel()
+        self._status_label.setWordWrap(True)
         self._validation_label = QLabel()
         self._validation_label.setWordWrap(True)
         self._section_nav = QListWidget()
         self._section_nav.setObjectName("ContextNavigation")
         self._section_nav.currentRowChanged.connect(self._on_section_changed)
         self._section_stack = QStackedWidget()
+        self._section_stack.setSizePolicy(
+            QSizePolicy.Policy.Ignored,
+            QSizePolicy.Policy.Expanding,
+        )
 
         self._readiness_tile = MetricTile()
         self._mode_tile = MetricTile()
@@ -169,11 +177,23 @@ class SimulationView(QWidget):
             "simulation.status_card",
             self._build_runtime_widget(),
         )
+        status_card.setSizePolicy(
+            QSizePolicy.Policy.Ignored,
+            QSizePolicy.Policy.Preferred,
+        )
         config_card = self._build_card(
             "simulation.config_card",
             self._build_config_widget(),
         )
+        config_card.setSizePolicy(
+            QSizePolicy.Policy.Ignored,
+            QSizePolicy.Policy.Preferred,
+        )
         history_card = self._build_card("simulation.history_card", self._run_history)
+        history_card.setSizePolicy(
+            QSizePolicy.Policy.Ignored,
+            QSizePolicy.Policy.Preferred,
+        )
 
         self._top_splitter = configure_splitter(QSplitter())
         self._top_splitter.addWidget(status_card)
@@ -188,6 +208,10 @@ class SimulationView(QWidget):
         launch_layout.setSpacing(16)
         launch_layout.addLayout(metrics_row)
         launch_layout.addWidget(self._top_splitter)
+        launch_page.setSizePolicy(
+            QSizePolicy.Policy.Ignored,
+            QSizePolicy.Policy.Expanding,
+        )
         self._launch_page = launch_page
 
         preview_page = QWidget()
@@ -197,6 +221,10 @@ class SimulationView(QWidget):
         preview_layout.addWidget(
             self._build_card("simulation.preview_card", self._preview_text),
             1,
+        )
+        preview_page.setSizePolicy(
+            QSizePolicy.Policy.Ignored,
+            QSizePolicy.Policy.Expanding,
         )
         self._preview_page = preview_page
 
@@ -209,6 +237,10 @@ class SimulationView(QWidget):
             1,
         )
         logs_layout.addWidget(history_card, 1)
+        logs_page.setSizePolicy(
+            QSizePolicy.Policy.Ignored,
+            QSizePolicy.Policy.Expanding,
+        )
         self._log_page = logs_page
 
         self._sections = [
