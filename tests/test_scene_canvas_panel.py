@@ -330,6 +330,30 @@ class SceneCanvasPanelTests(unittest.TestCase):
             self.assertTrue(panel._plane_buttons["yz"].isChecked())  # noqa: SLF001
             self.assertEqual(panel._plane, "yz")  # noqa: SLF001
 
+    def test_scene_toolbar_compacts_on_small_width(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Scene Demo", Path(temp_dir))
+            state = AppState(
+                current_project=project,
+                current_project_validation=validate_project(project),
+            )
+            editor = ModelEditorService(state)
+            validation = ValidationService(state)
+            panel = SceneCanvasPanel(LocalizationService("ru"), editor, validation)
+
+            panel.set_project(project)
+            panel.resize(900, 600)
+            panel.show()
+            self._app.processEvents()  # noqa: SLF001
+
+            self.assertLessEqual(panel.width(), 900)
+            self.assertLessEqual(panel.minimumWidth(), 900)
+            self.assertEqual(
+                panel._tool_buttons["select"].toolButtonStyle(),  # noqa: SLF001
+                Qt.ToolButtonStyle.ToolButtonIconOnly,
+            )
+            self.assertFalse(panel._cursor_status_label.isVisible())  # noqa: SLF001
+
     def test_create_tool_adds_selected_entity_at_click_position(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             project = default_project("Scene Demo", Path(temp_dir))
