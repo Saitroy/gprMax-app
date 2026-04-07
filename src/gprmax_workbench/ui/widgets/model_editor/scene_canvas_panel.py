@@ -263,10 +263,10 @@ class _MetricRuler(QWidget):
         self._axis_name = "X"
         self._unit = "m"
         if orientation == Qt.Orientation.Horizontal:
-            self.setMinimumHeight(34)
+            self.setMinimumHeight(28)
             self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         else:
-            self.setMinimumWidth(64)
+            self.setMinimumWidth(48)
             self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
 
     def set_scale(self, minimum: float, maximum: float, axis_name: str, unit: str = "m") -> None:
@@ -289,14 +289,16 @@ class _MetricRuler(QWidget):
 
         label = f"{self._axis_name}, {self._unit}"
         if self._orientation == Qt.Orientation.Horizontal:
-            left = 10
-            right = self.width() - 10
-            baseline = self.height() - 10
+            compact = self.width() < 420
+            left = 8
+            right = self.width() - 8
+            baseline = self.height() - 8
             painter.setPen(QColor("#506273"))
             painter.drawLine(left, baseline, right, baseline)
-            painter.drawText(left, 14, label)
+            if not compact:
+                painter.drawText(left, 12, label)
             available = max(right - left, 1)
-            target_ticks = max(2, int(available / 90))
+            target_ticks = max(2, int(available / (120 if compact else 90)))
             step = _nice_step((self._maximum - self._minimum) / target_ticks)
             value = ceil(self._minimum / step) * step
             painter.setPen(QColor("#6f8293"))
@@ -305,21 +307,23 @@ class _MetricRuler(QWidget):
                 x = left + ratio * available
                 painter.drawLine(QPointF(x, baseline), QPointF(x, baseline - 6))
                 painter.drawText(
-                    QRectF(x - 28, baseline - 22, 56, 16),
+                    QRectF(x - 24, baseline - 20, 48, 14),
                     Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
                     f"{value:.3g}",
                 )
                 value += step
             return
 
-        top = 10
-        bottom = self.height() - 10
-        baseline = self.width() - 10
+        compact = self.height() < 320
+        top = 8
+        bottom = self.height() - 8
+        baseline = self.width() - 8
         painter.setPen(QColor("#506273"))
         painter.drawLine(baseline, top, baseline, bottom)
-        painter.drawText(8, 14, label)
+        if not compact:
+            painter.drawText(6, 12, label)
         available = max(bottom - top, 1)
-        target_ticks = max(2, int(available / 72))
+        target_ticks = max(2, int(available / (96 if compact else 72)))
         step = _nice_step((self._maximum - self._minimum) / target_ticks)
         value = ceil(self._minimum / step) * step
         painter.setPen(QColor("#6f8293"))
@@ -328,7 +332,7 @@ class _MetricRuler(QWidget):
             y = top + ratio * available
             painter.drawLine(QPointF(baseline, y), QPointF(baseline - 6, y))
             painter.drawText(
-                QRectF(2, y - 8, baseline - 10, 16),
+                QRectF(2, y - 7, baseline - 8, 14),
                 Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
                 f"{value:.3g}",
             )
