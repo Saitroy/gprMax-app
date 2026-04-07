@@ -58,6 +58,9 @@ class SimulationView(QWidget):
         self._start_allowed = False
         self._run_in_progress = False
         self._has_retry_target = False
+        self._top_splitter_user_resized = False
+        self._content_splitter_user_resized = False
+        self._syncing_splitter_sizes = False
 
         self._title = QLabel()
         self._title.setObjectName("ViewTitle")
@@ -177,6 +180,7 @@ class SimulationView(QWidget):
         self._top_splitter.addWidget(config_card)
         self._top_splitter.setStretchFactor(0, 1)
         self._top_splitter.setStretchFactor(1, 1)
+        self._top_splitter.splitterMoved.connect(self._on_top_splitter_moved)
 
         launch_page = QWidget()
         launch_layout = QVBoxLayout(launch_page)
@@ -232,6 +236,7 @@ class SimulationView(QWidget):
         self._content_splitter.setStretchFactor(0, 0)
         self._content_splitter.setStretchFactor(1, 1)
         self._content_splitter.setSizes([240, 980])
+        self._content_splitter.splitterMoved.connect(self._on_content_splitter_moved)
 
         self._workspace_container = QWidget()
         workspace_layout = QVBoxLayout(self._workspace_container)
@@ -257,7 +262,7 @@ class SimulationView(QWidget):
         self.set_run_state(None, [])
         self.set_project_state(project_name=None, is_dirty=False)
         self._refresh_configuration_summary()
-        self._refresh_responsive_layout()
+        self._refresh_responsive_layout(force=True)
 
     def current_configuration(self) -> SimulationRunConfig:
         mode = SimulationMode(self._mode_combo.currentData())
@@ -595,33 +600,69 @@ class SimulationView(QWidget):
         self._cancel_button.setEnabled(self._run_in_progress)
         self._retry_button.setEnabled(self._has_retry_target and not self._run_in_progress)
 
-    def _refresh_responsive_layout(self) -> None:
+    def _refresh_responsive_layout(self, *, force: bool = False) -> None:
         wide = self.width() >= 1020
         top_orientation = Qt.Orientation.Horizontal if wide else Qt.Orientation.Vertical
-        self._top_splitter.setOrientation(top_orientation)
-        if wide:
-            left_width = max(360, min(520, int(self.width() * 0.42)))
-            self._top_splitter.setSizes(
-                [left_width, max(420, self.width() - left_width)]
-            )
-        else:
-            top_height = 260 if self.height() >= 720 else 220
-            self._top_splitter.setSizes(
-                [top_height, max(340, self.height() - top_height)]
-            )
+        top_orientation_changed = self._top_splitter.orientation() != top_orientation
+        if top_orientation_changed:
+            self._top_splitter.setOrientation(top_orientation)
+            self._top_splitter_user_resized = False
+        if force or top_orientation_changed or not self._top_splitter_user_resized:
+            if wide:
+                left_width = max(360, min(520, int(self.width() * 0.42)))
+                self._apply_splitter_sizes(
+                    self._top_splitter,
+                    [left_width, max(420, self.width() - left_width)],
+                )
+            else:
+                top_height = 260 if self.height() >= 720 else 220
+                self._apply_splitter_sizes(
+                    self._top_splitter,
+                    [top_height, max(340, self.height() - top_height)],
+                )
 
-        if self.width() >= 980:
-            self._content_splitter.setOrientation(Qt.Orientation.Horizontal)
-            nav_width = max(210, min(250, int(self.width() * 0.22)))
-            self._content_splitter.setSizes(
-                [nav_width, max(640, self.width() - nav_width)]
+        content_orientation = (
+            Qt.Orientation.Horizontal
+            if self.width() >= 980
+            else Qt.Orientation.Vertical
+        )
+        content_orientation_changed = (
+            self._content_splitter.orientation() != content_orientation
+        )
+        if content_orientation_changed:
+            self._content_splitter.setOrientation(content_orientation)
+            self._content_splitter_user_resized = False
+        if force or content_orientation_changed or not self._content_splitter_user_resized:
+            if content_orientation == Qt.Orientation.Horizontal:
+                nav_width = max(210, min(250, int(self.width() * 0.22)))
+                self._apply_splitter_sizes(
+                    self._content_splitter,
+                    [nav_width, max(640, self.width() - nav_width)],
+                )
+                return
+            top_height = 170 if self.height() >= 700 else 146
+            self._apply_splitter_sizes(
+                self._content_splitter,
+                [top_height, max(360, self.height() - top_height)],
             )
             return
-        self._content_splitter.setOrientation(Qt.Orientation.Vertical)
-        top_height = 170 if self.height() >= 700 else 146
-        self._content_splitter.setSizes(
-            [top_height, max(360, self.height() - top_height)]
-        )
+
+    def _apply_splitter_sizes(self, splitter: QSplitter, sizes: list[int]) -> None:
+        self._syncing_splitter_sizes = True
+        try:
+            splitter.setSizes(sizes)
+        finally:
+            self._syncing_splitter_sizes = False
+
+    def _on_top_splitter_moved(self, _pos: int, _index: int) -> None:
+        if self._syncing_splitter_sizes:
+            return
+        self._top_splitter_user_resized = True
+
+    def _on_content_splitter_moved(self, _pos: int, _index: int) -> None:
+        if self._syncing_splitter_sizes:
+            return
+        self._content_splitter_user_resized = True
 
     def _retranslate_sections(self) -> None:
         current_row = self._section_nav.currentRow()

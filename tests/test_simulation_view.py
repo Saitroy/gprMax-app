@@ -97,6 +97,46 @@ class SimulationViewTests(unittest.TestCase):
         self.assertGreaterEqual(view._content_splitter.handleWidth(), 10)  # noqa: SLF001
         self.assertGreaterEqual(view._top_splitter.handleWidth(), 10)  # noqa: SLF001
 
+    def test_manual_top_splitter_resize_survives_responsive_refresh(self) -> None:
+        view = SimulationView(
+            localization=LocalizationService("en"),
+            runtime_label="Bundled runtime",
+        )
+
+        view.resize(1200, 760)
+        view.show()
+        self._app.processEvents()
+        original_sizes = view._top_splitter.sizes()  # noqa: SLF001
+
+        view._top_splitter.setSizes([300, 820])  # noqa: SLF001
+        view._on_top_splitter_moved(300, 1)  # noqa: SLF001
+        view._refresh_responsive_layout()  # noqa: SLF001
+        self._app.processEvents()
+
+        resized_sizes = view._top_splitter.sizes()  # noqa: SLF001
+        self.assertLess(resized_sizes[0], original_sizes[0] - 40)
+        self.assertLess(abs(resized_sizes[0] - 300), 80)
+
+    def test_manual_content_splitter_resize_survives_responsive_refresh(self) -> None:
+        view = SimulationView(
+            localization=LocalizationService("en"),
+            runtime_label="Bundled runtime",
+        )
+
+        view.resize(1200, 760)
+        view.show()
+        self._app.processEvents()
+        original_sizes = view._content_splitter.sizes()  # noqa: SLF001
+
+        view._content_splitter.setSizes([320, 880])  # noqa: SLF001
+        view._on_content_splitter_moved(320, 1)  # noqa: SLF001
+        view._refresh_responsive_layout()  # noqa: SLF001
+        self._app.processEvents()
+
+        resized_sizes = view._content_splitter.sizes()  # noqa: SLF001
+        self.assertGreater(resized_sizes[0], original_sizes[0] + 40)
+        self.assertLess(abs(resized_sizes[0] - 320), 100)
+
 
 if __name__ == "__main__":
     unittest.main()
