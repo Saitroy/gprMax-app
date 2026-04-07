@@ -866,6 +866,10 @@ class SceneCanvasPanel(QWidget):
         self.set_project(None)
         self._build_shortcuts()
 
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._refresh_toolbar_compact_mode()
+
     def _build_scene_toolbar(self) -> None:
         self._scene_toolbar_layout = QHBoxLayout(self._scene_toolbar)
         self._scene_toolbar_layout.setContentsMargins(14, 12, 14, 12)
@@ -1140,7 +1144,9 @@ class SceneCanvasPanel(QWidget):
         self._scene_tool_combo.setCurrentIndex(index if index >= 0 else 0)
         self._scene_tool_combo.blockSignals(False)
         for tool_key, button in self._tool_buttons.items():
-            button.setText(self._localization.text(f"editor.scene.tool.{tool_key}"))
+            text = self._localization.text(f"editor.scene.tool.{tool_key}")
+            button.setText(text)
+            button.setToolTip(text)
         self._scene_mode_combo.blockSignals(True)
         current_mode = self._scene_mode_combo.currentData() or self._scene_mode
         self._scene_mode_combo.clear()
@@ -1156,11 +1162,17 @@ class SceneCanvasPanel(QWidget):
         self._scene_mode_combo.setCurrentIndex(index if index >= 0 else 0)
         self._scene_mode_combo.blockSignals(False)
         for mode_key, button in self._mode_buttons.items():
-            button.setText(self._localization.text(f"editor.scene.mode.{mode_key}"))
+            text = self._localization.text(f"editor.scene.mode.{mode_key}")
+            button.setText(text)
+            button.setToolTip(text)
         for button in self._palette_buttons:
             button.setText(self._localization.text(f"editor.scene.entity.{button.entity_kind}"))
         self._sync_palette_buttons()
         self._sync_toolbar_buttons()
+        self._undo_button.setToolTip(self._undo_button.text())
+        self._redo_button.setToolTip(self._redo_button.text())
+        self._fit_scene_button.setToolTip(self._fit_scene_button.text())
+        self._refresh_toolbar_compact_mode()
         self._update_cursor_status()
         self._refresh_material_choices()
         self._refresh_waveform_choices()
