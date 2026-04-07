@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  windows:
+    name: Windows validation (Py${{ matrix.python-version }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version:
+          - "3.11"
+          - "3.13"
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .[dev]
+
+      - name: Ruff
+        run: python -m ruff check src tests packaging tools
+
+      - name: Python script syntax smoke
+        run: >
+          python -m py_compile
+          packaging/engine/build_manifest.py
+          packaging/licenses/export_dependency_licenses.py
+          packaging/windows/build_release_manifest.py
+          packaging/windows/launch_gprmax_workbench.py
+          tools/collect_support_bundle.py
+
+      - name: Unit tests
+        run: python -m unittest discover tests

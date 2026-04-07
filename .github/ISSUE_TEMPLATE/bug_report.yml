@@ -1,0 +1,81 @@
+name: Bug report
+description: Report a reproducible problem in GPRMax Workbench
+title: "[Bug]: "
+labels:
+  - bug
+  - needs-triage
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please attach a support bundle if you can reproduce the issue locally.
+        See `SUPPORT.md` for the collection steps.
+  - type: input
+    id: app_version
+    attributes:
+      label: App version
+      description: Example: 0.1.0
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: install_type
+    attributes:
+      label: Install type
+      options:
+        - Source checkout
+        - Bundled portable build
+        - Bundled installer build
+    validations:
+      required: true
+  - type: input
+    id: windows_version
+    attributes:
+      label: Windows version
+      description: Example: Windows 11 24H2
+      placeholder: Windows 11 24H2
+    validations:
+      required: true
+  - type: textarea
+    id: runtime_info
+    attributes:
+      label: Runtime diagnostics
+      description: Paste the key runtime details shown in Settings.
+      placeholder: Runtime mode, app version, engine version, gprMax version, Python executable
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open ...
+        2. Click ...
+        3. Run ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: input
+    id: support_bundle
+    attributes:
+      label: Support bundle path or note
+      description: Mention the attached zip name or say why it is unavailable.
+      placeholder: support-bundle-20260407-153000.zip
+    validations:
+      required: true
+  - type: textarea
+    id: extras
+    attributes:
+      label: Additional context
+      description: Screenshots, logs, run IDs, project notes, or anything else relevant.

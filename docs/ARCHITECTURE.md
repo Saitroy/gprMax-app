@@ -694,12 +694,29 @@ This keeps the UI thin enough to stay replaceable while still giving the editor 
 
 ## UI shell
 
-The Stage 1 shell is organized around five top-level workspaces:
+The current shell is organized around four top-level navigation pages plus dialog surfaces:
 
-- Welcome / Project Manager
-- Model Editor
-- Simulation Runner
-- Results Viewer
-- Settings
+- `Welcome`
+- `Project`
+- `Simulation`
+- `Results`
 
-This gives a stable navigation model without prematurely locking the internal editor architecture.
+Additional shell surfaces:
+
+- `Settings` as a dedicated dialog with runtime diagnostics and advanced-mode controls;
+- `Documentation` as a separate dialog launched from the welcome shell.
+
+The `Project` page is intentionally a sectioned workspace rather than a separate top-level page per editor subtool. It currently groups:
+
+- `Scene`
+- `Domain / Grid / Time Window`
+- `Materials`
+- `Waveforms`
+- `Sources`
+- `Receivers`
+- `Geometry`
+- `Libraries / Imports`
+- `Advanced`
+- `Input Preview`
+
+This keeps the start flow, editing flow, simulation flow, and results flow separate without forcing the entire product into one overloaded workbench. Splitter-based desktop layouts are the default composition pattern, with the current UI baseline targeting `1366x768` and `1920x1080`.

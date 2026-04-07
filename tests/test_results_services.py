@@ -20,7 +20,7 @@ from gprmax_workbench.domain.results import (
     RunResultSummary,
 )
 from gprmax_workbench.domain.simulation import SimulationRunRecord
-from gprmax_workbench.domain.traces import AscanTrace, BscanLoadResult, TraceMetadata
+from gprmax_workbench.domain.traces import BscanLoadResult
 
 
 class _FakeResultRepository:

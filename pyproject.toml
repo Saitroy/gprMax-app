@@ -39,6 +39,9 @@ dev = [
   "ruff>=0.6",
   "mypy>=1.10",
 ]
+release = [
+  "pyinstaller>=6.0",
+]
 
 [project.scripts]
 gprmax-workbench = "gprmax_workbench.main:main"

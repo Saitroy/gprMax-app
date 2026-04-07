@@ -64,21 +64,24 @@ Status: implemented in the current iteration.
 Included:
 
 - a more human-facing shell with persistent project context;
-- a dashboard-style welcome screen;
-- bundled example projects as part of the onboarding path;
-- project and simulation summary tiles;
-- more adaptive splitters and reflow on the key screens;
+- a dedicated welcome dashboard with `new`, `open`, recent projects, and workflow help;
+- separate `Project`, `Simulation`, and `Results` workspaces instead of one overloaded screen;
+- a sectioned project editor with a scene workspace, domain/material sections, advanced editing, and input preview;
+- adaptive splitters with visible drag handles on the main desktop tools;
+- a desktop baseline that is actively checked against `1366x768` and `1920x1080`;
 - a more coherent visual system with workstation-style cards and a restrained corporate palette.
 
 ### UI Phase 2
 
 Next step after interface smoke testing:
 
-- reshape the Model Editor around guided sections and user scenarios;
-- clearly separate basic and advanced simulation flows;
+- persist splitter sizes and selected workspace state across sessions;
+- continue per-screen polish without collapsing the app back into one mega-layout;
 - strengthen empty / loading / error / success states across the application;
-- improve Results Viewer readability, including a clearer B-scan layout;
+- improve Results Viewer readability and export affordances;
+- continue expanding scene and editor ergonomics on top of the existing service boundaries;
 - add entity-aware inline help and warnings where users are likely to make mistakes.
+- keep the settings/runtime diagnostics surface aligned with the bundled-runtime direction.
 
 ### Feature Phase 3
 

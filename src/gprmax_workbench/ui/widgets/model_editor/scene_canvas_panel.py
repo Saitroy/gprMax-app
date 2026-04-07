@@ -1599,10 +1599,6 @@ class SceneCanvasPanel(QWidget):
         self._scene.addItem(line)
         self._measurement_items.append(line)
 
-        dx = end.x() - start.x()
-        dy = end.y() - start.y()
-        distance = hypot(dx, dy)
-        axes = self._plane_axes()
         label = QGraphicsSimpleTextItem(
             self._measurement_text(start, end)
         )

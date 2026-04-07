@@ -8,7 +8,6 @@ from ...domain.validation import ValidationResult, validate_project_for_executio
 from ...infrastructure.gprmax.input_generator import (
     GeneratedInput,
     GprMaxInputGenerator,
-    InputGenerationError,
 )
 from ...infrastructure.persistence.artifact_store import RunArtifactStore
 

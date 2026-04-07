@@ -176,9 +176,9 @@ Cross-milestone epics:
 
 What is already in place:
 
-- Stages 0-5 exist at a foundation/MVP level: architecture, project model, persistence, guided editor, simulation runner, and results viewer are already present;
-- the project is already usable for early testing and iterative refinement;
-- Windows packaging and bundled runtime work are intentionally deferred and are not the current top priority.
+- Stages 0-6 exist at a foundation/MVP level: architecture, project model, persistence, guided editor, simulation runner, results viewer, and runtime-resolution foundation are already present;
+- the desktop shell is already usable for internal testing across `Welcome`, `Project`, `Simulation`, and `Results`;
+- packaging and release engineering exist only as a foundation and are still incomplete for a first public release.
 
 Current product focus:
 
@@ -187,6 +187,8 @@ Current product focus:
 - `result analysis`
 
 The guiding principle of the current cycle is to make the core user path strong first: `build a scene -> run a simulation -> understand the result`, and only then move on to packaging and distribution work.
+
+For the current public-release assessment see [FIRST_RELEASE_READINESS.md](./FIRST_RELEASE_READINESS.md).
 
 ### Near-term roadmap: 8-12 weeks
 

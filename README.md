@@ -154,6 +154,29 @@ This repository currently contains:
 - packaging scripts for building a bundled `gprMax` engine on a Windows release machine;
 - layered package structure for UI, application services, domain, infrastructure, and jobs.
 
+### Current desktop workflow
+
+The current application shell is organized around separate desktop workspaces instead of one overloaded screen:
+
+- `Welcome`: create/open project, reopen recent work, inspect current readiness, access documentation and examples;
+- `Project`: sectioned model editing with `Scene`, domain/grid/time window, materials, waveforms, sources, receivers, geometry, libraries/imports, advanced editing, and input preview;
+- `Simulation`: run readiness, run configuration, preview/export, live logs, history, and open-folder actions;
+- `Results`: run-centric output browsing with summary metadata, artifacts, A-scan plots, and bounded B-scan previews;
+- `Settings`: runtime diagnostics, language selection, advanced mode, and external-runtime fallback in a dedicated dialog.
+
+The current UI baseline is desktop-first and has been stabilized around `1366x768` and `1920x1080`, with adaptive splitters and visible drag handles across the main tools.
+
+### Current limitations
+
+The current implementation is already useful for internal testing, but a few boundaries are still intentional:
+
+- guided editor coverage is still smaller than the full `gprMax` command surface;
+- results analysis is currently bounded to the existing A-scan and B-scan workflows;
+- splitter sizes are not yet persisted between sessions;
+- installer and public release engineering are still incomplete.
+
+For a factual product snapshot see [docs/CURRENT_STATE.md](docs/CURRENT_STATE.md).
+
 ### Repository structure
 
 ```text
@@ -229,6 +252,18 @@ Run the application:
 python -m gprmax_workbench
 ```
 
+Open a specific project on startup:
+
+```bash
+python -m gprmax_workbench --project /path/to/project
+```
+
+After editable installation you can also use:
+
+```bash
+gprmax-workbench
+```
+
 Run tests:
 
 ```bash
@@ -254,6 +289,15 @@ For Windows builds, `gprMax` is intended to be compiled on the release machine a
 ### Licensing note
 
 `gprMax` is GPLv3+. Bundling it into the desktop distribution requires a dedicated release/license review before the first public bundled build. This repository already accounts for bundled notices and engine manifests, but that is not a substitute for license review.
+
+### Release readiness
+
+Current recommendation:
+
+- internal alpha or design-partner testing: reasonable;
+- first public bundled release: not ready yet.
+
+See [docs/FIRST_RELEASE_READINESS.md](docs/FIRST_RELEASE_READINESS.md) for the current go/no-go assessment and concrete blockers.
 
 ### References
 

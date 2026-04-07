@@ -15,6 +15,7 @@ build/
 dist/
 *.egg-info/
 *.spec
+!packaging/windows/*.spec
 engine/python/
 engine/licenses/
 engine/manifest.json
