@@ -22,6 +22,7 @@ from ....application.services.model_editor_service import ModelEditorService
 from ....application.services.validation_service import ValidationService
 from ....domain.models import Project
 from ....infrastructure.gprmax.command_registry import GprMaxCommandRegistry
+from ...splitters import configure_splitter
 from .helpers import build_status_label
 from .raw_highlighter import GprMaxHighlighter
 
@@ -135,9 +136,11 @@ class AdvancedPanel(QWidget):
         editor_actions.addStretch(1)
         editor_layout.addLayout(editor_actions)
 
-        splitter = QSplitter()
+        splitter = configure_splitter(QSplitter())
         splitter.addWidget(template_panel)
         splitter.addWidget(editor_panel)
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
         splitter.setSizes([320, 900])
 
         layout = QVBoxLayout(self)

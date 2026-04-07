@@ -19,6 +19,7 @@ from ....application.services.model_editor_service import ModelEditorService
 from ....application.services.validation_service import ValidationService
 from ....domain.models import MaterialDefinition, Project
 from ...layouts.flow_layout import FlowLayout
+from ...splitters import configure_splitter
 from .helpers import (
     build_float_spinbox,
     build_status_label,
@@ -98,9 +99,11 @@ class MaterialsPanel(QWidget):
         detail_layout.addWidget(self._status_label)
         detail_layout.addStretch(1)
 
-        splitter = QSplitter()
+        splitter = configure_splitter(QSplitter())
         splitter.addWidget(list_panel)
         splitter.addWidget(detail_panel)
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
         splitter.setSizes([320, 640])
 
         layout = QVBoxLayout(self)

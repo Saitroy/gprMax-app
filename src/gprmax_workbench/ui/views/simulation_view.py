@@ -27,6 +27,7 @@ from ...domain.execution_status import SimulationMode
 from ...domain.gprmax_config import SimulationRunConfig
 from ...domain.simulation import SimulationRunRecord
 from ..layouts.flow_layout import FlowLayout
+from ..splitters import configure_splitter
 from ..widgets.metric_tile import MetricTile
 
 
@@ -171,12 +172,11 @@ class SimulationView(QWidget):
         )
         history_card = self._build_card("simulation.history_card", self._run_history)
 
-        self._top_splitter = QSplitter()
+        self._top_splitter = configure_splitter(QSplitter())
         self._top_splitter.addWidget(status_card)
         self._top_splitter.addWidget(config_card)
         self._top_splitter.setStretchFactor(0, 1)
         self._top_splitter.setStretchFactor(1, 1)
-        self._top_splitter.setChildrenCollapsible(False)
 
         launch_page = QWidget()
         launch_layout = QVBoxLayout(launch_page)
@@ -226,12 +226,11 @@ class SimulationView(QWidget):
         nav_layout.addWidget(self._nav_heading)
         nav_layout.addWidget(self._section_nav, 1)
 
-        self._content_splitter = QSplitter()
+        self._content_splitter = configure_splitter(QSplitter())
         self._content_splitter.addWidget(nav_card)
         self._content_splitter.addWidget(self._section_stack)
         self._content_splitter.setStretchFactor(0, 0)
         self._content_splitter.setStretchFactor(1, 1)
-        self._content_splitter.setChildrenCollapsible(False)
         self._content_splitter.setSizes([240, 980])
 
         self._workspace_container = QWidget()
@@ -597,20 +596,32 @@ class SimulationView(QWidget):
         self._retry_button.setEnabled(self._has_retry_target and not self._run_in_progress)
 
     def _refresh_responsive_layout(self) -> None:
-        wide = self.width() >= 1160
+        wide = self.width() >= 1020
         top_orientation = Qt.Orientation.Horizontal if wide else Qt.Orientation.Vertical
         self._top_splitter.setOrientation(top_orientation)
         if wide:
-            self._top_splitter.setSizes([520, 520])
+            left_width = max(360, min(520, int(self.width() * 0.42)))
+            self._top_splitter.setSizes(
+                [left_width, max(420, self.width() - left_width)]
+            )
         else:
-            self._top_splitter.setSizes([300, 520])
+            top_height = 260 if self.height() >= 720 else 220
+            self._top_splitter.setSizes(
+                [top_height, max(340, self.height() - top_height)]
+            )
 
-        if self.width() >= 1100:
+        if self.width() >= 980:
             self._content_splitter.setOrientation(Qt.Orientation.Horizontal)
-            self._content_splitter.setSizes([240, 980])
+            nav_width = max(210, min(250, int(self.width() * 0.22)))
+            self._content_splitter.setSizes(
+                [nav_width, max(640, self.width() - nav_width)]
+            )
             return
         self._content_splitter.setOrientation(Qt.Orientation.Vertical)
-        self._content_splitter.setSizes([180, 820])
+        top_height = 170 if self.height() >= 700 else 146
+        self._content_splitter.setSizes(
+            [top_height, max(360, self.height() - top_height)]
+        )
 
     def _retranslate_sections(self) -> None:
         current_row = self._section_nav.currentRow()

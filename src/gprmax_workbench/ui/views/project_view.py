@@ -21,6 +21,7 @@ from ...application.services.validation_service import ValidationService
 from ...domain.models import Project
 from ...domain.validation import ValidationResult
 from ...infrastructure.gprmax.command_registry import GprMaxCommandRegistry
+from ..splitters import configure_splitter
 from ..widgets.model_editor.advanced_panel import AdvancedPanel
 from ..widgets.model_editor.general_panel import GeneralPanel
 from ..widgets.model_editor.geometry_panel import GeometryPanel
@@ -149,12 +150,11 @@ class ProjectView(QWidget):
         for _, panel in self._sections:
             self._section_stack.addWidget(panel)
 
-        self._content_splitter = QSplitter()
+        self._content_splitter = configure_splitter(QSplitter())
         self._content_splitter.addWidget(nav_card)
         self._content_splitter.addWidget(self._section_stack)
         self._content_splitter.setStretchFactor(0, 0)
         self._content_splitter.setStretchFactor(1, 1)
-        self._content_splitter.setChildrenCollapsible(False)
         self._content_splitter.setSizes([230, 980])
 
         layout = QVBoxLayout(self)
@@ -313,12 +313,18 @@ class ProjectView(QWidget):
         self._section_stack.setCurrentIndex(row)
 
     def _refresh_responsive_layout(self) -> None:
-        if self.width() < 1160:
+        if self.width() < 980:
             self._content_splitter.setOrientation(Qt.Orientation.Vertical)
-            self._content_splitter.setSizes([220, 760])
+            top_height = 176 if self.height() >= 700 else 152
+            self._content_splitter.setSizes(
+                [top_height, max(360, self.height() - top_height)]
+            )
             return
         self._content_splitter.setOrientation(Qt.Orientation.Horizontal)
-        self._content_splitter.setSizes([230, 980])
+        nav_width = max(210, min(250, int(self.width() * 0.23)))
+        self._content_splitter.setSizes(
+            [nav_width, max(680, self.width() - nav_width)]
+        )
 
     def _on_scene_edit_requested(self, entity_kind: str) -> None:
         target_key = {

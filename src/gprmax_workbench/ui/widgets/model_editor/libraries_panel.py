@@ -31,6 +31,7 @@ from ....domain.models import (
     Vector3,
 )
 from ...layouts.flow_layout import FlowLayout
+from ...splitters import configure_splitter
 from .helpers import (
     build_float_spinbox,
     build_status_label,
@@ -145,9 +146,11 @@ class LibrariesPanel(QWidget):
         detail_layout.addWidget(self._import_preview_label)
         detail_layout.addStretch(1)
 
-        splitter = QSplitter()
+        splitter = configure_splitter(QSplitter())
         splitter.addWidget(list_panel)
         splitter.addWidget(detail_panel)
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
         splitter.setSizes([320, 800])
 
         for widget in (
@@ -241,9 +244,11 @@ class LibrariesPanel(QWidget):
         detail_layout.addWidget(self._antenna_preview_label)
         detail_layout.addStretch(1)
 
-        splitter = QSplitter()
+        splitter = configure_splitter(QSplitter())
         splitter.addWidget(list_panel)
         splitter.addWidget(detail_panel)
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
         splitter.setSizes([320, 800])
 
         for widget in (

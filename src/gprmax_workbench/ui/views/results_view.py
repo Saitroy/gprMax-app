@@ -28,6 +28,7 @@ from ...domain.results import ResultMetadata, RunResultSummary
 from ...domain.traces import BscanLoadResult
 from ...infrastructure.results.hdf5_reader import ResultsReadError
 from ..layouts.flow_layout import FlowLayout
+from ..splitters import configure_splitter
 from ..widgets.results.bscan_image_widget import BscanImageWidget
 from ..widgets.results.summary_panel import ResultSummaryPanel
 from ..widgets.results.trace_plot_widget import TracePlotWidget
@@ -95,7 +96,7 @@ class ResultsView(QWidget):
         toolbar.addWidget(self._open_selected_file_button)
 
         left_panel = self._build_card("results.card.runs", self._run_list)
-        left_panel.setMinimumWidth(220)
+        left_panel.setMinimumWidth(200)
 
         self._summary_panel = ResultSummaryPanel(localization)
         summary_card = self._build_card("results.card.summary", self._summary_panel)
@@ -108,24 +109,22 @@ class ResultsView(QWidget):
         details_layout.addWidget(summary_card)
         details_layout.addWidget(artifact_card, 1)
 
-        self._bottom_splitter = QSplitter()
+        self._bottom_splitter = configure_splitter(QSplitter())
         self._bottom_splitter.addWidget(left_panel)
         self._bottom_splitter.addWidget(details_panel)
         self._bottom_splitter.setStretchFactor(0, 0)
         self._bottom_splitter.setStretchFactor(1, 1)
-        self._bottom_splitter.setChildrenCollapsible(False)
         self._bottom_splitter.setSizes([320, 960])
 
         plot_card = self._build_card("results.card.plot", self._tabs)
-        plot_card.setMinimumHeight(320 if embedded else 420)
+        plot_card.setMinimumHeight(300 if embedded else 360)
         plot_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
-        self._page_splitter = QSplitter(Qt.Orientation.Vertical)
+        self._page_splitter = configure_splitter(QSplitter(Qt.Orientation.Vertical))
         self._page_splitter.addWidget(plot_card)
         self._page_splitter.addWidget(self._bottom_splitter)
         self._page_splitter.setStretchFactor(0, 4)
         self._page_splitter.setStretchFactor(1, 2)
-        self._page_splitter.setChildrenCollapsible(False)
         self._page_splitter.setSizes([560 if embedded else 620, 280])
 
         layout = QVBoxLayout(self)
@@ -869,13 +868,24 @@ class ResultsView(QWidget):
 
     def _refresh_responsive_layout(self) -> None:
         main_orientation = (
-            Qt.Orientation.Horizontal if self.width() >= 1180 else Qt.Orientation.Vertical
+            Qt.Orientation.Horizontal if self.width() >= 1000 else Qt.Orientation.Vertical
         )
         self._bottom_splitter.setOrientation(main_orientation)
         if main_orientation == Qt.Orientation.Horizontal:
-            self._bottom_splitter.setSizes([260, 900])
-            return
-        self._bottom_splitter.setSizes([260, 540])
+            left_width = max(220, min(300, int(self.width() * 0.25)))
+            self._bottom_splitter.setSizes(
+                [left_width, max(520, self.width() - left_width)]
+            )
+        else:
+            top_height = 220 if self.height() >= 720 else 190
+            self._bottom_splitter.setSizes(
+                [top_height, max(280, self.height() - top_height)]
+            )
+
+        plot_height = 460 if self.height() >= 860 else 380
+        self._page_splitter.setSizes(
+            [plot_height, max(220, self.height() - plot_height)]
+        )
 
     def _sync_run_selection(self) -> None:
         selected_run_id = self._results_service.viewer_state.selected_run_id
