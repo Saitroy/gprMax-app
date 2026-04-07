@@ -53,6 +53,7 @@ from ....application.services.model_editor_service import ModelEditorService
 from ....application.services.validation_service import ValidationService
 from ....domain.models import GeometryPrimitive, Project, Vector3
 from ...layouts.flow_layout import FlowLayout
+from ...splitters import configure_splitter
 from .helpers import (
     build_float_spinbox,
     build_status_label,
@@ -839,7 +840,7 @@ class SceneCanvasPanel(QWidget):
         self._side_scroll.setFrameShape(QFrame.Shape.NoFrame)
         self._side_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._side_scroll.setWidget(self._side_panel)
-        self._side_scroll.setMinimumWidth(240)
+        self._side_scroll.setMinimumWidth(220)
         self._side_scroll.setMaximumWidth(520)
         self._side_scroll.setSizePolicy(
             QSizePolicy.Policy.Preferred,
@@ -862,9 +863,7 @@ class SceneCanvasPanel(QWidget):
         view_shell_layout.setColumnStretch(1, 1)
         view_shell_layout.setRowStretch(2, 1)
 
-        self._workspace_splitter = QSplitter(Qt.Orientation.Horizontal)
-        self._workspace_splitter.setChildrenCollapsible(False)
-        self._workspace_splitter.setHandleWidth(8)
+        self._workspace_splitter = configure_splitter(QSplitter(Qt.Orientation.Horizontal))
         self._workspace_splitter.addWidget(view_shell)
         self._workspace_splitter.addWidget(self._side_scroll)
         self._workspace_splitter.setStretchFactor(0, 1)
@@ -914,7 +913,7 @@ class SceneCanvasPanel(QWidget):
         self._scene_toolbar_layout.addWidget(self._toolbar_tool_section)
         self._scene_toolbar_layout.addWidget(self._toolbar_mode_section)
         self._scene_toolbar_layout.addWidget(self._toolbar_history_section)
-        self._cursor_status_label.setMinimumWidth(180)
+        self._cursor_status_label.setMinimumWidth(140)
         self._scene_toolbar_layout.addWidget(
             self._cursor_status_label,
         )

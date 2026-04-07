@@ -7,6 +7,7 @@ from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QWidget
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -80,6 +81,21 @@ class SimulationViewTests(unittest.TestCase):
 
         with self.assertRaises(SimulationConfigurationError):
             view.current_configuration()
+
+    def test_standard_desktop_width_keeps_splitters_horizontal(self) -> None:
+        view = SimulationView(
+            localization=LocalizationService("en"),
+            runtime_label="Bundled runtime",
+        )
+
+        view.resize(1040, 720)
+        view.show()
+        self._app.processEvents()
+
+        self.assertEqual(view._content_splitter.orientation(), Qt.Orientation.Horizontal)  # noqa: SLF001
+        self.assertEqual(view._top_splitter.orientation(), Qt.Orientation.Horizontal)  # noqa: SLF001
+        self.assertGreaterEqual(view._content_splitter.handleWidth(), 10)  # noqa: SLF001
+        self.assertGreaterEqual(view._top_splitter.handleWidth(), 10)  # noqa: SLF001
 
 
 if __name__ == "__main__":

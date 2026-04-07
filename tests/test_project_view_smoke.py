@@ -8,6 +8,7 @@ from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -74,6 +75,16 @@ class ProjectViewSmokeTests(unittest.TestCase):
             view._scene_panel.edit_requested.emit("receiver")  # noqa: SLF001
 
             self.assertIs(view._section_stack.currentWidget(), view._receivers_panel)  # noqa: SLF001
+
+    def test_standard_desktop_width_keeps_project_splitter_horizontal(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            view = self._build_view(temp_dir)
+            view.resize(1040, 720)
+            view.show()
+            self._app.processEvents()
+
+            self.assertEqual(view._content_splitter.orientation(), Qt.Orientation.Horizontal)  # noqa: SLF001
+            self.assertGreaterEqual(view._content_splitter.handleWidth(), 10)  # noqa: SLF001
 
 
 if __name__ == "__main__":

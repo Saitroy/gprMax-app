@@ -235,6 +235,24 @@ class ResultsViewTests(unittest.TestCase):
         self.assertEqual(results_service.viewer_state.selected_run_id, "run-1")
         self.assertEqual(view._run_list.currentItem().data(Qt.ItemDataRole.UserRole), "run-1")
 
+    def test_standard_desktop_width_keeps_results_splitter_horizontal(self) -> None:
+        summary = _build_run_summary(Path("D:/demo/output/run1.out"))
+        metadata = _build_metadata(summary.output_files[0], components=["Ez"])
+        traces = _build_traces(summary.output_files[0].path, components=["Ez"])
+        view, _results_service = _build_view(
+            [summary],
+            metadata=metadata,
+            traces=traces,
+        )
+
+        view.resize(1040, 720)
+        view.show()
+        self._app.processEvents()
+
+        self.assertEqual(view._bottom_splitter.orientation(), Qt.Orientation.Horizontal)  # noqa: SLF001
+        self.assertGreaterEqual(view._bottom_splitter.handleWidth(), 10)  # noqa: SLF001
+        self.assertGreaterEqual(view._page_splitter.handleWidth(), 10)  # noqa: SLF001
+
 
 def _build_view(
     summaries: list[RunResultSummary],

@@ -9,7 +9,7 @@ class SettingsDialog(QDialog):
     def __init__(self, settings_view: SettingsView, parent=None) -> None:
         super().__init__(parent)
         self.setModal(False)
-        self.setMinimumSize(760, 620)
+        self.setMinimumSize(720, 560)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(18, 18, 18, 18)
