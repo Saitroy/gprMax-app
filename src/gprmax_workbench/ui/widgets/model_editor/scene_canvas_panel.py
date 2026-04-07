@@ -40,6 +40,7 @@ from PySide6.QtWidgets import (
     QRubberBand,
     QScrollArea,
     QSizePolicy,
+    QSplitter,
     QStackedWidget,
     QStyle,
     QToolButton,
@@ -574,6 +575,7 @@ class SceneCanvasPanel(QWidget):
         self._loading = False
         self._workbench_mode = False
         self._auxiliary_sidebar_widget: QWidget | None = None
+        self._workspace_splitter_user_resized = False
 
         self._plane_combo = QComboBox()
         self._plane_combo.currentIndexChanged.connect(self._change_plane)
@@ -832,8 +834,8 @@ class SceneCanvasPanel(QWidget):
         self._side_scroll.setFrameShape(QFrame.Shape.NoFrame)
         self._side_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._side_scroll.setWidget(self._side_panel)
-        self._side_scroll.setMinimumWidth(280)
-        self._side_scroll.setMaximumWidth(380)
+        self._side_scroll.setMinimumWidth(240)
+        self._side_scroll.setMaximumWidth(520)
         self._side_scroll.setSizePolicy(
             QSizePolicy.Policy.Preferred,
             QSizePolicy.Policy.Expanding,
@@ -855,20 +857,30 @@ class SceneCanvasPanel(QWidget):
         view_shell_layout.setColumnStretch(1, 1)
         view_shell_layout.setRowStretch(2, 1)
 
+        self._workspace_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self._workspace_splitter.setChildrenCollapsible(False)
+        self._workspace_splitter.setHandleWidth(8)
+        self._workspace_splitter.addWidget(view_shell)
+        self._workspace_splitter.addWidget(self._side_scroll)
+        self._workspace_splitter.setStretchFactor(0, 1)
+        self._workspace_splitter.setStretchFactor(1, 0)
+        self._workspace_splitter.splitterMoved.connect(self._on_workspace_splitter_moved)
+
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(16)
-        layout.addWidget(view_shell, 1)
-        layout.addWidget(self._side_scroll, 0)
+        layout.setSpacing(0)
+        layout.addWidget(self._workspace_splitter, 1)
 
         self._build_nudge_buttons()
         self.retranslate_ui()
         self.set_project(None)
         self._build_shortcuts()
+        self._refresh_workspace_splitter_sizes(force=True)
 
     def resizeEvent(self, event) -> None:  # noqa: N802
         super().resizeEvent(event)
         self._refresh_toolbar_compact_mode()
+        self._refresh_workspace_splitter_sizes()
 
     def _build_scene_toolbar(self) -> None:
         self._scene_toolbar_layout = FlowLayout(
@@ -1046,6 +1058,33 @@ class SceneCanvasPanel(QWidget):
             "" if compact else self._localization.text("editor.scene.fit")
         )
         self._scene_toolbar.updateGeometry()
+
+    def _refresh_workspace_splitter_sizes(self, *, force: bool = False) -> None:
+        if not hasattr(self, "_workspace_splitter"):
+            return
+        if self.width() <= 0:
+            return
+        if self._workspace_splitter_user_resized and not force:
+            return
+
+        total_width = max(self.width(), 1)
+        if total_width >= 1500:
+            sidebar_width = 360
+        elif total_width >= 1280:
+            sidebar_width = 330
+        elif total_width >= 1080:
+            sidebar_width = 300
+        elif total_width >= 900:
+            sidebar_width = 270
+        else:
+            sidebar_width = 240
+
+        sidebar_width = max(self._side_scroll.minimumWidth(), min(sidebar_width, 420))
+        scene_width = max(320, total_width - sidebar_width)
+        self._workspace_splitter.setSizes([scene_width, sidebar_width])
+
+    def _on_workspace_splitter_moved(self, _pos: int, _index: int) -> None:
+        self._workspace_splitter_user_resized = True
 
     def _build_nudge_buttons(self) -> None:
         self._nudge_buttons: list[QPushButton] = []
