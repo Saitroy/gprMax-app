@@ -34,6 +34,7 @@ from ..application.services.simulation_service import (
 from .dialogs.new_project_dialog import NewProjectDialog
 from .dialogs.documentation_dialog import DocumentationDialog
 from .dialogs.settings_dialog import SettingsDialog
+from .splitters import configure_splitter
 from .views.project_view import ProjectView
 from .views.results_view import ResultsView
 from .views.settings_view import SettingsView
@@ -193,8 +194,7 @@ class MainWindow(QMainWindow):
         sidebar = self._build_sidebar()
         content = self._build_content_area()
 
-        self._shell_splitter = QSplitter(Qt.Orientation.Horizontal)
-        self._shell_splitter.setChildrenCollapsible(False)
+        self._shell_splitter = configure_splitter(QSplitter(Qt.Orientation.Horizontal))
         self._shell_splitter.addWidget(sidebar)
         self._shell_splitter.addWidget(content)
         self._shell_splitter.setStretchFactor(0, 0)
@@ -308,8 +308,8 @@ class MainWindow(QMainWindow):
         frame = QFrame()
         frame.setObjectName("Sidebar")
         self._sidebar = frame
-        frame.setMinimumWidth(220)
-        frame.setMaximumWidth(300)
+        frame.setMinimumWidth(210)
+        frame.setMaximumWidth(280)
         frame.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
 
         layout = QVBoxLayout(frame)
@@ -353,8 +353,10 @@ class MainWindow(QMainWindow):
             return
 
         available = screen.availableGeometry()
-        target_width = min(1400, max(980, available.width() - 80))
-        target_height = min(900, max(700, available.height() - 96))
+        width_margin = 40 if available.width() <= 1440 else 80
+        height_margin = 40 if available.height() <= 900 else 96
+        target_width = min(1440, max(980, available.width() - width_margin))
+        target_height = min(920, max(700, available.height() - height_margin))
         target_width = min(target_width, available.width())
         target_height = min(target_height, available.height())
         self.resize(target_width, target_height)
@@ -369,7 +371,7 @@ class MainWindow(QMainWindow):
         self.move(centered_x, centered_y)
 
     def _sidebar_width_for_window(self, window_width: int) -> int:
-        return max(220, min(300, int(window_width * 0.19)))
+        return max(210, min(280, int(window_width * 0.18)))
 
     def _build_content_stack(self) -> QWidget:
         for page in self._pages:
