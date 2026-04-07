@@ -1019,6 +1019,36 @@ class SceneCanvasPanel(QWidget):
             button.setChecked(mode_key == self._scene_mode and mode_enabled)
         self._refresh_history_controls()
 
+    def _refresh_toolbar_compact_mode(self) -> None:
+        compact = self.width() < 1360
+        tight = self.width() < 1120
+
+        for button in self._tool_buttons.values():
+            button.setToolButtonStyle(
+                Qt.ToolButtonStyle.ToolButtonIconOnly
+                if compact
+                else Qt.ToolButtonStyle.ToolButtonTextBesideIcon
+            )
+        for button in self._mode_buttons.values():
+            button.setToolButtonStyle(
+                Qt.ToolButtonStyle.ToolButtonIconOnly
+                if compact
+                else Qt.ToolButtonStyle.ToolButtonTextBesideIcon
+            )
+
+        self._toolbar_plane_label.setVisible(not tight)
+        self._toolbar_tool_label.setVisible(not tight)
+        self._toolbar_mode_label.setVisible(not tight)
+        self._toolbar_history_label.setVisible(not tight)
+        self._cursor_status_label.setVisible(not compact)
+
+        self._undo_button.setText("" if compact else self._localization.text("common.undo"))
+        self._redo_button.setText("" if compact else self._localization.text("common.redo"))
+        self._fit_scene_button.setText(
+            "" if compact else self._localization.text("editor.scene.fit")
+        )
+        self._scene_toolbar.updateGeometry()
+
     def _build_nudge_buttons(self) -> None:
         self._nudge_buttons: list[QPushButton] = []
         for text_key, vector in (
