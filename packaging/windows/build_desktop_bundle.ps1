@@ -24,6 +24,162 @@ function Copy-DirectoryTree([string]$SourceRoot, [string]$DestinationRoot) {
     }
 }
 
+function Remove-PathIfExists([string]$PathValue) {
+    if (Test-Path $PathValue) {
+        Remove-Item -Recurse -Force $PathValue
+    }
+}
+
+function Remove-PathsByPattern([string]$Root, [string[]]$Patterns) {
+    foreach ($pattern in $Patterns) {
+        Get-ChildItem -Path $Root -Filter $pattern -Force -ErrorAction SilentlyContinue | ForEach-Object {
+            Remove-Item -Recurse -Force $_.FullName
+        }
+    }
+}
+
+function Optimize-EngineRuntime([string]$BundleRoot) {
+    $engineRoot = Join-Path $BundleRoot "engine"
+    $sitePackages = Join-Path $engineRoot "python\Lib\site-packages"
+    $scriptsRoot = Join-Path $engineRoot "python\Scripts"
+
+    Remove-PathIfExists (Join-Path $engineRoot "python\etc\jupyter")
+    Remove-PathIfExists (Join-Path $engineRoot "python\share\jupyter")
+
+    if (Test-Path $sitePackages) {
+        $explicitRemovals = @(
+            "IPython",
+            "ipykernel",
+            "ipywidgets",
+            "jupyterlab",
+            "jupyterlab_pygments",
+            "jupyterlab_server",
+            "jupyterlab_widgets",
+            "jupyter_client",
+            "jupyter_console",
+            "jupyter_core",
+            "jupyter_events",
+            "jupyter_lsp",
+            "jupyter_server",
+            "jupyter_server_terminals",
+            "nbclient",
+            "nbconvert",
+            "nbformat",
+            "notebook",
+            "notebook_shim",
+            "widgetsnbextension",
+            "comm",
+            "debugpy",
+            "jsonschema",
+            "jsonschema_specifications",
+            "referencing",
+            "rpds",
+            "argon2",
+            "async_lru",
+            "bs4",
+            "bleach",
+            "defusedxml",
+            "mistune",
+            "prometheus_client",
+            "send2trash",
+            "stack_data",
+            "tinycss2",
+            "traitlets",
+            "webcolors",
+            "webencodings",
+            "websocket",
+            "fqdn",
+            "isoduration",
+            "uri_template",
+            "json5",
+            "fastjsonschema",
+            "jedi",
+            "parso",
+            "prompt_toolkit",
+            "terminado",
+            "tornado",
+            "zmq",
+            "yaml",
+            "winpty",
+            "_argon2_cffi_bindings"
+        )
+
+        foreach ($entry in $explicitRemovals) {
+            Remove-PathIfExists (Join-Path $sitePackages $entry)
+        }
+
+        Remove-PathsByPattern $sitePackages @(
+            "jupyter*",
+            "notebook*",
+            "ipykernel*",
+            "ipython*",
+            "ipywidgets*",
+            "widgetsnbextension*",
+            "debugpy*",
+            "jsonschema*",
+            "referencing*",
+            "rpds*",
+            "argon2*",
+            "async_lru*",
+            "beautifulsoup4*",
+            "bleach*",
+            "defusedxml*",
+            "mistune*",
+            "prometheus_client*",
+            "python_json_logger*",
+            "pythonjsonlogger*",
+            "rfc3339_validator*",
+            "rfc3986_validator*",
+            "rfc3987_syntax*",
+            "send2trash*",
+            "stack_data*",
+            "tinycss2*",
+            "traitlets*",
+            "webcolors*",
+            "webencodings*",
+            "websocket*",
+            "fqdn*",
+            "isoduration*",
+            "uri_template*",
+            "json5*",
+            "fastjsonschema*",
+            "jedi*",
+            "parso*",
+            "prompt_toolkit*",
+            "terminado*",
+            "tornado*",
+            "pywinpty*",
+            "winpty*",
+            "pyzmq*"
+        )
+
+        Get-ChildItem -Path $sitePackages -Directory -Recurse -Force -ErrorAction SilentlyContinue | Where-Object {
+            $_.Name -in @("__pycache__", "tests", "test", "testing", "benchmarks", "docs", "doc", "examples", "example")
+        } | Sort-Object FullName -Descending | ForEach-Object {
+            Remove-Item -Recurse -Force $_.FullName
+        }
+
+        Get-ChildItem -Path $sitePackages -Include *.pyc,*.pyo,*.whl -Recurse -Force -ErrorAction SilentlyContinue | ForEach-Object {
+            Remove-Item -Force $_.FullName
+        }
+    }
+
+    if (Test-Path $scriptsRoot) {
+        Get-ChildItem -Path $scriptsRoot -File -Force -ErrorAction SilentlyContinue | Where-Object {
+            $_.Name -like "jupyter*" -or
+            $_.Name -like "ipython*" -or
+            $_.Name -like "debugpy*" -or
+            $_.Name -like "jlpm*" -or
+            $_.Name -like "jsonschema*" -or
+            $_.Name -like "pyjson5*" -or
+            $_.Name -like "pygmentize*" -or
+            $_.Name -like "wsdump*"
+        } | ForEach-Object {
+            Remove-Item -Force $_.FullName
+        }
+    }
+}
+
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Resolve-AbsolutePath "..\.." $scriptRoot
 
@@ -88,6 +244,7 @@ New-Item -ItemType Directory -Path $licensesRoot -Force | Out-Null
 New-Item -ItemType Directory -Path $supportRoot -Force | Out-Null
 
 Copy-DirectoryTree $sourceEngineRoot (Join-Path $bundleRoot "engine")
+Optimize-EngineRuntime $bundleRoot
 Copy-Item (Join-Path $repoRoot "README.md") (Join-Path $docsRoot "README.md")
 Copy-Item (Join-Path $repoRoot "SUPPORT.md") (Join-Path $docsRoot "SUPPORT.md")
 Copy-Item (Join-Path $repoRoot "docs\PUBLIC_RELEASE_CHECKLIST.md") (Join-Path $docsRoot "PUBLIC_RELEASE_CHECKLIST.md")

@@ -44,6 +44,12 @@ if ($LASTEXITCODE -ne 0) {
     throw "Failed to validate bundled engine manifest with bundled Python."
 }
 
+$gprMaxImportCommand = "import gprMax; print(getattr(gprMax, '__version__', 'unknown'))"
+& $enginePythonExe -c $gprMaxImportCommand | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    throw "Failed to import gprMax from the bundled engine runtime."
+}
+
 $releaseManifestPath = Join-Path $resolvedBundleRoot "release-manifest.json"
 $releaseManifest = Get-Content $releaseManifestPath -Raw | ConvertFrom-Json
 if ($releaseManifest.schema.name -ne "gprmax-workbench-release-manifest") {
