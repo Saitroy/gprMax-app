@@ -16,6 +16,14 @@ function Resolve-AbsolutePath([string]$PathValue, [string]$BaseRoot) {
     return [System.IO.Path]::GetFullPath((Join-Path $BaseRoot $PathValue))
 }
 
+function Copy-DirectoryTree([string]$SourceRoot, [string]$DestinationRoot) {
+    New-Item -ItemType Directory -Path $DestinationRoot -Force | Out-Null
+    $null = robocopy $SourceRoot $DestinationRoot /E /NFL /NDL /NJH /NJS /NP
+    if ($LASTEXITCODE -gt 7) {
+        throw "robocopy failed while copying '$SourceRoot' to '$DestinationRoot' with exit code $LASTEXITCODE"
+    }
+}
+
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Resolve-AbsolutePath "..\.." $scriptRoot
 
@@ -79,13 +87,14 @@ New-Item -ItemType Directory -Path $docsRoot -Force | Out-Null
 New-Item -ItemType Directory -Path $licensesRoot -Force | Out-Null
 New-Item -ItemType Directory -Path $supportRoot -Force | Out-Null
 
-Copy-Item $sourceEngineRoot (Join-Path $bundleRoot "engine") -Recurse -Force
+Copy-DirectoryTree $sourceEngineRoot (Join-Path $bundleRoot "engine")
 Copy-Item (Join-Path $repoRoot "README.md") (Join-Path $docsRoot "README.md")
 Copy-Item (Join-Path $repoRoot "SUPPORT.md") (Join-Path $docsRoot "SUPPORT.md")
 Copy-Item (Join-Path $repoRoot "docs\PUBLIC_RELEASE_CHECKLIST.md") (Join-Path $docsRoot "PUBLIC_RELEASE_CHECKLIST.md")
 Copy-Item (Join-Path $repoRoot "docs\BUNDLED_LICENSE_REVIEW.md") (Join-Path $docsRoot "BUNDLED_LICENSE_REVIEW.md")
 Copy-Item (Join-Path $repoRoot "LICENSE") (Join-Path $licensesRoot "GPRMax-Workbench-LICENSE.txt")
 Copy-Item (Join-Path $repoRoot "tools\collect_support_bundle.py") (Join-Path $supportRoot "collect_support_bundle.py")
+Copy-Item (Join-Path $repoRoot "packaging\windows\install_vs_build_tools.ps1") (Join-Path $supportRoot "install_vs_build_tools.ps1")
 
 & $PythonExe `
     (Join-Path $repoRoot "packaging\licenses\export_dependency_licenses.py") `

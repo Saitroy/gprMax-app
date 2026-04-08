@@ -107,6 +107,8 @@ For the first releases, a Windows installer with a one-folder install layout is 
 - MSVC Build Tools installation;
 - manual Python executable selection as a required step.
 
+For accuracy, the Windows installer may still expose an optional advanced task that downloads Microsoft Visual Studio Build Tools with the C++ workload. This is not part of the normal end-user path for the bundled app. It exists only for users who intentionally want to rebuild or repair the `gprMax` engine on the target machine.
+
 ## Engine Bundle Build
 
 `gprMax` requires Windows Cython modules to be built through an MSVC/OpenMP toolchain. Therefore:

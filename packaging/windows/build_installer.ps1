@@ -16,7 +16,8 @@ function Resolve-AbsolutePath([string]$PathValue, [string]$BaseRoot) {
 function Find-ISCC {
     $candidates = @(
         "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
-        "${env:ProgramFiles}\Inno Setup 6\ISCC.exe"
+        "${env:ProgramFiles}\Inno Setup 6\ISCC.exe",
+        "${env:LOCALAPPDATA}\Programs\Inno Setup 6\ISCC.exe"
     )
     foreach ($candidate in $candidates) {
         if (Test-Path $candidate) {

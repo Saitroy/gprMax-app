@@ -22,6 +22,7 @@ $requiredPaths = @(
     (Join-Path $resolvedBundleRoot "licenses\engine-python\inventory-engine-python.json"),
     (Join-Path $resolvedBundleRoot "docs\PUBLIC_RELEASE_CHECKLIST.md"),
     (Join-Path $resolvedBundleRoot "support\collect_support_bundle.py"),
+    (Join-Path $resolvedBundleRoot "support\install_vs_build_tools.ps1"),
     (Join-Path $resolvedBundleRoot "release-manifest.json")
 )
 

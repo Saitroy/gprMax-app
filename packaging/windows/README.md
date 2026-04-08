@@ -17,6 +17,13 @@ The public release path is:
 5. build the installer with Inno Setup
 6. run clean-machine smoke tests
 
+The installer now also exposes an optional post-install task to download and launch Microsoft Visual Studio Build Tools with the C++ workload.
+
+Important distinction:
+
+- normal bundled application use does not require Visual Studio Build Tools;
+- Build Tools are only needed on machines where the user wants to rebuild or repair the `gprMax` engine manually.
+
 ## Prerequisites
 
 - Windows x64 release machine
@@ -52,6 +59,11 @@ dist/windows/GPRMax Workbench/
   release-manifest.json
 ```
 
+The bundle includes:
+
+- `support\collect_support_bundle.py`
+- `support\install_vs_build_tools.ps1`
+
 ## Build the installer
 
 ```powershell
@@ -77,3 +89,4 @@ powershell -ExecutionPolicy Bypass -File packaging\windows\smoke_test_bundle.ps1
 - This is release-machine tooling, not end-user workflow.
 - CI validates repository quality gates, not the full Windows installer build.
 - A public bundled release still requires a completed review from `docs/BUNDLED_LICENSE_REVIEW.md`.
+- The optional Build Tools installer task downloads the official Microsoft bootstrapper from `https://aka.ms/vs/17/release/vs_BuildTools.exe` and starts it with the `Microsoft.VisualStudio.Workload.VCTools` workload.
