@@ -173,7 +173,7 @@ The current implementation is already useful for internal testing, but a few bou
 - guided editor coverage is still smaller than the full `gprMax` command surface;
 - results analysis is currently bounded to the existing A-scan and B-scan workflows;
 - splitter sizes are not yet persisted between sessions;
-- installer and public release engineering are still incomplete.
+- installer and public release engineering now have repository scaffolding, but still require full release dry-runs and sign-off.
 
 For a factual product snapshot see [docs/CURRENT_STATE.md](docs/CURRENT_STATE.md).
 
@@ -285,6 +285,16 @@ The next engineering steps are:
 The product direction is now explicit: end users must not install `gprMax`, Python, Git, Conda, or Visual Studio Build Tools manually.
 
 For Windows builds, `gprMax` is intended to be compiled on the release machine and shipped inside the installer as a bundled `engine/` runtime. The current repository includes the foundation for that approach in [packaging/engine/README.md](packaging/engine/README.md).
+
+### Release engineering assets
+
+The repository now contains the first public-release foundation:
+
+- CI workflow: [.github/workflows/ci.yml](.github/workflows/ci.yml)
+- public release gate: [docs/PUBLIC_RELEASE_CHECKLIST.md](docs/PUBLIC_RELEASE_CHECKLIST.md)
+- bundled license review gate: [docs/BUNDLED_LICENSE_REVIEW.md](docs/BUNDLED_LICENSE_REVIEW.md)
+- Windows bundle and installer scripts: [packaging/windows/README.md](packaging/windows/README.md)
+- support and bug-report flow: [SUPPORT.md](SUPPORT.md)
 
 ### Licensing note
 

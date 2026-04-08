@@ -23,6 +23,8 @@ The project is technically usable for guided testing, but it does not yet have t
 - The application has a working layered architecture with `ui`, `application`, `domain`, `infrastructure`, and `jobs`.
 - The main user flow exists across `Welcome -> Project -> Simulation -> Results`.
 - Runtime diagnostics and bundled-engine foundation work are present.
+- Repository CI now exists in `.github/workflows/ci.yml`.
+- Public release checklist, license-review checklist, issue templates, and support-bundle tooling now exist in the main repository.
 - The repository currently contains `107` automated tests, and `python -m unittest discover tests` passes locally.
 - The current desktop shell has been smoke-checked for `1366x768` and `1920x1080`.
 
@@ -72,33 +74,35 @@ Why:
 
 Remaining gaps:
 
-- there is no repository-level CI workflow in the main `.github/workflows` path;
-- release gates are currently social/manual rather than enforced by automation.
+- CI does not yet build the desktop bundle or installer artifact;
+- release sign-off is still manual, even though the repository now contains explicit checklists.
 
 ### 4. Packaging and Installation
 
-Status: `not ready`
+Status: `foundation ready, not yet release-proven`
 
 Why:
 
 - the repository contains engine bundle build scripts under `packaging/engine/`;
 - Stage 6 runtime resolution exists in the application.
+- the repository now contains a Windows desktop bundle and installer pipeline under `packaging/windows/`.
 
 Blocking gaps:
 
-- there is no finished installer pipeline in the main repository;
-- there is no documented release artifact assembly process for the desktop app itself;
-- there is no signed, reproducible public release path yet.
+- the new pipeline still needs a real dry-run on a clean Windows release machine;
+- there is no signed public artifact history yet;
+- installer validation is still pending outside local repository checks.
 
 ### 5. Legal and Compliance
 
-Status: `not ready`
+Status: `review-ready, sign-off pending`
 
 Blocking facts:
 
 - the project intends to bundle `gprMax`;
 - `gprMax` is GPLv3+;
-- the repository documentation already treats license review as a release gate.
+- the repository documentation already treats license review as a release gate;
+- release-time inventory export now exists, but legal/compliance sign-off is still human work.
 
 Conclusion:
 
@@ -110,20 +114,19 @@ Status: `not ready`
 
 Blocking gaps:
 
-- no main-repo CI workflow;
-- no issue templates in the main repository;
-- no documented crash/log bundle process for outside users;
-- no public release checklist or sign-off flow existed before this assessment.
+- support and reporting assets now exist, but they have not yet been exercised in a real outside-user support loop;
+- the support-bundle script is not yet exposed directly inside the running GUI;
+- release operations still need one full rehearsal from issue report to reproduced fix.
 
 ## Public Release Blockers
 
-The following items should be treated as blockers for the first public bundled release:
+The following items should still be treated as blockers for the first public bundled release:
 
-1. Finish a repeatable installer/release artifact pipeline for the desktop app plus bundled engine.
-2. Add repository CI for tests and at least one basic lint/type gate.
-3. Complete GPL and bundled-license review for the intended distribution model.
-4. Define a public release checklist with smoke tests, artifact validation, and sign-off.
-5. Add minimum supportability assets: issue templates, bug-report instructions, and log collection guidance.
+1. Run the new CI and packaging pipeline on the intended release path and keep the build green.
+2. Produce and validate the first desktop bundle and installer from `packaging/windows/` on a clean Windows machine.
+3. Complete GPL and bundled-license sign-off using `docs/BUNDLED_LICENSE_REVIEW.md` plus generated inventory artifacts.
+4. Execute `docs/PUBLIC_RELEASE_CHECKLIST.md` end to end for a real release candidate.
+5. Rehearse the support flow with issue templates and `tools/collect_support_bundle.py` on at least one real bug report.
 
 ## Recommended Non-Blocking Improvements
 
@@ -138,7 +141,7 @@ These are important, but they should not hold up an internal alpha:
 ## Recommended Release Sequence
 
 1. Ship an `internal alpha` tag for guided testing with the current desktop workspaces.
-2. Close the public-release blockers above.
+2. Exercise the new CI, packaging, licensing, and support assets on a real release candidate.
 3. Run a small design-partner or invited beta round on real Windows machines.
 4. Cut the first public bundled release only after packaging, CI, and legal review are complete.
 

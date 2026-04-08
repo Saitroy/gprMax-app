@@ -109,11 +109,11 @@ Current layout behavior:
 
 The current implementation is intentionally bounded in a few places:
 
-- the first public installer pipeline is not finished;
+- the first public installer pipeline now exists as repository tooling under `packaging/windows/`, but it has not yet been validated through a shipped public release;
 - splitter sizes are not yet persisted between sessions;
 - guided editor coverage does not yet span the full `gprMax` command surface;
 - results analysis is currently limited to the existing A-scan and bounded B-scan workflows;
-- public release support processes such as CI, issue templates, and crash bundle workflows are still incomplete.
+- public release support assets now exist in the repository, but they still need real release dry-runs and maintainer sign-off.
 
 ## Verification Snapshot
 
@@ -128,3 +128,5 @@ Latest local verification used for this documentation update:
 - [Architecture](./ARCHITECTURE.md)
 - [UI Workstream](./UI_WORKSTREAM.md)
 - [First Release Readiness](./FIRST_RELEASE_READINESS.md)
+- [Public Release Checklist](./PUBLIC_RELEASE_CHECKLIST.md)
+- [Bundled License Review](./BUNDLED_LICENSE_REVIEW.md)
