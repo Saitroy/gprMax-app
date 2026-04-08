@@ -31,7 +31,7 @@ class RuntimeProbe(Protocol):
 class SubprocessRuntimeProbe:
     """Checks runtime capabilities without importing gprMax into the GUI process."""
 
-    def __init__(self, timeout_seconds: float = 5.0) -> None:
+    def __init__(self, timeout_seconds: float = 15.0) -> None:
         self._timeout_seconds = timeout_seconds
 
     def probe(self, python_executable: Path, module_name: str) -> ProbeResult:

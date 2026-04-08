@@ -1,17 +1,21 @@
 # Support
 
-This repository uses GitHub issues for bug reports and feature requests.
+The application is currently in ALPHA testing.
 
-Before opening a bug:
+Bug reports should be sent by email to `gleb.herz@yandex.ru`.
+
+Before sending a bug report:
 
 1. Confirm the problem on the latest commit or latest bundled build you have.
 2. Capture the app version and runtime diagnostics from `Settings`.
-3. Export a support bundle when possible.
-4. Remove sensitive project data before attaching anything publicly.
+3. Attach screenshots of the problem.
+4. Describe what you were doing right before the bug appeared.
+5. Export a support bundle when possible.
+6. Remove sensitive project data before attaching anything.
 
 ## Bug reports
 
-Use the `Bug report` issue template and include:
+Please include:
 
 - app version
 - install type: source checkout, portable bundle, or installer build
@@ -19,7 +23,8 @@ Use the `Bug report` issue template and include:
 - exact reproduction steps
 - expected behavior
 - actual behavior
-- screenshots if the problem is visual
+- screenshots of the problem
+- a short description of what happened right before the bug
 - the support bundle archive if available
 
 ## Collecting a support bundle
@@ -45,15 +50,6 @@ The support bundle collects lightweight diagnostics only:
 - run metadata, logs, and generated input snapshots
 
 Result files are not included by default because they can be large.
-
-## Feature requests
-
-Use the `Feature request` issue template and describe:
-
-- the workflow problem
-- who is affected
-- the current workaround
-- the expected outcome
 
 ## What not to publish
 
