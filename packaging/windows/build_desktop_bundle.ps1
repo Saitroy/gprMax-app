@@ -24,10 +24,57 @@ function Copy-DirectoryTree([string]$SourceRoot, [string]$DestinationRoot) {
     }
 }
 
-function Remove-PathIfExists([string]$PathValue) {
-    if (Test-Path $PathValue) {
-        Remove-Item -Recurse -Force $PathValue
+function Get-FreeDriveLetter {
+    foreach ($letter in @("Z", "Y", "X", "W", "V", "U", "T", "S", "R")) {
+        if (-not (Test-Path "${letter}:\")) {
+            return "${letter}:"
+        }
     }
+    throw "Could not find a free drive letter for subst."
+}
+
+function Remove-DirectoryTree([string]$PathValue) {
+    if (-not (Test-Path $PathValue)) {
+        return
+    }
+
+    $drive = Get-FreeDriveLetter
+    $emptyRoot = Join-Path $env:TEMP "gprmax-workbench-empty-dir"
+    New-Item -ItemType Directory -Path $emptyRoot -Force | Out-Null
+
+    cmd.exe /c "subst $drive `"$PathValue`""
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to map '$PathValue' to a temporary drive."
+    }
+
+    try {
+        $null = robocopy $emptyRoot "$drive\" /MIR /NFL /NDL /NJH /NJS /NP
+        if ($LASTEXITCODE -gt 7) {
+            throw "robocopy failed while cleaning '$PathValue' with exit code $LASTEXITCODE"
+        }
+    }
+    finally {
+        cmd.exe /c "subst $drive /d" | Out-Null
+    }
+
+    cmd.exe /c "rmdir /s /q `"$PathValue`""
+    if (Test-Path $PathValue) {
+        throw "Failed to remove directory tree '$PathValue'"
+    }
+}
+
+function Remove-PathIfExists([string]$PathValue) {
+    if (-not (Test-Path $PathValue)) {
+        return
+    }
+
+    $item = Get-Item $PathValue -Force
+    if ($item.PSIsContainer) {
+        Remove-DirectoryTree $PathValue
+        return
+    }
+
+    Remove-Item -Force $PathValue
 }
 
 function Remove-PathsByPattern([string]$Root, [string[]]$Patterns) {
@@ -154,7 +201,7 @@ function Optimize-EngineRuntime([string]$BundleRoot) {
         )
 
         Get-ChildItem -Path $sitePackages -Directory -Recurse -Force -ErrorAction SilentlyContinue | Where-Object {
-            $_.Name -in @("__pycache__", "tests", "test", "testing", "benchmarks", "docs", "doc", "examples", "example")
+            $_.Name -in @("__pycache__", "benchmarks", "docs", "doc", "examples", "example")
         } | Sort-Object FullName -Descending | ForEach-Object {
             Remove-Item -Recurse -Force $_.FullName
         }
@@ -208,10 +255,10 @@ if (-not (Test-Path $engineManifestPath)) {
 }
 
 if (Test-Path $distRoot) {
-    Remove-Item -Recurse -Force $distRoot
+    Remove-DirectoryTree $distRoot
 }
 if (Test-Path $workRoot) {
-    Remove-Item -Recurse -Force $workRoot
+    Remove-DirectoryTree $workRoot
 }
 New-Item -ItemType Directory -Path $distRoot | Out-Null
 New-Item -ItemType Directory -Path $workRoot | Out-Null
