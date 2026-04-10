@@ -113,9 +113,9 @@
 
 Приложение сейчас находится в стадии ALPHA-теста.
 
-Все баг-репорты отправляйте на почту `gleb.herz@yandex.ru`.
+Все баг-репорты отправляйте через [GitHub Issues](https://github.com/Saitroy/gprMax-app/issues).
 
-К письму желательно приложить:
+К issue желательно приложить:
 
 - скриншоты проблемы;
 - краткое описание того, что вы делали перед появлением бага;
@@ -172,7 +172,7 @@ Project state is saved into `project.gprwb.json` inside the project folder, with
 
 The application is currently in ALPHA testing.
 
-Please send bug reports to `gleb.herz@yandex.ru` and include:
+Please report bugs via [GitHub Issues](https://github.com/Saitroy/gprMax-app/issues) and include:
 
 - screenshots of the problem;
 - a short note about what you were doing right before the bug appeared;
