@@ -168,12 +168,17 @@ class ResultsViewTests(unittest.TestCase):
 
         self.assertTrue(view._tabs.isTabEnabled(1))
         self.assertEqual(view._tabs.currentIndex(), 0)
-        self.assertEqual(view._ascan_output_combo.count(), 0)
-        self.assertIn("A-scan", view._ascan_status_label.text())
+        self.assertEqual(view._ascan_output_combo.count(), 1)
+        self.assertTrue(view._show_unmerged_checkbox.isChecked())
         self.assertFalse(view._show_unmerged_checkbox.isHidden())
         self.assertEqual(view._bscan_output_combo.count(), 1)
         self.assertEqual(view._bscan_output_combo.currentData(), str(merged_output))
         self.assertFalse(view._bscan_view._source_pixmap.isNull())
+
+        view._show_unmerged_checkbox.setChecked(False)
+
+        self.assertEqual(view._ascan_output_combo.count(), 0)
+        self.assertIn("A-scan", view._ascan_status_label.text())
 
         view._show_unmerged_checkbox.setChecked(True)
 

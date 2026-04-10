@@ -62,8 +62,12 @@ class MainWindow(QMainWindow):
         self._navigation = QListWidget()
         self._stack = QStackedWidget()
         self._simulation_refresh_timer = QTimer(self)
-        self._simulation_refresh_timer.setInterval(400)
+        self._simulation_refresh_timer.setInterval(750)
         self._simulation_refresh_timer.timeout.connect(self._refresh_simulation_runtime_state)
+        self._readiness_refresh_timer = QTimer(self)
+        self._readiness_refresh_timer.setSingleShot(True)
+        self._readiness_refresh_timer.setInterval(250)
+        self._readiness_refresh_timer.timeout.connect(self._refresh_simulation_readiness)
 
         self._welcome_view = WelcomeView(self._localization)
         self._project_view = ProjectView(
@@ -115,10 +119,12 @@ class MainWindow(QMainWindow):
         self._connect_signals()
         self._create_actions()
         self._build_ui()
+        self._apply_preferences_to_views()
         self._apply_screen_adaptive_geometry()
         self._welcome_view.set_example_projects(self._discover_example_projects())
         self.retranslate_ui()
         self.refresh_views()
+        self._restore_ui_state()
         self._simulation_refresh_timer.start()
 
     def _build_pages(self) -> list[PageSpec]:
@@ -162,7 +168,7 @@ class MainWindow(QMainWindow):
         self._simulation_view.retry_requested.connect(self._on_retry_run)
         self._simulation_view.cancel_requested.connect(self._on_cancel_run)
         self._simulation_view.configuration_changed.connect(
-            self._refresh_simulation_readiness
+            self._schedule_readiness_refresh
         )
         self._simulation_view.open_run_directory_requested.connect(
             self._on_open_run_directory
@@ -248,7 +254,7 @@ class MainWindow(QMainWindow):
             settings=settings_service.settings,
             runtime_info=self._context.runtime_service.runtime_info(),
         )
-        self._results_view.refresh_project(project.root if project is not None else None)
+        self._refresh_results_view()
         self._refresh_welcome_summary()
         self._simulation_view.set_runtime_label(
             self._context.simulation_service.runtime_label()
@@ -256,7 +262,7 @@ class MainWindow(QMainWindow):
         self._save_project_action.setEnabled(project is not None)
         self._update_window_title()
         self._refresh_simulation_runtime_state()
-        self._refresh_simulation_readiness()
+        self._schedule_readiness_refresh()
 
     def retranslate_ui(self) -> None:
         self._file_menu.setTitle(self._localization.text("menu.file"))
@@ -419,6 +425,53 @@ class MainWindow(QMainWindow):
             )
             self._navigation.setCurrentRow(row)
         self._update_status(page_index)
+
+    def _apply_preferences_to_views(self) -> None:
+        advanced_mode = self._context.settings_service.settings.advanced_mode
+        self._project_view.set_advanced_mode(advanced_mode)
+        self._simulation_view.set_advanced_mode(advanced_mode)
+
+    def _restore_ui_state(self) -> None:
+        state = self._context.settings_service.ui_state_value("main_window", {})
+        if not isinstance(state, dict):
+            return
+        shell_splitter = state.get("shell_splitter")
+        if isinstance(shell_splitter, dict):
+            sizes = self._splitter_sizes_for_orientation(
+                shell_splitter,
+                Qt.Orientation.Horizontal,
+            )
+            if sizes is not None:
+                self._shell_splitter.setSizes(sizes)
+        project_state = state.get("project_view")
+        if isinstance(project_state, dict):
+            self._project_view.apply_ui_state(project_state)
+        simulation_state = state.get("simulation_view")
+        if isinstance(simulation_state, dict):
+            self._simulation_view.apply_ui_state(simulation_state)
+        results_state = state.get("results_view")
+        if isinstance(results_state, dict):
+            self._results_view.apply_ui_state(results_state)
+
+        page_key = state.get("page_key")
+        if not isinstance(page_key, str):
+            return
+        project = self._context.workspace_service.state.current_project
+        if project is None and page_key != "page.welcome.title":
+            return
+        page_index = self._page_index_by_title_key.get(page_key)
+        if page_index is not None:
+            self._show_page(page_index)
+
+    def _save_ui_state(self) -> None:
+        state = {
+            "page_key": self._current_page_key(),
+            "shell_splitter": self._splitter_state(self._shell_splitter),
+            "project_view": self._project_view.ui_state(),
+            "simulation_view": self._simulation_view.ui_state(),
+            "results_view": self._results_view.ui_state(),
+        }
+        self._context.settings_service.update_ui_state("main_window", state)
 
     def _open_settings_page(self) -> None:
         self._settings_view.set_settings(
@@ -583,6 +636,7 @@ class MainWindow(QMainWindow):
 
     def _on_project_editor_changed(self) -> None:
         self._refresh_shell_state()
+        self._schedule_readiness_refresh()
 
     def _on_save_settings(self) -> None:
         settings = self._context.settings_service.update_preferences(
@@ -590,6 +644,7 @@ class MainWindow(QMainWindow):
             gprmax_python_executable=self._settings_view.runtime_executable(),
             language=self._settings_view.selected_language(),
         )
+        self._apply_preferences_to_views()
         self._localization.set_language(settings.language)
         self._context.runtime_service.refresh()
         self.retranslate_ui()
@@ -833,7 +888,6 @@ class MainWindow(QMainWindow):
         if project is None:
             self._simulation_view.set_run_state(None, [])
             self._simulation_view.set_log_output("")
-            self._results_view.refresh_project(None)
             self._last_polled_run_state = None
             return
 
@@ -851,11 +905,12 @@ class MainWindow(QMainWindow):
 
         self._simulation_view.set_run_state(active_run, history)
         self._simulation_view.set_log_output(log_snapshot.combined_text)
-        self._results_view.refresh_project(project.root)
         self._refresh_welcome_summary()
         self._update_window_title()
-        self._refresh_simulation_readiness()
         self._last_polled_run_state = current_run_state
+
+        if previous_run_state != current_run_state:
+            self._schedule_readiness_refresh()
 
         if (
             previous_run_state is not None
@@ -863,10 +918,17 @@ class MainWindow(QMainWindow):
             and previous_run_state[0] == current_run_state[0]
             and previous_run_state[1] in {"preparing", "running"}
             and current_run_state[1] == "completed"
+            and active_run is not None
         ):
             self._context.results_service.focus_run(active_run.run_id)
-            self._results_view.refresh_project(project.root)
-            self._show_results_page()
+            self._refresh_results_view()
+            self.statusBar().showMessage(
+                self._localization.text(
+                    "status.run_results_ready",
+                    run_id=active_run.run_id,
+                ),
+                8000,
+            )
         elif (
             previous_run_state is not None
             and current_run_state is not None
@@ -874,10 +936,22 @@ class MainWindow(QMainWindow):
             and previous_run_state[1] in {"preparing", "running"}
             and current_run_state[1] in {"failed", "cancelled"}
             and active_run is not None
-            and active_run.error_summary
         ):
+            self._refresh_results_view()
             self._simulation_view.set_validation_messages(
                 [self._localization.translate_message(active_run.error_summary)]
+                if active_run.error_summary
+                else []
+            )
+            self.statusBar().showMessage(
+                self._localization.text(
+                    "status.run_finished",
+                    run_id=active_run.run_id,
+                    status=self._localization.simulation_status_text(
+                        active_run.status.value
+                    ),
+                ),
+                8000,
             )
 
     def _resolve_target_run(
@@ -987,6 +1061,51 @@ class MainWindow(QMainWindow):
             for message in readiness.warning_messages
         )
         self._simulation_view.set_validation_messages(messages)
+
+    def _schedule_readiness_refresh(self) -> None:
+        self._readiness_refresh_timer.start()
+
+    def _refresh_results_view(self) -> None:
+        project = self._context.workspace_service.state.current_project
+        self._results_view.refresh_project(project.root if project is not None else None)
+
+    def _current_page_key(self) -> str:
+        page_index = self._stack.currentIndex()
+        if 0 <= page_index < len(self._pages):
+            return self._pages[page_index].title_key
+        return "page.welcome.title"
+
+    def _splitter_state(self, splitter: QSplitter) -> dict[str, object]:
+        orientation = (
+            "horizontal"
+            if splitter.orientation() == Qt.Orientation.Horizontal
+            else "vertical"
+        )
+        return {
+            "orientation": orientation,
+            "sizes": [int(size) for size in splitter.sizes()],
+        }
+
+    def _splitter_sizes_for_orientation(
+        self,
+        state: dict[str, object],
+        orientation: Qt.Orientation,
+    ) -> list[int] | None:
+        orientation_name = (
+            "horizontal" if orientation == Qt.Orientation.Horizontal else "vertical"
+        )
+        if state.get("orientation") != orientation_name:
+            return None
+        sizes = state.get("sizes")
+        if not isinstance(sizes, list) or len(sizes) != 2:
+            return None
+        if not all(isinstance(item, int) and item > 0 for item in sizes):
+            return None
+        return list(sizes)
+
+    def closeEvent(self, event) -> None:  # noqa: N802
+        self._save_ui_state()
+        super().closeEvent(event)
 
     def _show_about_dialog(self) -> None:
         QMessageBox.information(

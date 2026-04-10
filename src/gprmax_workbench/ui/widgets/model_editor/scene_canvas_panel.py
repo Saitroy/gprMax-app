@@ -132,6 +132,7 @@ class _CanvasView(QGraphicsView):
     selection_box_finished = Signal(float, float, float, float, object)
     pointer_moved = Signal(float, float)
     pointer_left = Signal()
+    zoom_changed = Signal(float)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -183,15 +184,18 @@ class _CanvasView(QGraphicsView):
         scene = self.scene()
         if scene is not None and not scene.sceneRect().isNull():
             self.fitInView(scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+        self._emit_zoom_changed()
 
     def wheelEvent(self, event) -> None:  # noqa: N802
         factor = 1.12 if event.angleDelta().y() > 0 else 1 / 1.12
         self.scale(factor, factor)
+        self._emit_zoom_changed()
 
     def mouseDoubleClickEvent(self, event) -> None:  # noqa: N802
         scene = self.scene()
         if scene is not None and not scene.sceneRect().isNull():
             self.fitInView(scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+        self._emit_zoom_changed()
         super().mouseDoubleClickEvent(event)
 
     def contextMenuEvent(self, event) -> None:  # noqa: N802
@@ -254,6 +258,9 @@ class _CanvasView(QGraphicsView):
     def leaveEvent(self, event) -> None:  # noqa: N802
         self.pointer_left.emit()
         super().leaveEvent(event)
+
+    def _emit_zoom_changed(self) -> None:
+        self.zoom_changed.emit(float(self.transform().m11()))
 
 
 class _MetricRuler(QWidget):
@@ -577,6 +584,8 @@ class SceneCanvasPanel(QWidget):
         self._workbench_mode = False
         self._auxiliary_sidebar_widget: QWidget | None = None
         self._workspace_splitter_user_resized = False
+        self._workspace_splitter_syncing = False
+        self._persisted_workspace_splitter: dict[str, object] | None = None
 
         self._plane_combo = QComboBox()
         self._plane_combo.currentIndexChanged.connect(self._change_plane)
@@ -614,6 +623,7 @@ class SceneCanvasPanel(QWidget):
         self._view.selection_box_finished.connect(self._handle_selection_box)
         self._view.pointer_moved.connect(self._handle_pointer_move)
         self._view.pointer_left.connect(self._handle_pointer_leave)
+        self._view.zoom_changed.connect(self._update_zoom_status)
         self._horizontal_ruler = _MetricRuler(Qt.Orientation.Horizontal)
         self._vertical_ruler = _MetricRuler(Qt.Orientation.Vertical)
         self._scene_toolbar = QFrame()
@@ -682,6 +692,8 @@ class SceneCanvasPanel(QWidget):
         self._toolbar_history_label.setProperty("toolbarRole", "section")
         self._cursor_status_label = QLabel()
         self._cursor_status_label.setProperty("toolbarRole", "status")
+        self._zoom_status_label = QLabel()
+        self._zoom_status_label.setProperty("toolbarRole", "status")
         self._undo_button = QPushButton()
         self._undo_button.setObjectName("SceneToolbarAction")
         self._undo_button.clicked.connect(self._undo_scene_change)
@@ -917,6 +929,8 @@ class SceneCanvasPanel(QWidget):
         self._scene_toolbar_layout.addWidget(
             self._cursor_status_label,
         )
+        self._zoom_status_label.setMinimumWidth(92)
+        self._scene_toolbar_layout.addWidget(self._zoom_status_label)
         self._fit_scene_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DesktopIcon))
         self._scene_toolbar_layout.addWidget(
             self._fit_scene_button,
@@ -1055,6 +1069,7 @@ class SceneCanvasPanel(QWidget):
         self._toolbar_mode_label.setVisible(not tight)
         self._toolbar_history_label.setVisible(not tight)
         self._cursor_status_label.setVisible(not compact)
+        self._zoom_status_label.setVisible(not compact)
 
         self._undo_button.setText("" if compact else self._localization.text("common.undo"))
         self._redo_button.setText("" if compact else self._localization.text("common.redo"))
@@ -1071,6 +1086,11 @@ class SceneCanvasPanel(QWidget):
         if self._workspace_splitter_user_resized and not force:
             return
 
+        persisted_sizes = self._splitter_sizes_for_current_orientation()
+        if persisted_sizes is not None:
+            self._apply_workspace_splitter_sizes(persisted_sizes)
+            return
+
         total_width = max(self.width(), 1)
         if total_width >= 1500:
             sidebar_width = 360
@@ -1085,10 +1105,48 @@ class SceneCanvasPanel(QWidget):
 
         sidebar_width = max(self._side_scroll.minimumWidth(), min(sidebar_width, 420))
         scene_width = max(320, total_width - sidebar_width)
-        self._workspace_splitter.setSizes([scene_width, sidebar_width])
+        self._apply_workspace_splitter_sizes([scene_width, sidebar_width])
 
     def _on_workspace_splitter_moved(self, _pos: int, _index: int) -> None:
+        if self._workspace_splitter_syncing:
+            return
         self._workspace_splitter_user_resized = True
+
+    def _apply_workspace_splitter_sizes(self, sizes: list[int]) -> None:
+        self._workspace_splitter_syncing = True
+        try:
+            self._workspace_splitter.setSizes(sizes)
+        finally:
+            self._workspace_splitter_syncing = False
+
+    def _splitter_state(self, splitter: QSplitter) -> dict[str, object]:
+        orientation = (
+            "horizontal"
+            if splitter.orientation() == Qt.Orientation.Horizontal
+            else "vertical"
+        )
+        return {
+            "orientation": orientation,
+            "sizes": [int(size) for size in splitter.sizes()],
+        }
+
+    def _splitter_sizes_for_current_orientation(self) -> list[int] | None:
+        state = self._persisted_workspace_splitter
+        if not isinstance(state, dict):
+            return None
+        orientation = (
+            "horizontal"
+            if self._workspace_splitter.orientation() == Qt.Orientation.Horizontal
+            else "vertical"
+        )
+        if state.get("orientation") != orientation:
+            return None
+        sizes = state.get("sizes")
+        if not isinstance(sizes, list) or len(sizes) != 2:
+            return None
+        if not all(isinstance(item, int) and item > 0 for item in sizes):
+            return None
+        return list(sizes)
 
     def _build_nudge_buttons(self) -> None:
         self._nudge_buttons: list[QPushButton] = []
@@ -1244,6 +1302,7 @@ class SceneCanvasPanel(QWidget):
         self._redo_button.setToolTip(self._redo_button.text())
         self._fit_scene_button.setToolTip(self._fit_scene_button.text())
         self._refresh_toolbar_compact_mode()
+        self._update_zoom_status()
         self._update_cursor_status()
         self._refresh_material_choices()
         self._refresh_waveform_choices()
@@ -1271,6 +1330,20 @@ class SceneCanvasPanel(QWidget):
         self._workbench_mode = enabled
         self._entities_card.setVisible(not enabled)
         self._hint_label.setVisible(not enabled)
+
+    def ui_state(self) -> dict[str, object]:
+        return {
+            "workspace_splitter": self._splitter_state(self._workspace_splitter),
+        }
+
+    def apply_ui_state(self, state: dict[str, object] | None) -> None:
+        if not isinstance(state, dict):
+            return
+        splitter_state = state.get("workspace_splitter")
+        if isinstance(splitter_state, dict):
+            self._persisted_workspace_splitter = splitter_state
+            self._workspace_splitter_user_resized = False
+            self._refresh_workspace_splitter_sizes(force=True)
 
     def set_auxiliary_sidebar_widget(self, widget: QWidget | None) -> None:
         if self._auxiliary_sidebar_widget is widget:
@@ -1379,6 +1452,7 @@ class SceneCanvasPanel(QWidget):
         if self._scene.sceneRect().isNull():
             return
         self._view.fitInView(self._scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+        self._update_zoom_status()
 
     def _sync_palette_buttons(self) -> None:
         for button in self._palette_buttons:
@@ -1713,6 +1787,13 @@ class SceneCanvasPanel(QWidget):
         if self._scene_tool == "measure" and self._measurement_start is not None:
             text = f"{text} | {self._measurement_text(self._measurement_start, self._cursor_scene_point)}"
         self._cursor_status_label.setText(text)
+
+    def _update_zoom_status(self, scale: float | None = None) -> None:
+        zoom_scale = scale if scale is not None else float(self._view.transform().m11())
+        percent = max(10, min(2000, int(round(zoom_scale * 100))))
+        self._zoom_status_label.setText(
+            self._localization.text("editor.scene.zoom", percent=percent)
+        )
 
     def _preview_geometry_resize(self, role: str, point: QPointF) -> None:
         if (

@@ -31,6 +31,11 @@ class SettingsManagerTests(unittest.TestCase):
                 advanced_mode=True,
                 gprmax_python_executable="python",
                 language="en",
+                ui_state={
+                    "main_window": {
+                        "page_key": "page.results.title",
+                    }
+                },
             )
 
             manager.save(settings)
@@ -41,6 +46,10 @@ class SettingsManagerTests(unittest.TestCase):
             self.assertTrue(loaded.advanced_mode)
             self.assertEqual(loaded.gprmax_python_executable, "python")
             self.assertEqual(loaded.language, "en")
+            self.assertEqual(
+                loaded.ui_state,
+                {"main_window": {"page_key": "page.results.title"}},
+            )
 
 
 if __name__ == "__main__":

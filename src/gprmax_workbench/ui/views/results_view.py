@@ -67,6 +67,13 @@ class ResultsView(QWidget):
         self._preferred_bscan_receiver_by_run: dict[str, str] = {}
         self._preferred_ascan_components_by_run: dict[str, list[str]] = {}
         self._preferred_bscan_component_by_run: dict[str, str] = {}
+        self._preferred_show_unmerged_by_run: dict[str, bool] = {}
+        self._bottom_splitter_user_resized = False
+        self._page_splitter_user_resized = False
+        self._syncing_splitter_sizes = False
+        self._persisted_bottom_splitter: dict[str, object] | None = None
+        self._persisted_page_splitter: dict[str, object] | None = None
+        self._pending_tab_index = 0
 
         self._title = QLabel()
         self._title.setObjectName("ViewTitle")
@@ -89,6 +96,7 @@ class ResultsView(QWidget):
         self._tabs.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._tabs.addTab(self._build_ascan_panel(), "")
         self._tabs.addTab(self._build_bscan_panel(), "")
+        self._tabs.currentChanged.connect(self._update_action_state)
 
         toolbar = FlowLayout(horizontal_spacing=10, vertical_spacing=10)
         toolbar.addWidget(self._refresh_button)
@@ -115,6 +123,7 @@ class ResultsView(QWidget):
         self._bottom_splitter.setStretchFactor(0, 0)
         self._bottom_splitter.setStretchFactor(1, 1)
         self._bottom_splitter.setSizes([320, 960])
+        self._bottom_splitter.splitterMoved.connect(self._on_bottom_splitter_moved)
 
         plot_card = self._build_card("results.card.plot", self._tabs)
         plot_card.setMinimumHeight(300 if embedded else 360)
@@ -126,6 +135,7 @@ class ResultsView(QWidget):
         self._page_splitter.setStretchFactor(0, 4)
         self._page_splitter.setStretchFactor(1, 2)
         self._page_splitter.setSizes([560 if embedded else 620, 280])
+        self._page_splitter.splitterMoved.connect(self._on_page_splitter_moved)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -139,6 +149,29 @@ class ResultsView(QWidget):
         self.retranslate_ui()
         self._clear_results(self._localization.text("results.status.open_project"))
         self._refresh_responsive_layout()
+        self._update_action_state()
+
+    def ui_state(self) -> dict[str, object]:
+        return {
+            "tab_index": self._tabs.currentIndex(),
+            "bottom_splitter": self._splitter_state(self._bottom_splitter),
+            "page_splitter": self._splitter_state(self._page_splitter),
+        }
+
+    def apply_ui_state(self, state: dict[str, object] | None) -> None:
+        if not isinstance(state, dict):
+            return
+        tab_index = state.get("tab_index")
+        if isinstance(tab_index, int) and 0 <= tab_index < self._tabs.count():
+            self._pending_tab_index = tab_index
+            self._tabs.setCurrentIndex(tab_index)
+        bottom_state = state.get("bottom_splitter")
+        if isinstance(bottom_state, dict):
+            self._persisted_bottom_splitter = bottom_state
+        page_state = state.get("page_splitter")
+        if isinstance(page_state, dict):
+            self._persisted_page_splitter = page_state
+        self._refresh_responsive_layout(force=True)
 
     def refresh_project(self, project_root: Path | None) -> None:
         if project_root is None:
@@ -146,12 +179,14 @@ class ResultsView(QWidget):
             self._refresh_key = None
             self._loading = False
             self._clear_results(self._localization.text("results.status.open_project"))
+            self._update_action_state()
             return
 
         summaries = self._results_service.refresh_results(project_root)
         refresh_key = self._build_refresh_key(project_root, summaries)
         if self._project_root == project_root and self._refresh_key == refresh_key:
             self._sync_run_selection()
+            self._update_action_state()
             return
 
         self._project_root = project_root
@@ -188,10 +223,12 @@ class ResultsView(QWidget):
         self._loading = False
         if self._run_list.count() == 0:
             self._clear_results(self._localization.text("results.status.no_results"))
+            self._update_action_state()
             return
 
         with QSignalBlocker(self._run_list):
             self._run_list.setCurrentRow(target_row)
+        self._tabs.setCurrentIndex(min(self._pending_tab_index, self._tabs.count() - 1))
         self._on_run_changed(target_row)
 
     def refresh_current_project(self) -> None:
@@ -282,6 +319,7 @@ class ResultsView(QWidget):
         self._results_service.select_run(run_id_text)
         summary = self._run_summaries.get(run_id_text or "")
         self._populate_run_details(summary)
+        self._update_action_state()
 
     def _populate_run_details(self, summary: RunResultSummary | None) -> None:
         self._loading = True
@@ -292,6 +330,7 @@ class ResultsView(QWidget):
 
         if summary is None:
             self._loading = False
+            self._update_action_state()
             return
 
         for artifact in summary.visualisation_artifacts:
@@ -306,6 +345,7 @@ class ResultsView(QWidget):
 
         self._populate_ascan_panel(summary)
         self._populate_bscan_panel(summary)
+        self._update_action_state()
 
     def _populate_ascan_panel(self, summary: RunResultSummary) -> None:
         run_id = summary.run_record.run_id
@@ -316,8 +356,9 @@ class ResultsView(QWidget):
         with QSignalBlocker(self._show_unmerged_checkbox):
             self._show_unmerged_checkbox.setVisible(toggle_available)
             self._show_unmerged_checkbox.setEnabled(toggle_available)
-            if not toggle_available:
-                self._show_unmerged_checkbox.setChecked(False)
+            self._show_unmerged_checkbox.setChecked(
+                toggle_available and self._preferred_show_unmerged_by_run.get(run_id, True)
+            )
 
         entries = self._ascan_output_entries(summary)
         with QSignalBlocker(self._ascan_output_combo):
@@ -385,6 +426,9 @@ class ResultsView(QWidget):
         summary = self._current_summary()
         if summary is None:
             return
+        self._preferred_show_unmerged_by_run[summary.run_record.run_id] = (
+            self._show_unmerged_checkbox.isChecked()
+        )
         self._populate_ascan_panel(summary)
 
     def _on_ascan_output_changed(self, index: int) -> None:
@@ -771,6 +815,7 @@ class ResultsView(QWidget):
         self._summary_panel.set_summary(None, None)
         self._clear_ascan_panel(message)
         self._clear_bscan_panel(message)
+        self._update_action_state()
 
     def _clear_ascan_panel(self, message: str, *, keep_toggle_state: bool = False) -> None:
         with QSignalBlocker(self._ascan_output_combo):
@@ -780,7 +825,10 @@ class ResultsView(QWidget):
         with QSignalBlocker(self._ascan_component_list):
             self._ascan_component_list.clear()
         if not keep_toggle_state:
-            self._show_unmerged_checkbox.setVisible(False)
+            with QSignalBlocker(self._show_unmerged_checkbox):
+                self._show_unmerged_checkbox.setChecked(False)
+                self._show_unmerged_checkbox.setEnabled(False)
+                self._show_unmerged_checkbox.setVisible(False)
         self._trace_plot.clear(message)
         self._ascan_status_label.setText(message)
 
@@ -866,26 +914,47 @@ class ResultsView(QWidget):
         for key, heading in self._card_headings.items():
             heading.setText(self._localization.text(key))
 
-    def _refresh_responsive_layout(self) -> None:
+    def _refresh_responsive_layout(self, *, force: bool = False) -> None:
         main_orientation = (
             Qt.Orientation.Horizontal if self.width() >= 1000 else Qt.Orientation.Vertical
         )
-        self._bottom_splitter.setOrientation(main_orientation)
-        if main_orientation == Qt.Orientation.Horizontal:
-            left_width = max(220, min(300, int(self.width() * 0.25)))
-            self._bottom_splitter.setSizes(
-                [left_width, max(520, self.width() - left_width)]
+        main_orientation_changed = self._bottom_splitter.orientation() != main_orientation
+        if main_orientation_changed:
+            self._bottom_splitter.setOrientation(main_orientation)
+            self._bottom_splitter_user_resized = False
+        if force or main_orientation_changed or not self._bottom_splitter_user_resized:
+            persisted_bottom = self._splitter_sizes_for_orientation(
+                self._persisted_bottom_splitter,
+                main_orientation,
             )
-        else:
-            top_height = 220 if self.height() >= 720 else 190
-            self._bottom_splitter.setSizes(
-                [top_height, max(280, self.height() - top_height)]
-            )
+            if persisted_bottom is not None:
+                self._apply_splitter_sizes(self._bottom_splitter, persisted_bottom)
+            elif main_orientation == Qt.Orientation.Horizontal:
+                left_width = max(220, min(300, int(self.width() * 0.25)))
+                self._apply_splitter_sizes(
+                    self._bottom_splitter,
+                    [left_width, max(520, self.width() - left_width)],
+                )
+            else:
+                top_height = 220 if self.height() >= 720 else 190
+                self._apply_splitter_sizes(
+                    self._bottom_splitter,
+                    [top_height, max(280, self.height() - top_height)],
+                )
 
-        plot_height = 460 if self.height() >= 860 else 380
-        self._page_splitter.setSizes(
-            [plot_height, max(220, self.height() - plot_height)]
-        )
+        if force or not self._page_splitter_user_resized:
+            persisted_page = self._splitter_sizes_for_orientation(
+                self._persisted_page_splitter,
+                Qt.Orientation.Vertical,
+            )
+            if persisted_page is not None:
+                self._apply_splitter_sizes(self._page_splitter, persisted_page)
+            else:
+                plot_height = 460 if self.height() >= 860 else 380
+                self._apply_splitter_sizes(
+                    self._page_splitter,
+                    [plot_height, max(220, self.height() - plot_height)],
+                )
 
     def _sync_run_selection(self) -> None:
         selected_run_id = self._results_service.viewer_state.selected_run_id
@@ -897,12 +966,68 @@ class ResultsView(QWidget):
             if item.data(Qt.ItemDataRole.UserRole) != selected_run_id:
                 continue
             if self._run_list.currentRow() == row:
-                self._populate_run_details(self._run_summaries.get(selected_run_id))
+                self._update_action_state()
                 return
             with QSignalBlocker(self._run_list):
                 self._run_list.setCurrentRow(row)
             self._on_run_changed(row)
             return
+
+    def _update_action_state(self) -> None:
+        self._pending_tab_index = self._tabs.currentIndex()
+        has_project = self._project_root is not None
+        has_summary = self._current_summary() is not None
+        has_file_selection = self._selected_artifact_or_output() is not None
+        self._refresh_button.setEnabled(has_project)
+        self._open_output_dir_button.setEnabled(has_summary)
+        self._open_selected_file_button.setEnabled(has_file_selection)
+
+    def _apply_splitter_sizes(self, splitter: QSplitter, sizes: list[int]) -> None:
+        self._syncing_splitter_sizes = True
+        try:
+            splitter.setSizes(sizes)
+        finally:
+            self._syncing_splitter_sizes = False
+
+    def _on_bottom_splitter_moved(self, _pos: int, _index: int) -> None:
+        if self._syncing_splitter_sizes:
+            return
+        self._bottom_splitter_user_resized = True
+
+    def _on_page_splitter_moved(self, _pos: int, _index: int) -> None:
+        if self._syncing_splitter_sizes:
+            return
+        self._page_splitter_user_resized = True
+
+    def _splitter_state(self, splitter: QSplitter) -> dict[str, object]:
+        orientation = (
+            "horizontal"
+            if splitter.orientation() == Qt.Orientation.Horizontal
+            else "vertical"
+        )
+        return {
+            "orientation": orientation,
+            "sizes": [int(size) for size in splitter.sizes()],
+        }
+
+    def _splitter_sizes_for_orientation(
+        self,
+        state: dict[str, object] | None,
+        orientation: Qt.Orientation,
+    ) -> list[int] | None:
+        if not isinstance(state, dict):
+            return None
+        orientation_name = (
+            "horizontal" if orientation == Qt.Orientation.Horizontal else "vertical"
+        )
+        if state.get("orientation") != orientation_name:
+            return None
+        sizes = state.get("sizes")
+        if not isinstance(sizes, list) or len(sizes) != 2:
+            return None
+        if not all(isinstance(item, int) and item > 0 for item in sizes):
+            return None
+        return list(sizes)
 
 
 def _empty_bscan_result(message: str) -> BscanLoadResult:

@@ -10,7 +10,7 @@ from pathlib import Path
 from ..domain.models import RecentProject
 
 SETTINGS_SCHEMA_NAME = "gprmax-workbench-settings"
-SETTINGS_SCHEMA_VERSION = 3
+SETTINGS_SCHEMA_VERSION = 4
 DEFAULT_INTERFACE_LANGUAGE = "ru"
 
 
@@ -20,6 +20,7 @@ class AppSettings:
     advanced_mode: bool = False
     gprmax_python_executable: str | None = None
     language: str = DEFAULT_INTERFACE_LANGUAGE
+    ui_state: dict[str, object] = field(default_factory=dict)
 
 
 class SettingsManager:
@@ -57,6 +58,7 @@ class SettingsManager:
             advanced_mode=bool(payload.get("advanced_mode", False)),
             gprmax_python_executable=payload.get("gprmax_python_executable"),
             language=str(payload.get("language", DEFAULT_INTERFACE_LANGUAGE)),
+            ui_state=_ui_state_from_payload(payload.get("ui_state")),
         )
 
     def save(self, settings: AppSettings) -> None:
@@ -71,6 +73,7 @@ class SettingsManager:
             "advanced_mode": settings.advanced_mode,
             "gprmax_python_executable": settings.gprmax_python_executable,
             "language": settings.language,
+            "ui_state": settings.ui_state,
         }
         self.settings_path.write_text(
             json.dumps(payload, indent=2, ensure_ascii=False),
@@ -102,3 +105,9 @@ def _recent_project_from_payload(payload: dict[str, str]) -> RecentProject:
         name=payload.get("name", ""),
         last_opened_at=datetime.fromisoformat(payload["last_opened_at"]),
     )
+
+
+def _ui_state_from_payload(payload: object) -> dict[str, object]:
+    if not isinstance(payload, dict):
+        return {}
+    return {str(key): value for key, value in payload.items()}

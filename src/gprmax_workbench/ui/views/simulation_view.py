@@ -59,9 +59,15 @@ class SimulationView(QWidget):
         self._start_allowed = False
         self._run_in_progress = False
         self._has_retry_target = False
+        self._has_project = False
+        self._advanced_mode = False
         self._top_splitter_user_resized = False
         self._content_splitter_user_resized = False
         self._syncing_splitter_sizes = False
+        self._persisted_top_splitter: dict[str, object] | None = None
+        self._persisted_content_splitter: dict[str, object] | None = None
+        self._pending_section_key: str | None = None
+        self._run_state_signature: tuple[object, ...] | None = None
 
         self._title = QLabel()
         self._title.setObjectName("ViewTitle")
@@ -360,8 +366,15 @@ class SimulationView(QWidget):
 
     def set_project_state(self, *, project_name: str | None, is_dirty: bool) -> None:
         if project_name is None:
+            self._has_project = False
             self._project_state_label.setText(self._localization.text("simulation.no_project"))
+            self._activity_tile.set_content(
+                eyebrow=self._localization.text("simulation.metric.activity"),
+                value=self._project_state_label.text(),
+            )
+            self._update_action_state()
             return
+        self._has_project = True
         dirty_state = self._localization.text(
             "simulation.project_state.dirty" if is_dirty else "simulation.project_state.saved"
         )
@@ -376,6 +389,7 @@ class SimulationView(QWidget):
             eyebrow=self._localization.text("simulation.metric.activity"),
             value=self._project_state_label.text(),
         )
+        self._update_action_state()
 
     def set_validation_messages(self, messages: list[str]) -> None:
         if not messages:
@@ -405,6 +419,8 @@ class SimulationView(QWidget):
         self._preview_text.setPlainText(preview_text)
 
     def set_log_output(self, log_text: str) -> None:
+        if self._log_text.toPlainText() == log_text:
+            return
         self._log_text.setPlainText(log_text)
         cursor = self._log_text.textCursor()
         cursor.movePosition(cursor.MoveOperation.End)
@@ -415,6 +431,15 @@ class SimulationView(QWidget):
         active_run: SimulationRunRecord | None,
         history: list[SimulationRunRecord],
     ) -> None:
+        signature = (
+            active_run.run_id if active_run is not None else None,
+            active_run.status.value if active_run is not None else None,
+            active_run.error_summary if active_run is not None else None,
+            tuple(
+                (run.run_id, run.status.value, run.created_at.isoformat())
+                for run in history
+            ),
+        )
         if active_run is None:
             self._status_label.setText(
                 self._localization.text("simulation.run_state.none")
@@ -437,6 +462,11 @@ class SimulationView(QWidget):
             value=self._status_label.text(),
         )
 
+        if self._run_state_signature == signature:
+            self._has_retry_target = bool(history)
+            self._update_action_state()
+            return
+
         current_selection = self.selected_run_id()
         self._run_history.clear()
         for run in history:
@@ -452,6 +482,7 @@ class SimulationView(QWidget):
         if self._run_history.currentItem() is None and self._run_history.count() > 0:
             self._run_history.setCurrentRow(0)
         self._has_retry_target = bool(history)
+        self._run_state_signature = signature
         self._update_action_state()
 
     def selected_run_id(self) -> str | None:
@@ -479,6 +510,7 @@ class SimulationView(QWidget):
     def _build_config_widget(self) -> QWidget:
         widget = QWidget()
         layout = QFormLayout(widget)
+        self._config_form = layout
         self._mode_label = QLabel()
         self._num_runs_label = QLabel()
         self._restart_label = QLabel()
@@ -599,6 +631,38 @@ class SimulationView(QWidget):
         for key, heading in self._card_headings.items():
             heading.setText(self._localization.text(key))
         self._refresh_configuration_summary()
+        self._refresh_section_selection()
+        self._update_advanced_rows()
+
+    def set_advanced_mode(self, enabled: bool) -> None:
+        if self._advanced_mode == enabled:
+            return
+        self._advanced_mode = enabled
+        self._update_advanced_rows()
+
+    def ui_state(self) -> dict[str, object]:
+        state: dict[str, object] = {
+            "top_splitter": self._splitter_state(self._top_splitter),
+            "content_splitter": self._splitter_state(self._content_splitter),
+        }
+        current_key = self._current_section_key()
+        if current_key is not None:
+            state["section_key"] = current_key
+        return state
+
+    def apply_ui_state(self, state: dict[str, object] | None) -> None:
+        if not isinstance(state, dict):
+            return
+        section_key = state.get("section_key")
+        self._pending_section_key = section_key if isinstance(section_key, str) else None
+        top_state = state.get("top_splitter")
+        if isinstance(top_state, dict):
+            self._persisted_top_splitter = top_state
+        content_state = state.get("content_splitter")
+        if isinstance(content_state, dict):
+            self._persisted_content_splitter = content_state
+        self._refresh_section_selection()
+        self._refresh_responsive_layout(force=True)
 
     def _refresh_configuration_summary(self) -> None:
         self._readiness_tile.set_content(
@@ -628,9 +692,17 @@ class SimulationView(QWidget):
         self.configuration_changed.emit()
 
     def _update_action_state(self) -> None:
-        self._start_button.setEnabled(self._start_allowed and not self._run_in_progress)
+        has_selected_run = self.selected_run_id() is not None
+        launch_available = self._has_project and not self._run_in_progress
+        self._start_button.setEnabled(
+            self._has_project and self._start_allowed and not self._run_in_progress
+        )
+        self._preview_button.setEnabled(launch_available)
+        self._export_button.setEnabled(launch_available)
         self._cancel_button.setEnabled(self._run_in_progress)
         self._retry_button.setEnabled(self._has_retry_target and not self._run_in_progress)
+        self._open_run_button.setEnabled(has_selected_run)
+        self._open_output_button.setEnabled(has_selected_run)
 
     def _refresh_responsive_layout(self, *, force: bool = False) -> None:
         wide = self.width() >= 1020
@@ -640,7 +712,13 @@ class SimulationView(QWidget):
             self._top_splitter.setOrientation(top_orientation)
             self._top_splitter_user_resized = False
         if force or top_orientation_changed or not self._top_splitter_user_resized:
-            if wide:
+            persisted_top = self._splitter_sizes_for_orientation(
+                self._persisted_top_splitter,
+                top_orientation,
+            )
+            if persisted_top is not None:
+                self._apply_splitter_sizes(self._top_splitter, persisted_top)
+            elif wide:
                 left_width = max(360, min(520, int(self.width() * 0.42)))
                 self._apply_splitter_sizes(
                     self._top_splitter,
@@ -665,6 +743,13 @@ class SimulationView(QWidget):
             self._content_splitter.setOrientation(content_orientation)
             self._content_splitter_user_resized = False
         if force or content_orientation_changed or not self._content_splitter_user_resized:
+            persisted_content = self._splitter_sizes_for_orientation(
+                self._persisted_content_splitter,
+                content_orientation,
+            )
+            if persisted_content is not None:
+                self._apply_splitter_sizes(self._content_splitter, persisted_content)
+                return
             if content_orientation == Qt.Orientation.Horizontal:
                 nav_width = max(210, min(250, int(self.width() * 0.22)))
                 self._apply_splitter_sizes(
@@ -697,16 +782,90 @@ class SimulationView(QWidget):
         self._content_splitter_user_resized = True
 
     def _retranslate_sections(self) -> None:
-        current_row = self._section_nav.currentRow()
+        current_key = self._current_section_key() or self._pending_section_key
         self._section_nav.clear()
         for index, title_key in enumerate(self._sections):
             item = QListWidgetItem(self._localization.text(title_key))
             item.setData(Qt.ItemDataRole.UserRole, index)
+            item.setData(Qt.ItemDataRole.UserRole + 1, title_key)
             self._section_nav.addItem(item)
-        if self._section_nav.count() > 0:
-            self._section_nav.setCurrentRow(max(0, current_row))
+        row = self._row_for_section_key(current_key)
+        if row < 0 and self._section_nav.count() > 0:
+            row = 0
+        if row >= 0:
+            self._section_nav.setCurrentRow(row)
 
     def _on_section_changed(self, row: int) -> None:
         if row < 0:
             return
+        item = self._section_nav.item(row)
+        self._pending_section_key = (
+            item.data(Qt.ItemDataRole.UserRole + 1)
+            if item is not None
+            else self._pending_section_key
+        )
         self._section_stack.setCurrentIndex(row)
+
+    def _refresh_section_selection(self) -> None:
+        row = self._row_for_section_key(self._pending_section_key)
+        if row < 0 and self._section_nav.count() > 0:
+            row = min(self._section_nav.currentRow(), self._section_nav.count() - 1)
+        if row >= 0:
+            self._section_nav.setCurrentRow(row)
+
+    def _update_advanced_rows(self) -> None:
+        if not hasattr(self, "_config_form"):
+            return
+        advanced_rows = (
+            self._restart_spinbox,
+            self._mpi_tasks_spinbox,
+            self._benchmark_checkbox,
+            self._mpi_no_spawn_checkbox,
+            self._extra_args_edit,
+        )
+        for widget in advanced_rows:
+            self._config_form.setRowVisible(widget, self._advanced_mode)
+
+    def _current_section_key(self) -> str | None:
+        item = self._section_nav.currentItem()
+        value = item.data(Qt.ItemDataRole.UserRole + 1) if item is not None else None
+        return value if isinstance(value, str) else None
+
+    def _row_for_section_key(self, section_key: str | None) -> int:
+        if not section_key:
+            return -1
+        for row in range(self._section_nav.count()):
+            item = self._section_nav.item(row)
+            if item is not None and item.data(Qt.ItemDataRole.UserRole + 1) == section_key:
+                return row
+        return -1
+
+    def _splitter_state(self, splitter: QSplitter) -> dict[str, object]:
+        orientation = (
+            "horizontal"
+            if splitter.orientation() == Qt.Orientation.Horizontal
+            else "vertical"
+        )
+        return {
+            "orientation": orientation,
+            "sizes": [int(size) for size in splitter.sizes()],
+        }
+
+    def _splitter_sizes_for_orientation(
+        self,
+        state: dict[str, object] | None,
+        orientation: Qt.Orientation,
+    ) -> list[int] | None:
+        if not isinstance(state, dict):
+            return None
+        orientation_name = (
+            "horizontal" if orientation == Qt.Orientation.Horizontal else "vertical"
+        )
+        if state.get("orientation") != orientation_name:
+            return None
+        sizes = state.get("sizes")
+        if not isinstance(sizes, list) or len(sizes) != 2:
+            return None
+        if not all(isinstance(item, int) and item > 0 for item in sizes):
+            return None
+        return list(sizes)

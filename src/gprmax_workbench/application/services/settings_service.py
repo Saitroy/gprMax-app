@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import UTC, datetime
+from typing import Any
 
 from ...domain.models import Project, RecentProject
 from ...infrastructure.settings import AppSettings, SettingsManager
@@ -45,6 +47,18 @@ class SettingsService:
         self._settings.advanced_mode = advanced_mode
         self._settings.gprmax_python_executable = runtime
         self._settings.language = language
+        self._settings_manager.save(self._settings)
+        return self._settings
+
+    def ui_state_value(self, key: str, default: Any = None) -> Any:
+        value = self._settings.ui_state.get(key, default)
+        return deepcopy(value)
+
+    def update_ui_state(self, key: str, value: object | None) -> AppSettings:
+        if value is None:
+            self._settings.ui_state.pop(key, None)
+        else:
+            self._settings.ui_state[key] = deepcopy(value)
         self._settings_manager.save(self._settings)
         return self._settings
 

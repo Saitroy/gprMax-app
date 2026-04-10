@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import os
 import sys
@@ -54,19 +54,34 @@ class ProjectViewSmokeTests(unittest.TestCase):
         view.set_project(project, state.current_project_validation, False, None)
         return view
 
-    def test_project_view_builds_extended_editor_sections(self) -> None:
+    def test_project_view_defaults_to_basic_sections(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             view = self._build_view(temp_dir)
+            localization = view._localization  # noqa: SLF001
 
             labels = [
                 view._section_nav.item(index).text()  # noqa: SLF001
                 for index in range(view._section_nav.count())  # noqa: SLF001
             ]
 
-            self.assertIn("Сцена", labels)
-            self.assertIn("Библиотеки и импорт", labels)
-            self.assertIn("Advanced", labels)
-            self.assertEqual(labels[0], "Сцена")
+            self.assertIn(localization.text("project.section.scene"), labels)
+            self.assertIn(localization.text("project.section.libraries"), labels)
+            self.assertNotIn(localization.text("project.section.advanced"), labels)
+            self.assertEqual(labels[0], localization.text("project.section.scene"))
+
+    def test_project_view_can_enable_advanced_section(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            view = self._build_view(temp_dir)
+            localization = view._localization  # noqa: SLF001
+
+            view.set_advanced_mode(True)
+
+            labels = [
+                view._section_nav.item(index).text()  # noqa: SLF001
+                for index in range(view._section_nav.count())  # noqa: SLF001
+            ]
+
+            self.assertIn(localization.text("project.section.advanced"), labels)
 
     def test_scene_edit_request_switches_to_matching_section(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

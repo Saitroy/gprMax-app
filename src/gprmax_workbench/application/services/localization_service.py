@@ -233,6 +233,36 @@ _TRANSLATIONS["ru"].update(
 
 _TRANSLATIONS["ru"].update(
     {
+        "status.stage_ready": "Приложение готово к редактированию модели, запуску расчётов и просмотру результатов.",
+        "about.body": "GPRMax Workbench помогает подготовить модель, выполнить расчёт и быстро проверить A-scan/B-scan результаты в одном окне.",
+        "settings.subtitle": "Выберите язык интерфейса и, при необходимости, откройте расширенные настройки запуска gprMax.",
+        "settings.advanced_mode": "Показать расширенные настройки",
+        "project.section.advanced": "Расширенные команды",
+        "results.show_unmerged": "Показывать отдельные A-scan трассы",
+        "editor.scene.hint": "Перетаскивайте объекты из палитры на сцену. Колесо меняет масштаб, двойной щелчок и кнопка «Подогнать сцену» возвращают удобный обзор, правая кнопка открывает быстрые действия.",
+        "editor.scene.zoom": "Масштаб {percent}%",
+        "status.run_results_ready": "Расчёт {run_id} завершён. Результаты готовы на вкладке «Результаты».",
+        "status.run_finished": "Запуск {run_id} завершён со статусом: {status}.",
+    }
+)
+
+_TRANSLATIONS["en"].update(
+    {
+        "status.stage_ready": "Ready for model editing, simulation runs, and result review.",
+        "about.body": "GPRMax Workbench helps you prepare a model, run the calculation, and inspect A-scan/B-scan results in one place.",
+        "settings.subtitle": "Choose the interface language and enable advanced run controls only when you need them.",
+        "settings.advanced_mode": "Show advanced controls",
+        "project.section.advanced": "Advanced commands",
+        "results.show_unmerged": "Show individual A-scan traces",
+        "editor.scene.hint": "Drag entities from the palette onto the scene. Use the wheel to zoom, double-click or Fit Scene to reset the view, and right-click for quick actions.",
+        "editor.scene.zoom": "Zoom {percent}%",
+        "status.run_results_ready": "Run {run_id} completed. Results are ready on the Results page.",
+        "status.run_finished": "Run {run_id} finished with status: {status}.",
+    }
+)
+
+_TRANSLATIONS["ru"].update(
+    {
         "project.explorer.title": "\u041f\u0440\u043e\u0435\u043a\u0442",
         "project.explorer.scene": "\u0421\u0446\u0435\u043d\u0430",
         "project.explorer.project_group": "\u041c\u043e\u0434\u0435\u043b\u044c",
@@ -280,6 +310,36 @@ _TRANSLATIONS["en"].update(
         "statusbar.timestep.empty": "dt: -",
         "statusbar.timestep": "dt~{timestep} | window {window}",
         "statusbar.runtime": "Engine: {runtime}",
+    }
+)
+
+_TRANSLATIONS["ru"].update(
+    {
+        "status.stage_ready": "Приложение готово к редактированию модели, запуску расчётов и просмотру результатов.",
+        "about.body": "GPRMax Workbench помогает подготовить модель, выполнить расчёт и быстро проверить A-scan/B-scan результаты в одном окне.",
+        "settings.subtitle": "Выберите язык интерфейса и, при необходимости, откройте расширенные настройки запуска gprMax.",
+        "settings.advanced_mode": "Показать расширенные настройки",
+        "project.section.advanced": "Расширенные команды",
+        "results.show_unmerged": "Показывать отдельные A-scan трассы",
+        "editor.scene.hint": "Перетаскивайте объекты из палитры на сцену. Колесо меняет масштаб, двойной щелчок и кнопка «Подогнать сцену» возвращают удобный обзор, правая кнопка открывает быстрые действия.",
+        "editor.scene.zoom": "Масштаб {percent}%",
+        "status.run_results_ready": "Расчёт {run_id} завершён. Результаты готовы на вкладке «Результаты».",
+        "status.run_finished": "Запуск {run_id} завершён со статусом: {status}.",
+    }
+)
+
+_TRANSLATIONS["en"].update(
+    {
+        "status.stage_ready": "Ready for model editing, simulation runs, and result review.",
+        "about.body": "GPRMax Workbench helps you prepare a model, run the calculation, and inspect A-scan/B-scan results in one place.",
+        "settings.subtitle": "Choose the interface language and enable advanced run controls only when you need them.",
+        "settings.advanced_mode": "Show advanced controls",
+        "project.section.advanced": "Advanced commands",
+        "results.show_unmerged": "Show individual A-scan traces",
+        "editor.scene.hint": "Drag entities from the palette onto the scene. Use the wheel to zoom, double-click or Fit Scene to reset the view, and right-click for quick actions.",
+        "editor.scene.zoom": "Zoom {percent}%",
+        "status.run_results_ready": "Run {run_id} completed. Results are ready on the Results page.",
+        "status.run_finished": "Run {run_id} finished with status: {status}.",
     }
 )
 
@@ -1538,6 +1598,36 @@ _TRANSLATIONS["en"].update(
         "external.path_not_writable": "Path is not writable: {path} ({detail})",
         "external.disk_space_probe_failed": "Could not inspect free disk space for {path}: {detail}",
         "external.disk_space_low": "Free disk space is very low in the project location: {bytes_remaining} bytes remaining.",
+    }
+)
+
+_TRANSLATIONS["ru"].update(
+    {
+        "status.stage_ready": "Приложение готово к редактированию модели, запуску расчётов и просмотру результатов.",
+        "about.body": "GPRMax Workbench помогает подготовить модель, выполнить расчёт и быстро проверить A-scan/B-scan результаты в одном окне.",
+        "settings.subtitle": "Выберите язык интерфейса и, при необходимости, откройте расширенные настройки запуска gprMax.",
+        "settings.advanced_mode": "Показать расширенные настройки",
+        "project.section.advanced": "Расширенные команды",
+        "results.show_unmerged": "Показывать отдельные A-scan трассы",
+        "editor.scene.hint": "Перетаскивайте объекты из палитры на сцену. Колесо меняет масштаб, двойной щелчок и кнопка «Подогнать сцену» возвращают удобный обзор, правая кнопка открывает быстрые действия.",
+        "editor.scene.zoom": "Масштаб {percent}%",
+        "status.run_results_ready": "Расчёт {run_id} завершён. Результаты готовы на вкладке «Результаты».",
+        "status.run_finished": "Запуск {run_id} завершён со статусом: {status}.",
+    }
+)
+
+_TRANSLATIONS["en"].update(
+    {
+        "status.stage_ready": "Ready for model editing, simulation runs, and result review.",
+        "about.body": "GPRMax Workbench helps you prepare a model, run the calculation, and inspect A-scan/B-scan results in one place.",
+        "settings.subtitle": "Choose the interface language and enable advanced run controls only when you need them.",
+        "settings.advanced_mode": "Show advanced controls",
+        "project.section.advanced": "Advanced commands",
+        "results.show_unmerged": "Show individual A-scan traces",
+        "editor.scene.hint": "Drag entities from the palette onto the scene. Use the wheel to zoom, double-click or Fit Scene to reset the view, and right-click for quick actions.",
+        "editor.scene.zoom": "Zoom {percent}%",
+        "status.run_results_ready": "Run {run_id} completed. Results are ready on the Results page.",
+        "status.run_finished": "Run {run_id} finished with status: {status}.",
     }
 )
 

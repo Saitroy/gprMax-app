@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSignalBlocker, Qt, Signal
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -55,6 +55,11 @@ class ProjectView(QWidget):
         self._project_file: str | None = None
         self._is_dirty = False
         self._current_project: Project | None = None
+        self._advanced_mode = False
+        self._content_splitter_user_resized = False
+        self._syncing_splitter_sizes = False
+        self._persisted_content_splitter: dict[str, object] | None = None
+        self._pending_section_key: str | None = None
 
         self._project_root_label = QLabel()
         self._project_file_label = QLabel()
@@ -88,7 +93,7 @@ class ProjectView(QWidget):
             command_registry,
         )
         self._preview_panel = PreviewPanel(localization, model_editor_service, input_preview_service)
-        self._sections: list[tuple[str, QWidget]] = [
+        self._all_sections: list[tuple[str, QWidget]] = [
             ("project.section.scene", self._scene_panel),
             ("project.section.area", self._general_panel),
             ("project.section.materials", self._materials_panel),
@@ -100,6 +105,7 @@ class ProjectView(QWidget):
             ("project.section.advanced", self._advanced_panel),
             ("project.section.preview", self._preview_panel),
         ]
+        self._visible_sections: list[tuple[str, QWidget, int]] = []
 
         for panel in (
             self._general_panel,
@@ -147,7 +153,7 @@ class ProjectView(QWidget):
         nav_layout.addWidget(self._nav_heading)
         nav_layout.addWidget(self._section_nav, 1)
 
-        for _, panel in self._sections:
+        for _, panel in self._all_sections:
             self._section_stack.addWidget(panel)
 
         self._content_splitter = configure_splitter(QSplitter())
@@ -156,6 +162,7 @@ class ProjectView(QWidget):
         self._content_splitter.setStretchFactor(0, 0)
         self._content_splitter.setStretchFactor(1, 1)
         self._content_splitter.setSizes([230, 980])
+        self._content_splitter.splitterMoved.connect(self._on_content_splitter_moved)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -291,40 +298,108 @@ class ProjectView(QWidget):
         self._advanced_panel.retranslate_ui()
         self._preview_panel.retranslate_ui()
         self.set_project(self._current_project, self._validation_service.current_validation(), self._is_dirty, self._project_file)
-        self._refresh_responsive_layout()
+        self._refresh_responsive_layout(force=True)
+
+    def set_advanced_mode(self, enabled: bool) -> None:
+        if self._advanced_mode == enabled:
+            return
+        self._advanced_mode = enabled
+        self._retranslate_sections()
+
+    def ui_state(self) -> dict[str, object]:
+        state: dict[str, object] = {
+            "content_splitter": self._splitter_state(self._content_splitter),
+        }
+        current_key = self._current_section_key()
+        if current_key is not None:
+            state["section_key"] = current_key
+        scene_state = self._scene_panel.ui_state()
+        if scene_state:
+            state["scene"] = scene_state
+        return state
+
+    def apply_ui_state(self, state: dict[str, object] | None) -> None:
+        if not isinstance(state, dict):
+            return
+        section_key = state.get("section_key")
+        self._pending_section_key = section_key if isinstance(section_key, str) else None
+        splitter_state = state.get("content_splitter")
+        if isinstance(splitter_state, dict):
+            self._persisted_content_splitter = splitter_state
+        scene_state = state.get("scene")
+        if isinstance(scene_state, dict):
+            self._scene_panel.apply_ui_state(scene_state)
+        self._retranslate_sections()
+        self._refresh_responsive_layout(force=True)
 
     def resizeEvent(self, event) -> None:  # noqa: N802
         super().resizeEvent(event)
         self._refresh_responsive_layout()
 
     def _retranslate_sections(self) -> None:
-        current_row = self._section_nav.currentRow()
-        self._section_nav.clear()
-        for index, (title_key, _) in enumerate(self._sections):
-            item = QListWidgetItem(self._localization.text(title_key))
-            item.setData(Qt.ItemDataRole.UserRole, index)
-            self._section_nav.addItem(item)
-        if self._section_nav.count() > 0:
-            self._section_nav.setCurrentRow(max(0, current_row))
+        current_key = self._current_section_key() or self._pending_section_key
+        self._visible_sections = []
+        with QSignalBlocker(self._section_nav):
+            self._section_nav.clear()
+            for stack_index, (title_key, panel) in enumerate(self._all_sections):
+                if not self._advanced_mode and title_key == "project.section.advanced":
+                    continue
+                item = QListWidgetItem(self._localization.text(title_key))
+                item.setData(Qt.ItemDataRole.UserRole, stack_index)
+                item.setData(Qt.ItemDataRole.UserRole + 1, title_key)
+                self._section_nav.addItem(item)
+                self._visible_sections.append((title_key, panel, stack_index))
+
+            target_row = self._row_for_section_key(current_key)
+            if target_row < 0 and self._section_nav.count() > 0:
+                target_row = 0
+            if target_row >= 0:
+                self._section_nav.setCurrentRow(target_row)
+
+        if target_row >= 0:
+            self._on_section_changed(target_row)
 
     def _on_section_changed(self, row: int) -> None:
-        if row < 0:
+        item = self._section_nav.item(row) if row >= 0 else None
+        if item is None:
             return
-        self._section_stack.setCurrentIndex(row)
+        stack_index = item.data(Qt.ItemDataRole.UserRole)
+        if not isinstance(stack_index, int):
+            return
+        self._pending_section_key = item.data(Qt.ItemDataRole.UserRole + 1)
+        self._section_stack.setCurrentIndex(stack_index)
 
-    def _refresh_responsive_layout(self) -> None:
+    def _refresh_responsive_layout(self, *, force: bool = False) -> None:
         if self.width() < 980:
-            self._content_splitter.setOrientation(Qt.Orientation.Vertical)
-            top_height = 176 if self.height() >= 700 else 152
-            self._content_splitter.setSizes(
-                [top_height, max(360, self.height() - top_height)]
-            )
+            orientation = Qt.Orientation.Vertical
+            orientation_changed = self._content_splitter.orientation() != orientation
+            if orientation_changed:
+                self._content_splitter.setOrientation(orientation)
+                self._content_splitter_user_resized = False
+            if force or orientation_changed or not self._content_splitter_user_resized:
+                persisted_sizes = self._splitter_sizes_for_orientation(orientation)
+                if persisted_sizes is not None:
+                    self._apply_splitter_sizes(persisted_sizes)
+                    return
+                top_height = 176 if self.height() >= 700 else 152
+                self._apply_splitter_sizes(
+                    [top_height, max(360, self.height() - top_height)]
+                )
             return
-        self._content_splitter.setOrientation(Qt.Orientation.Horizontal)
-        nav_width = max(210, min(250, int(self.width() * 0.23)))
-        self._content_splitter.setSizes(
-            [nav_width, max(680, self.width() - nav_width)]
-        )
+        orientation = Qt.Orientation.Horizontal
+        orientation_changed = self._content_splitter.orientation() != orientation
+        if orientation_changed:
+            self._content_splitter.setOrientation(orientation)
+            self._content_splitter_user_resized = False
+        if force or orientation_changed or not self._content_splitter_user_resized:
+            persisted_sizes = self._splitter_sizes_for_orientation(orientation)
+            if persisted_sizes is not None:
+                self._apply_splitter_sizes(persisted_sizes)
+                return
+            nav_width = max(210, min(250, int(self.width() * 0.23)))
+            self._apply_splitter_sizes(
+                [nav_width, max(680, self.width() - nav_width)]
+            )
 
     def _on_scene_edit_requested(self, entity_kind: str) -> None:
         target_key = {
@@ -336,7 +411,63 @@ class ProjectView(QWidget):
         }.get(entity_kind)
         if target_key is None:
             return
-        for row, (title_key, _panel) in enumerate(self._sections):
-            if title_key == target_key:
-                self._section_nav.setCurrentRow(row)
-                return
+        row = self._row_for_section_key(target_key)
+        if row >= 0:
+            self._section_nav.setCurrentRow(row)
+            return
+
+    def _apply_splitter_sizes(self, sizes: list[int]) -> None:
+        self._syncing_splitter_sizes = True
+        try:
+            self._content_splitter.setSizes(sizes)
+        finally:
+            self._syncing_splitter_sizes = False
+
+    def _on_content_splitter_moved(self, _pos: int, _index: int) -> None:
+        if self._syncing_splitter_sizes:
+            return
+        self._content_splitter_user_resized = True
+
+    def _current_section_key(self) -> str | None:
+        item = self._section_nav.currentItem()
+        value = item.data(Qt.ItemDataRole.UserRole + 1) if item is not None else None
+        return value if isinstance(value, str) else None
+
+    def _row_for_section_key(self, section_key: str | None) -> int:
+        if not section_key:
+            return -1
+        for row in range(self._section_nav.count()):
+            item = self._section_nav.item(row)
+            if item is not None and item.data(Qt.ItemDataRole.UserRole + 1) == section_key:
+                return row
+        return -1
+
+    def _splitter_state(self, splitter: QSplitter) -> dict[str, object]:
+        orientation = (
+            "horizontal"
+            if splitter.orientation() == Qt.Orientation.Horizontal
+            else "vertical"
+        )
+        return {
+            "orientation": orientation,
+            "sizes": [int(size) for size in splitter.sizes()],
+        }
+
+    def _splitter_sizes_for_orientation(
+        self,
+        orientation: Qt.Orientation,
+    ) -> list[int] | None:
+        state = self._persisted_content_splitter
+        if not isinstance(state, dict):
+            return None
+        orientation_name = (
+            "horizontal" if orientation == Qt.Orientation.Horizontal else "vertical"
+        )
+        if state.get("orientation") != orientation_name:
+            return None
+        sizes = state.get("sizes")
+        if not isinstance(sizes, list) or len(sizes) != 2:
+            return None
+        if not all(isinstance(item, int) and item > 0 for item in sizes):
+            return None
+        return list(sizes)

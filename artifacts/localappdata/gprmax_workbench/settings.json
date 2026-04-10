@@ -1,0 +1,16 @@
+{
+  "schema": {
+    "name": "gprmax-workbench-settings",
+    "version": 3
+  },
+  "recent_projects": [
+    {
+      "path": "D:\\GitRepositories\\gprMax-app\\examples\\cylinder_bscan_2d",
+      "name": "Cylinder B-scan 2D",
+      "last_opened_at": "2026-04-10T12:15:59.721568+00:00"
+    }
+  ],
+  "advanced_mode": false,
+  "gprmax_python_executable": null,
+  "language": "en"
+}

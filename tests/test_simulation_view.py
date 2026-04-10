@@ -82,6 +82,49 @@ class SimulationViewTests(unittest.TestCase):
         with self.assertRaises(SimulationConfigurationError):
             view.current_configuration()
 
+    def test_default_mode_hides_advanced_run_controls(self) -> None:
+        view = SimulationView(
+            localization=LocalizationService("en"),
+            runtime_label="Bundled runtime",
+        )
+
+        self.assertFalse(view._config_form.isRowVisible(view._restart_spinbox))  # noqa: SLF001
+        self.assertFalse(view._config_form.isRowVisible(view._mpi_tasks_spinbox))  # noqa: SLF001
+        self.assertFalse(view._config_form.isRowVisible(view._benchmark_checkbox))  # noqa: SLF001
+        self.assertFalse(view._config_form.isRowVisible(view._extra_args_edit))  # noqa: SLF001
+
+    def test_enabling_advanced_mode_shows_advanced_run_controls(self) -> None:
+        view = SimulationView(
+            localization=LocalizationService("en"),
+            runtime_label="Bundled runtime",
+        )
+
+        view.set_advanced_mode(True)
+
+        self.assertTrue(view._config_form.isRowVisible(view._restart_spinbox))  # noqa: SLF001
+        self.assertTrue(view._config_form.isRowVisible(view._mpi_tasks_spinbox))  # noqa: SLF001
+        self.assertTrue(view._config_form.isRowVisible(view._benchmark_checkbox))  # noqa: SLF001
+        self.assertTrue(view._config_form.isRowVisible(view._extra_args_edit))  # noqa: SLF001
+
+    def test_action_buttons_follow_project_and_run_state(self) -> None:
+        view = SimulationView(
+            localization=LocalizationService("en"),
+            runtime_label="Bundled runtime",
+        )
+
+        view.set_readiness_state(summary="Ready", caption="", start_allowed=True)
+        view.set_project_state(project_name=None, is_dirty=False)
+
+        self.assertFalse(view._start_button.isEnabled())  # noqa: SLF001
+        self.assertFalse(view._preview_button.isEnabled())  # noqa: SLF001
+        self.assertFalse(view._export_button.isEnabled())  # noqa: SLF001
+
+        view.set_project_state(project_name="Demo", is_dirty=False)
+
+        self.assertTrue(view._start_button.isEnabled())  # noqa: SLF001
+        self.assertTrue(view._preview_button.isEnabled())  # noqa: SLF001
+        self.assertTrue(view._export_button.isEnabled())  # noqa: SLF001
+
     def test_standard_desktop_width_keeps_splitters_horizontal(self) -> None:
         view = SimulationView(
             localization=LocalizationService("en"),
