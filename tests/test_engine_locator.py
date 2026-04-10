@@ -19,6 +19,9 @@ from gprmax_workbench.infrastructure.settings import AppSettings, SettingsManage
 
 
 class EngineLocatorTests(unittest.TestCase):
+    def assert_paths_equivalent(self, actual: Path, expected: Path) -> None:
+        self.assertEqual(actual.resolve(), expected.resolve())
+
     def test_prefers_bundled_runtime_when_present(self) -> None:
         with tempfile.TemporaryDirectory() as install_dir, tempfile.TemporaryDirectory() as settings_dir:
             install_root = Path(install_dir)
@@ -46,7 +49,10 @@ class EngineLocatorTests(unittest.TestCase):
             resolution = locator.resolve(AppSettings())
 
             self.assertEqual(resolution.engine.mode.value, "bundled")
-            self.assertEqual(resolution.engine.python_executable, bundled_python)
+            self.assert_paths_equivalent(
+                resolution.engine.python_executable,
+                bundled_python,
+            )
 
     def test_uses_configured_external_fallback_when_bundled_missing(self) -> None:
         with tempfile.TemporaryDirectory() as install_dir, tempfile.TemporaryDirectory() as settings_dir:
@@ -79,7 +85,10 @@ class EngineLocatorTests(unittest.TestCase):
             )
 
             self.assertEqual(resolution.engine.mode.value, "external")
-            self.assertEqual(resolution.engine.python_executable, external_python)
+            self.assert_paths_equivalent(
+                resolution.engine.python_executable,
+                external_python,
+            )
             self.assertIn("Bundled engine was not found", resolution.notes[0])
 
     def test_ignores_partial_bundled_runtime_without_manifest(self) -> None:
@@ -111,7 +120,10 @@ class EngineLocatorTests(unittest.TestCase):
             resolution = locator.resolve(AppSettings())
 
             self.assertEqual(resolution.engine.mode.value, "external")
-            self.assertEqual(resolution.engine.python_executable, dev_python)
+            self.assert_paths_equivalent(
+                resolution.engine.python_executable,
+                dev_python,
+            )
             self.assertIn("Bundled engine manifest is missing", resolution.notes[0])
 
 

@@ -12,6 +12,9 @@ from gprmax_workbench.infrastructure.settings import SettingsManager
 
 
 class PathManagerTests(unittest.TestCase):
+    def assert_paths_equivalent(self, actual: Path, expected: Path) -> None:
+        self.assertEqual(actual.resolve(), expected.resolve())
+
     def test_resolves_installer_oriented_paths(self) -> None:
         with tempfile.TemporaryDirectory() as install_dir, tempfile.TemporaryDirectory() as settings_dir:
             manager = SettingsManager(
@@ -23,13 +26,16 @@ class PathManagerTests(unittest.TestCase):
                 installation_root=Path(install_dir),
             )
 
-            self.assertEqual(path_manager.installation_root, Path(install_dir))
-            self.assertEqual(path_manager.bundled_engine_root, Path(install_dir) / "engine")
-            self.assertEqual(path_manager.bundled_manifest_path, Path(install_dir) / "engine" / "manifest.json")
-            self.assertEqual(path_manager.settings_directory, Path(settings_dir))
-            self.assertEqual(path_manager.logs_directory, Path(settings_dir) / "logs")
-            self.assertEqual(path_manager.cache_directory, Path(settings_dir) / "cache")
-            self.assertEqual(path_manager.temp_directory, Path(settings_dir) / "temp")
+            self.assert_paths_equivalent(path_manager.installation_root, Path(install_dir))
+            self.assert_paths_equivalent(path_manager.bundled_engine_root, Path(install_dir) / "engine")
+            self.assert_paths_equivalent(
+                path_manager.bundled_manifest_path,
+                Path(install_dir) / "engine" / "manifest.json",
+            )
+            self.assert_paths_equivalent(path_manager.settings_directory, Path(settings_dir))
+            self.assert_paths_equivalent(path_manager.logs_directory, Path(settings_dir) / "logs")
+            self.assert_paths_equivalent(path_manager.cache_directory, Path(settings_dir) / "cache")
+            self.assert_paths_equivalent(path_manager.temp_directory, Path(settings_dir) / "temp")
 
     def test_prefers_existing_bundled_python_candidate(self) -> None:
         with tempfile.TemporaryDirectory() as install_dir, tempfile.TemporaryDirectory() as settings_dir:
@@ -48,7 +54,7 @@ class PathManagerTests(unittest.TestCase):
                 installation_root=install_root,
             )
 
-            self.assertEqual(path_manager.bundled_python_executable(), expected)
+            self.assert_paths_equivalent(path_manager.bundled_python_executable(), expected)
 
 
 if __name__ == "__main__":
