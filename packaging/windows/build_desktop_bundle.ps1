@@ -24,6 +24,21 @@ function Copy-DirectoryTree([string]$SourceRoot, [string]$DestinationRoot) {
     }
 }
 
+function Resolve-DefaultPythonExe([string]$RepoRoot) {
+    $candidates = @(
+        (Join-Path $RepoRoot ".venv\Scripts\python.exe"),
+        (Join-Path $RepoRoot "venv\Scripts\python.exe")
+    )
+
+    foreach ($candidate in $candidates) {
+        if (Test-Path $candidate) {
+            return $candidate
+        }
+    }
+
+    return (Get-Command python -ErrorAction Stop).Source
+}
+
 function Get-FreeDriveLetter {
     foreach ($letter in @("Z", "Y", "X", "W", "V", "U", "T", "S", "R")) {
         if (-not (Test-Path "${letter}:\")) {
@@ -156,7 +171,11 @@ function Optimize-EngineRuntime([string]$BundleRoot) {
         }
 
         Remove-PathsByPattern $sitePackages @(
+            "comm*",
             "jupyter*",
+            "nbclient*",
+            "nbconvert*",
+            "nbformat*",
             "notebook*",
             "ipykernel*",
             "ipython*",
@@ -201,7 +220,7 @@ function Optimize-EngineRuntime([string]$BundleRoot) {
         )
 
         Get-ChildItem -Path $sitePackages -Directory -Recurse -Force -ErrorAction SilentlyContinue | Where-Object {
-            $_.Name -in @("__pycache__", "benchmarks", "docs", "doc", "examples", "example")
+            $_.Name -in @("__pycache__", "benchmarks", "docs", "doc", "examples", "example", "tests", "test")
         } | Sort-Object FullName -Descending | ForEach-Object {
             Remove-Item -Recurse -Force $_.FullName
         }
@@ -231,7 +250,7 @@ $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Resolve-AbsolutePath "..\.." $scriptRoot
 
 if (-not $PythonExe) {
-    $PythonExe = (Get-Command python -ErrorAction Stop).Source
+    $PythonExe = Resolve-DefaultPythonExe $repoRoot
 }
 
 if (-not $AppVersion) {

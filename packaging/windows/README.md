@@ -38,6 +38,8 @@ Important distinction:
 powershell -ExecutionPolicy Bypass -File packaging\windows\build_desktop_bundle.ps1
 ```
 
+When `-PythonExe` is omitted, the script prefers `.\.venv\Scripts\python.exe` from the repository root and only falls back to `python` from `PATH`.
+
 Optional overrides:
 
 ```powershell

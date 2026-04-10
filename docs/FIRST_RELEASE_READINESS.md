@@ -1,6 +1,6 @@
 # First Release Readiness
 
-Last updated: 2026-04-07
+Last updated: 2026-04-10
 
 ## Scope
 
@@ -27,6 +27,8 @@ The project is technically usable for guided testing, but it does not yet have t
 - Public release checklist, license-review checklist, issue templates, and support-bundle tooling now exist in the main repository.
 - The repository currently contains `107` automated tests, and `python -m unittest discover tests` passes locally.
 - The current desktop shell has been smoke-checked for `1366x768` and `1920x1080`.
+- A full local dry-run of `packaging/windows/build_desktop_bundle.ps1` and `packaging/windows/build_installer.ps1` succeeded on 2026-04-10.
+- Silent install, launch, and uninstall validation succeeded on the local Windows release machine on 2026-04-10.
 
 ## Readiness Assessment
 
@@ -79,7 +81,7 @@ Remaining gaps:
 
 ### 4. Packaging and Installation
 
-Status: `foundation ready, not yet release-proven`
+Status: `locally validated, not yet release-proven`
 
 Why:
 
@@ -89,7 +91,7 @@ Why:
 
 Blocking gaps:
 
-- the new pipeline still needs a real dry-run on a clean Windows release machine;
+- the new pipeline still needs a clean-machine or VM validation pass outside the maintainer workstation;
 - there is no signed public artifact history yet;
 - installer validation is still pending outside local repository checks.
 
@@ -123,7 +125,7 @@ Blocking gaps:
 The following items should still be treated as blockers for the first public bundled release:
 
 1. Run the new CI and packaging pipeline on the intended release path and keep the build green.
-2. Produce and validate the first desktop bundle and installer from `packaging/windows/` on a clean Windows machine.
+2. Validate the current desktop bundle and installer on a clean Windows machine or VM outside the maintainer workstation.
 3. Complete GPL and bundled-license sign-off using `docs/BUNDLED_LICENSE_REVIEW.md` plus generated inventory artifacts.
 4. Execute `docs/PUBLIC_RELEASE_CHECKLIST.md` end to end for a real release candidate.
 5. Rehearse the support flow with issue templates and `tools/collect_support_bundle.py` on at least one real bug report.

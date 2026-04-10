@@ -1,6 +1,6 @@
 # Current State
 
-Last updated: 2026-04-07
+Last updated: 2026-04-10
 
 This document describes the current implemented product state. It is intentionally factual and should be read as a companion to the architectural and roadmap documents.
 
@@ -109,11 +109,11 @@ Current layout behavior:
 
 The current implementation is intentionally bounded in a few places:
 
-- the first public installer pipeline now exists as repository tooling under `packaging/windows/`, but it has not yet been validated through a shipped public release;
+- the first public installer pipeline now exists as repository tooling under `packaging/windows/`, and a local bundle plus installer dry-run has now succeeded, but it still has not been validated through a shipped public release or a clean-machine external pilot;
 - splitter sizes are not yet persisted between sessions;
 - guided editor coverage does not yet span the full `gprMax` command surface;
 - results analysis is currently limited to the existing A-scan and bounded B-scan workflows;
-- public release support assets now exist in the repository, but they still need real release dry-runs and maintainer sign-off.
+- public release support assets now exist in the repository, but they still need maintainer sign-off, clean-machine validation, and an exercised outside-user support loop.
 
 ## Verification Snapshot
 
@@ -121,6 +121,9 @@ Latest local verification used for this documentation update:
 
 - `python -m unittest discover tests` -> `107 OK`
 - offscreen UI smoke confirms stable shell behavior at `1366x768` and `1920x1080`
+- `packaging/windows/build_desktop_bundle.ps1 -PythonExe .\.venv\Scripts\python.exe` -> bundle build and bundle smoke passed
+- `packaging/windows/build_installer.ps1` -> installer build passed
+- silent install, launch, and uninstall dry-run passed on the local Windows release machine
 
 ## Related Documents
 

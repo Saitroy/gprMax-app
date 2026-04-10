@@ -1,0 +1,73 @@
+# GPRMax Workbench 0.1.0 Alpha
+
+## Release intent
+
+This build is intended for guided alpha testing on Windows x64.
+
+It is suitable for geologists, geophysicists, students, and early design partners who need a desktop workflow around `gprMax` without working directly through a CLI-first setup.
+
+This is not yet the first public bundled production release.
+
+## Suggested GitHub prerelease metadata
+
+- Release title: `GPRMax Workbench 0.1.0 Alpha`
+- Release type: GitHub `pre-release`
+- Suggested assets:
+  - Windows installer `gprmax-workbench-0.1.0-windows-x64.exe`
+  - `release-manifest.json`
+  - generated license inventories for app and engine runtimes
+  - checksum file for the published artifacts
+  - these alpha release notes as the release body
+
+If you want alpha-specific versioning on GitHub, prefer a prerelease tag such as `v0.1.0-alpha.1` and align application version metadata before publishing the final tag.
+
+## What alpha testers can do
+
+- create a new project from `Welcome`
+- open an existing project and work with recent projects
+- edit the model through guided workspace sections
+- preview and export generated `gprMax` input
+- run CPU simulations with live logs and run history
+- inspect outputs through `Results`, including A-scan and bounded B-scan workflows
+- inspect runtime diagnostics through `Settings`
+
+## Validation completed for this alpha candidate
+
+- `python -m ruff check src tests packaging tools` passed
+- `python -m unittest discover tests` passed with `107 OK`
+- local Windows desktop bundle build passed
+- bundle smoke test passed
+- Windows installer build passed
+- silent install, launch, and uninstall dry-run passed on the maintainer workstation
+
+## Known limits
+
+- splitter sizes are not yet persisted between sessions
+- guided editor coverage is still intentionally partial relative to the full `gprMax` command surface
+- broader results analysis and export workflows are still limited
+- clean-machine validation outside the maintainer workstation is still pending
+- licensing and compliance sign-off are still required before a first public bundled release
+
+## Tester focus areas
+
+- project creation and project reopening
+- model editing flow for common classroom and field scenarios
+- simulation readiness feedback and live log clarity
+- results browsing on real project data
+- installer experience on typical Windows x64 machines
+- runtime diagnostics when the environment is incomplete or unusual
+
+## Installation notes
+
+- Windows x64 is the supported alpha target
+- the bundled application is intended to run without requiring a separate Python or `gprMax` installation
+- the optional Visual Studio Build Tools task is only for advanced engine rebuild or repair workflows
+
+## Bug reporting
+
+Please use the GitHub issue templates in this repository and include:
+
+- a short description of what you were doing
+- screenshots when relevant
+- the project or run where the problem occurred, if known
+- logs or a support bundle when available
