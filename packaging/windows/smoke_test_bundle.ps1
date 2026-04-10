@@ -11,6 +11,24 @@ function Resolve-AbsolutePath([string]$PathValue, [string]$BaseRoot) {
     return [System.IO.Path]::GetFullPath((Join-Path $BaseRoot $PathValue))
 }
 
+function Get-BundledEnginePythonExe([string]$BundleRoot) {
+    $candidates = @(
+        (Join-Path $BundleRoot "engine\python\python.exe"),
+        (Join-Path $BundleRoot "engine\python\Scripts\python.exe"),
+        (Join-Path $BundleRoot "engine\python\python"),
+        (Join-Path $BundleRoot "engine\python\bin\python.exe"),
+        (Join-Path $BundleRoot "engine\python\bin\python")
+    )
+
+    foreach ($candidate in $candidates) {
+        if (Test-Path $candidate) {
+            return $candidate
+        }
+    }
+
+    return $null
+}
+
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Resolve-AbsolutePath "..\.." $scriptRoot
 $resolvedBundleRoot = Resolve-AbsolutePath $BundleRoot $repoRoot
@@ -33,12 +51,23 @@ foreach ($requiredPath in $requiredPaths) {
 }
 
 $engineManifestPath = Join-Path $resolvedBundleRoot "engine\manifest.json"
-$enginePythonExe = Join-Path $resolvedBundleRoot "engine\python\Scripts\python.exe"
-if (-not (Test-Path $enginePythonExe)) {
-    throw "Bundled engine python.exe not found at $enginePythonExe"
+$enginePythonExe = Get-BundledEnginePythonExe $resolvedBundleRoot
+if (-not $enginePythonExe) {
+    throw "Bundled engine python executable not found under $resolvedBundleRoot\\engine\\python"
 }
 
-$probeCommand = "import json, pathlib; manifest = json.loads(pathlib.Path(r'$engineManifestPath').read_text(encoding='utf-8')); assert manifest.get('gprmax_version'); print(manifest['gprmax_version'])"
+$pyvenvPath = Join-Path $resolvedBundleRoot "engine\python\pyvenv.cfg"
+if (Test-Path $pyvenvPath) {
+    throw "Portable bundle still contains pyvenv.cfg: $pyvenvPath"
+}
+
+$directUrlFiles = Get-ChildItem -Path $resolvedBundleRoot -Filter "direct_url.json" -Recurse -Force -ErrorAction SilentlyContinue
+if (@($directUrlFiles).Count -gt 0) {
+    $firstMatch = @($directUrlFiles)[0].FullName
+    throw "Portable bundle still contains direct_url.json metadata: $firstMatch"
+}
+
+$probeCommand = "import json, pathlib, sys; manifest = json.loads(pathlib.Path(r'$engineManifestPath').read_text(encoding='utf-8')); assert manifest.get('gprmax_version'); expected = (pathlib.Path(r'$resolvedBundleRoot') / 'engine' / 'python').resolve(); assert pathlib.Path(sys.prefix).resolve() == expected; assert pathlib.Path(sys.base_prefix).resolve() == expected; print(manifest['gprmax_version'])"
 & $enginePythonExe -c $probeCommand | Out-Null
 if ($LASTEXITCODE -ne 0) {
     throw "Failed to validate bundled engine manifest with bundled Python."

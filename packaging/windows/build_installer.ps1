@@ -34,6 +34,27 @@ $resolvedOutputRoot = Resolve-AbsolutePath $OutputRoot $repoRoot
 $releaseManifestPath = Join-Path $resolvedBundleRoot "release-manifest.json"
 $iscc = Find-ISCC
 
+function Write-ReleaseChecksums([string]$InstallerRoot, [string]$BundleRoot, [string]$AppVersion) {
+    $artifacts = @(
+        (Join-Path $InstallerRoot "gprmax-workbench-$AppVersion-windows-x64.exe"),
+        (Join-Path $BundleRoot "release-manifest.json"),
+        (Join-Path $BundleRoot "licenses\app-python\inventory-app-python.json"),
+        (Join-Path $BundleRoot "licenses\engine-python\inventory-engine-python.json")
+    )
+
+    $lines = @()
+    foreach ($artifact in $artifacts) {
+        if (-not (Test-Path $artifact)) {
+            throw "Expected release artifact not found: $artifact"
+        }
+        $hash = (Get-FileHash -Algorithm SHA256 $artifact).Hash.ToLowerInvariant()
+        $lines += "$hash *$([System.IO.Path]::GetFileName($artifact))"
+    }
+
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllLines((Join-Path $InstallerRoot "SHA256SUMS.txt"), $lines, $utf8NoBom)
+}
+
 if (-not $iscc) {
     throw "ISCC.exe was not found. Install Inno Setup 6 on the release machine."
 }
@@ -61,5 +82,7 @@ New-Item -ItemType Directory -Path $resolvedOutputRoot -Force | Out-Null
 if ($LASTEXITCODE -ne 0) {
     throw "Inno Setup build failed."
 }
+
+Write-ReleaseChecksums $resolvedOutputRoot $resolvedBundleRoot $AppVersion
 
 Write-Host "Installer created under $resolvedOutputRoot"

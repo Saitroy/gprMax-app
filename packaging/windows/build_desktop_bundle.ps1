@@ -24,6 +24,32 @@ function Copy-DirectoryTree([string]$SourceRoot, [string]$DestinationRoot) {
     }
 }
 
+function Copy-DirectoryTreeFiltered(
+    [string]$SourceRoot,
+    [string]$DestinationRoot,
+    [string[]]$ExcludedDirectories = @()
+) {
+    New-Item -ItemType Directory -Path $DestinationRoot -Force | Out-Null
+    $robocopyArgs = @(
+        $SourceRoot,
+        $DestinationRoot,
+        "/E",
+        "/NFL",
+        "/NDL",
+        "/NJH",
+        "/NJS",
+        "/NP"
+    )
+    if ($ExcludedDirectories.Count -gt 0) {
+        $robocopyArgs += "/XD"
+        $robocopyArgs += $ExcludedDirectories
+    }
+    $null = & robocopy @robocopyArgs
+    if ($LASTEXITCODE -gt 7) {
+        throw "robocopy failed while copying '$SourceRoot' to '$DestinationRoot' with exit code $LASTEXITCODE"
+    }
+}
+
 function Resolve-DefaultPythonExe([string]$RepoRoot) {
     $candidates = @(
         (Join-Path $RepoRoot ".venv\Scripts\python.exe"),
@@ -100,9 +126,125 @@ function Remove-PathsByPattern([string]$Root, [string[]]$Patterns) {
     }
 }
 
+function Get-PortablePythonBaseRoot([string]$PythonRoot) {
+    $pyvenvPath = Join-Path $PythonRoot "pyvenv.cfg"
+    if (-not (Test-Path $pyvenvPath)) {
+        return $null
+    }
+
+    foreach ($line in Get-Content $pyvenvPath) {
+        if ($line -match '^\s*home\s*=\s*(.+?)\s*$') {
+            $candidate = $matches[1].Trim()
+            if ($candidate -and (Test-Path (Join-Path $candidate "python.exe"))) {
+                return $candidate
+            }
+        }
+        if ($line -match '^\s*executable\s*=\s*(.+?)\s*$') {
+            $candidateExe = $matches[1].Trim()
+            if ($candidateExe -and (Test-Path $candidateExe)) {
+                return (Split-Path -Parent $candidateExe)
+            }
+        }
+    }
+
+    return $null
+}
+
+function Update-EngineManifestForPortableRuntime([string]$ManifestPath) {
+    if (-not (Test-Path $ManifestPath)) {
+        return
+    }
+
+    $manifest = Get-Content $ManifestPath -Raw | ConvertFrom-Json
+    $manifest.python_executable = "python/python.exe"
+    $manifest.bundle_layout = "portable-python"
+
+    $notes = @($manifest.notes)
+    $portableNote = "Portable Python runtime was copied into engine/python for machine-independent execution."
+    if ($notes -notcontains $portableNote) {
+        $notes += $portableNote
+    }
+    $manifest.notes = $notes
+
+    $manifestJson = $manifest | ConvertTo-Json -Depth 10
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($ManifestPath, $manifestJson, $utf8NoBom)
+}
+
+function Convert-VenvEngineToPortableRuntime([string]$BundleRoot) {
+    $engineRoot = Join-Path $BundleRoot "engine"
+    $pythonRoot = Join-Path $engineRoot "python"
+    $baseRoot = Get-PortablePythonBaseRoot $pythonRoot
+    if (-not $baseRoot) {
+        return
+    }
+
+    foreach ($filename in @(
+        "python.exe",
+        "pythonw.exe",
+        "LICENSE.txt"
+    )) {
+        $sourceFile = Join-Path $baseRoot $filename
+        if (Test-Path $sourceFile) {
+            Copy-Item -LiteralPath $sourceFile -Destination (Join-Path $pythonRoot $filename) -Force
+        }
+    }
+
+    Get-ChildItem -Path $baseRoot -Filter "python*.dll" -File -Force -ErrorAction SilentlyContinue | ForEach-Object {
+        Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $pythonRoot $_.Name) -Force
+    }
+    Get-ChildItem -Path $baseRoot -Filter "vcruntime*.dll" -File -Force -ErrorAction SilentlyContinue | ForEach-Object {
+        Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $pythonRoot $_.Name) -Force
+    }
+
+    $baseDlls = Join-Path $baseRoot "DLLs"
+    if (Test-Path $baseDlls) {
+        Copy-DirectoryTree $baseDlls (Join-Path $pythonRoot "DLLs")
+    }
+
+    $baseLib = Join-Path $baseRoot "Lib"
+    if (Test-Path $baseLib) {
+        Copy-DirectoryTreeFiltered $baseLib (Join-Path $pythonRoot "Lib") @("site-packages")
+    }
+
+    Remove-PathIfExists (Join-Path $pythonRoot "pyvenv.cfg")
+    Remove-PathIfExists (Join-Path $pythonRoot ".gitignore")
+    Remove-PathIfExists (Join-Path $pythonRoot "Include")
+    Remove-PathIfExists (Join-Path $pythonRoot "etc")
+    Remove-PathIfExists (Join-Path $pythonRoot "share")
+    Remove-PathIfExists (Join-Path $pythonRoot "Scripts")
+
+    Get-ChildItem -Path $BundleRoot -Filter "direct_url.json" -Recurse -Force -ErrorAction SilentlyContinue | ForEach-Object {
+        Remove-Item -Force $_.FullName
+    }
+
+    Update-EngineManifestForPortableRuntime (Join-Path $engineRoot "manifest.json")
+}
+
+function Get-BundledEnginePythonExe([string]$BundleRoot) {
+    $candidates = @(
+        (Join-Path $BundleRoot "engine\python\python.exe"),
+        (Join-Path $BundleRoot "engine\python\Scripts\python.exe"),
+        (Join-Path $BundleRoot "engine\python\python"),
+        (Join-Path $BundleRoot "engine\python\bin\python.exe"),
+        (Join-Path $BundleRoot "engine\python\bin\python")
+    )
+
+    foreach ($candidate in $candidates) {
+        if (Test-Path $candidate) {
+            return $candidate
+        }
+    }
+
+    return $null
+}
+
 function Optimize-EngineRuntime([string]$BundleRoot) {
     $engineRoot = Join-Path $BundleRoot "engine"
     $sitePackages = Join-Path $engineRoot "python\Lib\site-packages"
+    $scriptsRoot = Join-Path $engineRoot "python\Scripts"
+
+    Convert-VenvEngineToPortableRuntime $BundleRoot
     $scriptsRoot = Join-Path $engineRoot "python\Scripts"
 
     Remove-PathIfExists (Join-Path $engineRoot "python\etc\jupyter")
@@ -219,13 +361,13 @@ function Optimize-EngineRuntime([string]$BundleRoot) {
             "pyzmq*"
         )
 
-        Get-ChildItem -Path $sitePackages -Directory -Recurse -Force -ErrorAction SilentlyContinue | Where-Object {
+        Get-ChildItem -Path $engineRoot -Directory -Recurse -Force -ErrorAction SilentlyContinue | Where-Object {
             $_.Name -in @("__pycache__", "benchmarks", "docs", "doc", "examples", "example", "tests", "test")
         } | Sort-Object FullName -Descending | ForEach-Object {
-            Remove-Item -Recurse -Force $_.FullName
+            Remove-PathIfExists $_.FullName
         }
 
-        Get-ChildItem -Path $sitePackages -Include *.pyc,*.pyo,*.whl -Recurse -Force -ErrorAction SilentlyContinue | ForEach-Object {
+        Get-ChildItem -Path $engineRoot -Include *.pyc,*.pyo,*.whl -Recurse -Force -ErrorAction SilentlyContinue | ForEach-Object {
             Remove-Item -Force $_.FullName
         }
     }
@@ -327,9 +469,9 @@ if ($LASTEXITCODE -ne 0) {
     throw "Failed to export app runtime license inventory."
 }
 
-$enginePythonExe = Join-Path $bundleRoot "engine\python\Scripts\python.exe"
-if (-not (Test-Path $enginePythonExe)) {
-    throw "Bundled engine Python executable not found at $enginePythonExe"
+$enginePythonExe = Get-BundledEnginePythonExe $bundleRoot
+if (-not $enginePythonExe) {
+    throw "Bundled engine Python executable was not found under $bundleRoot\\engine\\python"
 }
 
 & $enginePythonExe `
