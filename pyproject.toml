@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gprmax-workbench"
-version = "0.1.0"
+version = "0.2.1"
 description = "Modern PySide6 desktop GUI for gprMax."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -14,7 +14,7 @@ authors = [
 ]
 keywords = ["gprmax", "gpr", "desktop", "pyside6", "qt"]
 classifiers = [
-  "Development Status :: 2 - Pre-Alpha",
+  "Development Status :: 3 - Alpha",
   "Intended Audience :: Science/Research",
   "Intended Audience :: Education",
   "License :: OSI Approved :: MIT License",

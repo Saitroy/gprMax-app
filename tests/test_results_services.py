@@ -118,13 +118,14 @@ class ResultsServiceTests(unittest.TestCase):
         self.assertEqual(state.results_viewer.selected_ascan_components, [])
 
     def test_bscan_service_delegates_to_builder(self) -> None:
-        service = BscanService(_FakeBscanBuilder())
-        result = service.load_bscan_if_available(
-            _build_run_summary(Path("D:/demo"), "run-1"),
-            "rx1",
-            "Ez",
-        )
-        self.assertTrue(result.available)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service = BscanService(_FakeBscanBuilder())
+            result = service.load_bscan_if_available(
+                _build_run_summary(Path(temp_dir), "run-1"),
+                "rx1",
+                "Ez",
+            )
+            self.assertTrue(result.available)
 
 
 def _build_run_summary(

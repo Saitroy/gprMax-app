@@ -1,6 +1,6 @@
 # First Release Readiness
 
-Last updated: 2026-04-10
+Last updated: 2026-04-16
 
 ## Scope
 
@@ -8,15 +8,17 @@ This document evaluates the repository against the needs of a first release.
 
 Two release targets matter:
 
-- `internal alpha`: a build for the core team or a small design-partner group;
+- `invited alpha`: a build for the core team or a small trusted design-partner group;
+- `Alpha 0.3.0 Installer Candidate`: the next installer-first release path;
 - `first public bundled release`: a release intended for outside users with a bundled `gprMax` runtime and a supported installation path.
 
 ## Short Verdict
 
-- Internal alpha: `GO`, with explicit caveats.
+- Invited alpha 0.2.1 UX-fix: `GO`, with explicit caveats.
+- Alpha 0.3.0 Installer Candidate: `NOT READY YET`.
 - First public bundled release: `NO-GO`.
 
-The project is technically usable for guided testing, but it does not yet have the packaging, release, compliance, and operational support needed for a public bundled release.
+The project is technically usable for guided testing, but Alpha 0.3.0 still needs a fresh bundle/installer rebuild, smoke test, clean-machine validation, and release asset pass. A broad public bundled release also needs compliance sign-off.
 
 ## Evidence Available Today
 
@@ -25,10 +27,11 @@ The project is technically usable for guided testing, but it does not yet have t
 - Runtime diagnostics and bundled-engine foundation work are present.
 - Repository CI now exists in `.github/workflows/ci.yml`.
 - Public release checklist, license-review checklist, issue templates, and support-bundle tooling now exist in the main repository.
-- The repository currently contains `107` automated tests, and `python -m unittest discover tests` passes locally.
+- The repository currently contains `119` automated tests, and `.venv\Scripts\python.exe tools\run_tests.py` passes locally.
 - The current desktop shell has been smoke-checked for `1366x768` and `1920x1080`.
 - A full local dry-run of `packaging/windows/build_desktop_bundle.ps1` and `packaging/windows/build_installer.ps1` succeeded on 2026-04-10.
 - Silent install, launch, and uninstall validation succeeded on the local Windows release machine on 2026-04-10.
+- Alpha `0.2.1` now has an explicit UX sign-off scenario in `docs/ALPHA_0_2_UX_SIGNOFF.md`.
 
 ## Readiness Assessment
 
@@ -63,6 +66,7 @@ Remaining gaps:
 
 - splitter sizes and workspace layout are not persisted yet;
 - broader manual testing on real user hardware is still needed.
+- the Alpha 0.2.x scenario still needs real tester feedback captured through GitHub Issues.
 
 ### 3. Codebase and Test Baseline
 
@@ -91,7 +95,8 @@ Why:
 
 Blocking gaps:
 
-- the new pipeline still needs a clean-machine or VM validation pass outside the maintainer workstation;
+- Alpha `0.2.1` needs a fresh local bundle/installer rebuild before distribution;
+- the new pipeline still needs a clean-machine or VM validation pass outside the maintainer workstation before Alpha `0.3.0`;
 - there is no signed public artifact history yet;
 - installer validation is still pending outside local repository checks.
 
@@ -125,10 +130,11 @@ Blocking gaps:
 The following items should still be treated as blockers for the first public bundled release:
 
 1. Run the new CI and packaging pipeline on the intended release path and keep the build green.
-2. Validate the current desktop bundle and installer on a clean Windows machine or VM outside the maintainer workstation.
-3. Complete GPL and bundled-license sign-off using `docs/BUNDLED_LICENSE_REVIEW.md` plus generated inventory artifacts.
-4. Execute `docs/PUBLIC_RELEASE_CHECKLIST.md` end to end for a real release candidate.
-5. Rehearse the support flow with issue templates and `tools/collect_support_bundle.py` on at least one real bug report.
+2. Rebuild the Alpha `0.2.1` desktop bundle and installer and run `packaging/windows/smoke_test_bundle.ps1`.
+3. Validate the Alpha `0.3.0` desktop bundle and installer on a clean Windows machine or VM outside the maintainer workstation.
+4. Complete GPL and bundled-license sign-off using `docs/BUNDLED_LICENSE_REVIEW.md` plus generated inventory artifacts.
+5. Execute `docs/PUBLIC_RELEASE_CHECKLIST.md` end to end for a real release candidate.
+6. Rehearse the support flow with issue templates and `tools/collect_support_bundle.py` on at least one real bug report.
 
 ## Recommended Non-Blocking Improvements
 
@@ -142,10 +148,11 @@ These are important, but they should not hold up an internal alpha:
 
 ## Recommended Release Sequence
 
-1. Ship an `internal alpha` tag for guided testing with the current desktop workspaces.
-2. Exercise the new CI, packaging, licensing, and support assets on a real release candidate.
-3. Run a small design-partner or invited beta round on real Windows machines.
-4. Cut the first public bundled release only after packaging, CI, and legal review are complete.
+1. Ship Alpha `0.2.1` as a UX-fix prerelease for guided testing.
+2. Collect tester feedback through GitHub Issues and close blocking UX issues.
+3. Cut Alpha `0.3.0` as the installer-first candidate with fresh bundle/installer smoke.
+4. Run a small design-partner round on real Windows machines.
+5. Cut the first public bundled release only after packaging, CI, and legal review are complete.
 
 ## Bottom Line
 

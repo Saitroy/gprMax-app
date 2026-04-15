@@ -12,7 +12,7 @@ class VersioningService:
         try:
             return version("gprmax-workbench")
         except PackageNotFoundError:
-            return "0.1.0-dev"
+            return "0.2.1-dev"
 
     def load_engine_manifest(self, manifest_path: Path) -> dict[str, str]:
         if not manifest_path.exists():
@@ -26,4 +26,3 @@ class VersioningService:
             for key, value in payload.items()
             if value is not None and isinstance(value, (str, int, float, bool))
         }
-

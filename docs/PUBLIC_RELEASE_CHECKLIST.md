@@ -1,6 +1,6 @@
 # Public Release Checklist
 
-Last updated: 2026-04-07
+Last updated: 2026-04-16
 
 This checklist is the release gate for the first public bundled Windows build.
 
@@ -16,7 +16,7 @@ Do not cut a public release until every required item below is complete.
 ## 2. Core quality gates
 
 - [ ] `python -m ruff check src tests packaging tools` passes.
-- [ ] `python -m unittest discover tests` passes.
+- [ ] `python tools/run_tests.py` passes.
 - [ ] Desktop smoke checks still behave correctly at `1366x768` and `1920x1080`.
 - [ ] No critical regressions remain in `Welcome`, `Project`, `Simulation`, or `Results`.
 
@@ -46,6 +46,7 @@ Do not cut a public release until every required item below is complete.
 - [ ] The installer output is archived with the release build record.
 - [ ] Install/uninstall is validated on a clean Windows machine or VM.
 - [ ] The installed app launches without manually configuring Python, `gprMax`, or `PATH`.
+- [ ] For invited alpha testers only, unsigned installer risk is accepted and documented; code signing remains a beta/public-release concern.
 
 ## 6. Licensing and compliance
 
@@ -64,6 +65,7 @@ Do not cut a public release until every required item below is complete.
 ## 8. Clean-machine smoke test
 
 - [ ] Fresh install on Windows x64.
+- [ ] Launch without Python, Git, Conda, or manual `PATH` configuration.
 - [ ] Create a new project from `Welcome`.
 - [ ] Open an existing project.
 - [ ] Edit the model and save.

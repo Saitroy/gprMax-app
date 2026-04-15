@@ -43,8 +43,10 @@ python -m ruff check src tests packaging tools
 Run tests:
 
 ```bash
-python -m unittest discover tests
+python tools/run_tests.py
 ```
+
+`tools/run_tests.py` keeps temporary test files under `.tmp_test_runs`, which avoids Windows `%TEMP%` permission issues on locked-down machines.
 
 ## Repository structure
 

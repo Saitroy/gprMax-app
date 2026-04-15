@@ -1,6 +1,6 @@
 # Bundled License Review
 
-Last updated: 2026-04-07
+Last updated: 2026-04-16
 
 This document is a release gate for any public build that bundles `gprMax`.
 
@@ -71,11 +71,12 @@ Before public shipment, the release artifact must include:
 
 ## 6. Current status
 
-Status as of 2026-04-07:
+Status as of 2026-04-16:
 
 - engineering scaffolding exists
 - license inventory export exists
 - review documentation exists
+- invited alpha distribution may use an unsigned installer for trusted testers
 - public legal/compliance sign-off is still pending
 
 That means the bundled public release remains blocked until a human review is completed and signed off.

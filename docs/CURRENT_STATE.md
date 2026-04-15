@@ -1,6 +1,6 @@
 # Current State
 
-Last updated: 2026-04-10
+Last updated: 2026-04-16
 
 This document describes the current implemented product state. It is intentionally factual and should be read as a companion to the architectural and roadmap documents.
 
@@ -46,6 +46,10 @@ Current sections:
 The scene section currently provides:
 
 - orthographic `XY / XZ / YZ` views;
+- separate scene elements for geometry, sources, receivers, and auxiliary entities;
+- show/hide labels for scene entities;
+- layer visibility filters for objects, sources, receivers, and other elements;
+- model-state summary for materials, objects, sources, receivers, warnings, and errors;
 - selection inspector with exact coordinate editing;
 - snap-to-grid and step-based nudging;
 - duplicate/delete actions;
@@ -114,16 +118,18 @@ The current implementation is intentionally bounded in a few places:
 - guided editor coverage does not yet span the full `gprMax` command surface;
 - results analysis is currently limited to the existing A-scan and bounded B-scan workflows;
 - public release support assets now exist in the repository, but they still need maintainer sign-off, clean-machine validation, and an exercised outside-user support loop.
+- Alpha `0.2.1` is treated as the UX-fix milestone; Alpha `0.3.0` should be the installer-first candidate.
 
 ## Verification Snapshot
 
 Latest local verification used for this documentation update:
 
-- `python -m unittest discover tests` -> `107 OK`
-- offscreen UI smoke confirms stable shell behavior at `1366x768` and `1920x1080`
-- `packaging/windows/build_desktop_bundle.ps1 -PythonExe .\.venv\Scripts\python.exe` -> bundle build and bundle smoke passed
-- `packaging/windows/build_installer.ps1` -> installer build passed
-- silent install, launch, and uninstall dry-run passed on the local Windows release machine
+- `python -m ruff check src tests packaging tools` -> passed
+- `.venv\Scripts\python.exe tools\run_tests.py` -> `119` tests OK
+- offscreen UI smoke is covered by the current Project, Scene, Simulation, Results, and Settings view tests
+- last full local bundle/installer dry-run was completed on 2026-04-10
+- Alpha `0.2.1` bundle/installer still needs a fresh rebuild and smoke test before sending to testers
+- clean Windows VM install/launch/uninstall remains a gate for Alpha `0.3.0`
 
 ## Related Documents
 
@@ -133,3 +139,4 @@ Latest local verification used for this documentation update:
 - [First Release Readiness](./FIRST_RELEASE_READINESS.md)
 - [Public Release Checklist](./PUBLIC_RELEASE_CHECKLIST.md)
 - [Bundled License Review](./BUNDLED_LICENSE_REVIEW.md)
+- [Alpha 0.2.x UX Sign-Off](./ALPHA_0_2_UX_SIGNOFF.md)

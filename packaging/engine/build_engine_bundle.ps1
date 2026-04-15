@@ -2,7 +2,7 @@ param(
     [string]$PythonExe = "",
     [string]$GprMaxSource = "vendor/gprMax-source",
     [string]$OutputRoot = "engine",
-    [string]$AppVersion = "0.1.0",
+    [string]$AppVersion = "0.2.1",
     [switch]$SkipSmokeTest
 )
 

@@ -48,4 +48,4 @@ jobs:
           tools/collect_support_bundle.py
 
       - name: Unit tests
-        run: python -m unittest discover tests
+        run: python tools/run_tests.py
