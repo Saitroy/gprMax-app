@@ -373,6 +373,19 @@ _TRANSLATIONS["ru"].update(
     {
         "editor.scene.entity.geometry": "Объект",
         "editor.scene.entity_label": "{entity_type} #{number}: {label}",
+        "editor.scene.layers": "Видимость",
+        "editor.scene.labels.toggle": "Подписи",
+        "editor.scene.labels.short": "Пдп",
+        "editor.scene.labels.tooltip": "Показать или скрыть подписи объектов на сцене.",
+        "editor.scene.layer.geometry": "Объекты",
+        "editor.scene.layer.geometry.short": "Об",
+        "editor.scene.layer.source": "Источники",
+        "editor.scene.layer.source.short": "Ист",
+        "editor.scene.layer.receiver": "Приёмники",
+        "editor.scene.layer.receiver.short": "Прм",
+        "editor.scene.layer.other": "Прочее",
+        "editor.scene.layer.other.short": "Др",
+        "editor.scene.layer.tooltip": "Показать или скрыть слой «{layer}» на сцене.",
         "editor.scene.model_state.empty": "Состояние модели сейчас: проект не открыт.",
         "editor.scene.model_state.summary": (
             "Состояние модели сейчас\n"
@@ -388,6 +401,19 @@ _TRANSLATIONS["en"].update(
     {
         "editor.scene.entity.geometry": "Object",
         "editor.scene.entity_label": "{entity_type} #{number}: {label}",
+        "editor.scene.layers": "Visibility",
+        "editor.scene.labels.toggle": "Labels",
+        "editor.scene.labels.short": "Lab",
+        "editor.scene.labels.tooltip": "Show or hide object labels on the scene.",
+        "editor.scene.layer.geometry": "Objects",
+        "editor.scene.layer.geometry.short": "Obj",
+        "editor.scene.layer.source": "Sources",
+        "editor.scene.layer.source.short": "Src",
+        "editor.scene.layer.receiver": "Receivers",
+        "editor.scene.layer.receiver.short": "Rcv",
+        "editor.scene.layer.other": "Other",
+        "editor.scene.layer.other.short": "Oth",
+        "editor.scene.layer.tooltip": "Show or hide the {layer} layer on the scene.",
         "editor.scene.model_state.empty": "Current model state: no project is open.",
         "editor.scene.model_state.summary": (
             "Current model state\n"

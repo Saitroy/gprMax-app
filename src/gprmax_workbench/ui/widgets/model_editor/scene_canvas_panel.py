@@ -403,6 +403,13 @@ class _SceneEntityItem(QGraphicsObject):
     ) -> None:
         self._label_overlay_items = [(item, anchor) for item in items]
 
+    def set_label_overlay_visible(self, visible: bool) -> None:
+        for overlay_item, _anchor in self._label_overlay_items:
+            try:
+                overlay_item.setVisible(visible)
+            except RuntimeError:
+                continue
+
     def itemChange(self, change, value):
         if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
             base_position = self.scenePos()
@@ -594,6 +601,13 @@ class SceneCanvasPanel(QWidget):
         self._scene_tool = "select"
         self._scene_mode = "move"
         self._active_creation_kind = "box"
+        self._show_scene_labels = True
+        self._scene_layer_visibility = {
+            "geometry": True,
+            "source": True,
+            "receiver": True,
+            "other": True,
+        }
         self._selected_entity_ref: _SceneEntityRef | None = None
         self._selected_entity_refs: list[_SceneEntityRef] = []
         self._entity_items: dict[tuple[str, int], _SceneEntityItem] = {}
@@ -734,6 +748,8 @@ class SceneCanvasPanel(QWidget):
         self._toolbar_tool_label.setProperty("toolbarRole", "section")
         self._toolbar_mode_label = QLabel()
         self._toolbar_mode_label.setProperty("toolbarRole", "section")
+        self._toolbar_layers_label = QLabel()
+        self._toolbar_layers_label.setProperty("toolbarRole", "section")
         self._toolbar_history_label = QLabel()
         self._toolbar_history_label.setProperty("toolbarRole", "section")
         self._cursor_status_label = QLabel()
@@ -746,6 +762,10 @@ class SceneCanvasPanel(QWidget):
         self._redo_button = QPushButton()
         self._redo_button.setObjectName("SceneToolbarAction")
         self._redo_button.clicked.connect(self._redo_scene_change)
+        self._show_labels_button = _SceneToolbarButton("labels")
+        self._show_labels_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+        self._show_labels_button.clicked.connect(self._toggle_scene_labels)
+        self._layer_buttons: dict[str, _SceneToolbarButton] = {}
         self._build_scene_toolbar()
 
         self._palette_buttons: list[_PaletteButton] = []
@@ -969,6 +989,10 @@ class SceneCanvasPanel(QWidget):
             self._toolbar_mode_label,
             self._build_mode_buttons(),
         )
+        self._toolbar_layers_section = self._build_toolbar_section(
+            self._toolbar_layers_label,
+            self._build_layer_buttons(),
+        )
         self._toolbar_history_section = self._build_toolbar_section(
             self._toolbar_history_label,
             self._build_history_buttons(),
@@ -976,6 +1000,7 @@ class SceneCanvasPanel(QWidget):
         self._scene_toolbar_layout.addWidget(self._toolbar_plane_section)
         self._scene_toolbar_layout.addWidget(self._toolbar_tool_section)
         self._scene_toolbar_layout.addWidget(self._toolbar_mode_section)
+        self._scene_toolbar_layout.addWidget(self._toolbar_layers_section)
         self._scene_toolbar_layout.addWidget(self._toolbar_history_section)
         self._cursor_status_label.setMinimumWidth(140)
         self._scene_toolbar_layout.addWidget(
@@ -1048,6 +1073,26 @@ class SceneCanvasPanel(QWidget):
             layout.addWidget(button)
         return layout
 
+    def _build_layer_buttons(self) -> QHBoxLayout:
+        layout = QHBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        self._show_labels_button.setChecked(self._show_scene_labels)
+        layout.addWidget(self._show_labels_button)
+        for layer_key in ("geometry", "source", "receiver", "other"):
+            button = _SceneToolbarButton(layer_key)
+            button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+            button.setChecked(self._scene_layer_visibility[layer_key])
+            button.clicked.connect(
+                lambda checked=False, value=layer_key: self._set_scene_layer_visibility(
+                    value,
+                    checked,
+                )
+            )
+            self._layer_buttons[layer_key] = button
+            layout.addWidget(button)
+        return layout
+
     def _build_history_buttons(self) -> QHBoxLayout:
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
@@ -1088,6 +1133,16 @@ class SceneCanvasPanel(QWidget):
         if index >= 0:
             self._scene_mode_combo.setCurrentIndex(index)
 
+    def _toggle_scene_labels(self, checked: bool) -> None:
+        self._show_scene_labels = checked
+        self._sync_scene_layer_visibility()
+
+    def _set_scene_layer_visibility(self, layer_key: str, visible: bool) -> None:
+        if layer_key not in self._scene_layer_visibility:
+            return
+        self._scene_layer_visibility[layer_key] = visible
+        self._sync_scene_layer_visibility()
+
     def _sync_toolbar_buttons(self) -> None:
         for plane_key, button in self._plane_buttons.items():
             button.setChecked(plane_key == self._plane)
@@ -1097,6 +1152,9 @@ class SceneCanvasPanel(QWidget):
         for mode_key, button in self._mode_buttons.items():
             button.setEnabled(mode_enabled)
             button.setChecked(mode_key == self._scene_mode and mode_enabled)
+        self._show_labels_button.setChecked(self._show_scene_labels)
+        for layer_key, button in self._layer_buttons.items():
+            button.setChecked(self._scene_layer_visibility.get(layer_key, True))
         self._refresh_history_controls()
 
     def _refresh_toolbar_compact_mode(self) -> None:
@@ -1119,6 +1177,7 @@ class SceneCanvasPanel(QWidget):
         self._toolbar_plane_label.setVisible(not tight)
         self._toolbar_tool_label.setVisible(not tight)
         self._toolbar_mode_label.setVisible(not tight)
+        self._toolbar_layers_label.setVisible(not tight)
         self._toolbar_history_label.setVisible(not tight)
         self._cursor_status_label.setVisible(not compact)
         self._zoom_status_label.setVisible(not compact)
@@ -1128,6 +1187,21 @@ class SceneCanvasPanel(QWidget):
         self._fit_scene_button.setText(
             "" if compact else self._localization.text("editor.scene.fit")
         )
+        self._show_labels_button.setText(
+            self._localization.text(
+                "editor.scene.labels.short"
+                if compact
+                else "editor.scene.labels.toggle"
+            )
+        )
+        for layer_key, button in self._layer_buttons.items():
+            button.setText(
+                self._localization.text(
+                    f"editor.scene.layer.{layer_key}.short"
+                    if compact
+                    else f"editor.scene.layer.{layer_key}"
+                )
+            )
         self._scene_toolbar.updateGeometry()
 
     def _refresh_workspace_splitter_sizes(self, *, force: bool = False) -> None:
@@ -1261,6 +1335,7 @@ class SceneCanvasPanel(QWidget):
         self._toolbar_plane_label.setText(self._localization.text("editor.scene.plane"))
         self._toolbar_tool_label.setText(self._localization.text("editor.scene.tool"))
         self._toolbar_mode_label.setText(self._localization.text("editor.scene.mode"))
+        self._toolbar_layers_label.setText(self._localization.text("editor.scene.layers"))
         self._toolbar_history_label.setText(self._localization.text("editor.scene.history"))
         self._palette_title.setText(self._localization.text("editor.scene.palette"))
         self._entities_title.setText(self._localization.text("editor.scene.entities"))
@@ -1352,6 +1427,19 @@ class SceneCanvasPanel(QWidget):
             text = self._localization.text(f"editor.scene.mode.{mode_key}")
             button.setText(text)
             button.setToolTip(text)
+        self._show_labels_button.setText(self._localization.text("editor.scene.labels.toggle"))
+        self._show_labels_button.setToolTip(
+            self._localization.text("editor.scene.labels.tooltip")
+        )
+        for layer_key, button in self._layer_buttons.items():
+            text = self._localization.text(f"editor.scene.layer.{layer_key}")
+            button.setText(text)
+            button.setToolTip(
+                self._localization.text(
+                    "editor.scene.layer.tooltip",
+                    layer=text,
+                )
+            )
         for button in self._palette_buttons:
             button.setText(self._localization.text(f"editor.scene.entity.{button.entity_kind}"))
             button.setToolTip(
@@ -1648,6 +1736,7 @@ class SceneCanvasPanel(QWidget):
                 ),
             )
         self._restore_selection(selection)
+        self._sync_scene_layer_visibility(preserve_selection=True)
         self._refresh_resize_handles()
         self._fit_scene()
         self._refresh_pointer_overlays()
@@ -1711,6 +1800,11 @@ class SceneCanvasPanel(QWidget):
             or self._selected_entity_ref is None
             or self._selected_entity_ref.kind != "geometry"
         ):
+            return
+        selected_item = self._entity_items.get(
+            (self._selected_entity_ref.kind, self._selected_entity_ref.index)
+        )
+        if selected_item is None or not selected_item.isVisible():
             return
         geometry = self._project.model.geometry[self._selected_entity_ref.index]
         entity_ref = self._selected_entity_ref
@@ -2034,6 +2128,44 @@ class SceneCanvasPanel(QWidget):
             (background, text_item),
             QPointF(position.x() - item.scenePos().x(), position.y() - item.scenePos().y()),
         )
+        item.set_label_overlay_visible(
+            self._show_scene_labels and self._is_entity_ref_visible(entity_ref)
+        )
+
+    def _entity_layer_key(self, kind: str) -> str:
+        if kind in {"geometry", "source", "receiver"}:
+            return kind
+        return "other"
+
+    def _is_entity_ref_visible(self, entity_ref: _SceneEntityRef) -> bool:
+        return self._scene_layer_visibility.get(self._entity_layer_key(entity_ref.kind), True)
+
+    def _sync_scene_layer_visibility(self, *, preserve_selection: bool = False) -> None:
+        visible_signatures: set[tuple[str, int]] = set()
+        for signature, item in self._entity_items.items():
+            visible = self._is_entity_ref_visible(item.entity_ref)
+            item.setVisible(visible)
+            item.set_label_overlay_visible(self._show_scene_labels and visible)
+            if visible:
+                visible_signatures.add(signature)
+
+        for row in range(self._entity_list.count()):
+            list_item = self._entity_list.item(row)
+            entity_ref = list_item.data(Qt.ItemDataRole.UserRole)
+            if isinstance(entity_ref, _SceneEntityRef):
+                list_item.setHidden(not self._is_entity_ref_visible(entity_ref))
+
+        if not preserve_selection:
+            current = self._selected_signatures()
+            next_selection = tuple(
+                signature for signature in current if signature in visible_signatures
+            )
+            if next_selection != current:
+                primary = self._primary_selection_signature()
+                if primary not in next_selection:
+                    primary = next_selection[0] if next_selection else None
+                self._apply_selection_signatures(next_selection, primary)
+        self._refresh_resize_handles()
 
     def _update_model_state_summary(self) -> None:
         if not hasattr(self, "_model_state_label"):

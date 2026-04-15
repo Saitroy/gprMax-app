@@ -188,6 +188,75 @@ class SceneCanvasPanelTests(unittest.TestCase):
 
             self.assertNotEqual(label_position, receiver_label.pos())
 
+    def test_scene_labels_toggle_hides_only_label_overlays(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Scene Demo", Path(temp_dir))
+            state = AppState(
+                current_project=project,
+                current_project_validation=validate_project(project),
+            )
+            editor = ModelEditorService(state)
+            validation = ValidationService(state)
+            editor.add_receiver()
+            panel = SceneCanvasPanel(LocalizationService("en"), editor, validation)
+
+            panel.set_project(project)
+            receiver_item = panel._entity_items[("receiver", 0)]  # noqa: SLF001
+            receiver_label = next(
+                item
+                for item in panel._scene.items()  # noqa: SLF001
+                if item.data(0) == "scene-entity-label" and "receiver_1" in item.text()
+            )
+
+            panel._show_labels_button.click()  # noqa: SLF001
+
+            self.assertTrue(receiver_item.isVisible())
+            self.assertFalse(receiver_label.isVisible())
+
+            panel._show_labels_button.click()  # noqa: SLF001
+
+            self.assertTrue(receiver_label.isVisible())
+
+    def test_scene_layer_filter_hides_entities_labels_and_list_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Scene Demo", Path(temp_dir))
+            state = AppState(
+                current_project=project,
+                current_project_validation=validate_project(project),
+            )
+            editor = ModelEditorService(state)
+            validation = ValidationService(state)
+            editor.add_source()
+            editor.add_receiver()
+            panel = SceneCanvasPanel(LocalizationService("en"), editor, validation)
+
+            panel.set_project(project)
+            receiver_item = panel._entity_items[("receiver", 0)]  # noqa: SLF001
+            source_item = panel._entity_items[("source", 0)]  # noqa: SLF001
+            receiver_label = next(
+                item
+                for item in panel._scene.items()  # noqa: SLF001
+                if item.data(0) == "scene-entity-label" and "receiver_1" in item.text()
+            )
+            receiver_row = next(
+                panel._entity_list.item(row)  # noqa: SLF001
+                for row in range(panel._entity_list.count())  # noqa: SLF001
+                if panel._entity_list.item(row).data(256).kind == "receiver"  # noqa: SLF001
+            )
+
+            panel._layer_buttons["receiver"].click()  # noqa: SLF001
+
+            self.assertFalse(receiver_item.isVisible())
+            self.assertFalse(receiver_label.isVisible())
+            self.assertTrue(receiver_row.isHidden())
+            self.assertTrue(source_item.isVisible())
+
+            panel._layer_buttons["receiver"].click()  # noqa: SLF001
+
+            self.assertTrue(receiver_item.isVisible())
+            self.assertTrue(receiver_label.isVisible())
+            self.assertFalse(receiver_row.isHidden())
+
     def test_scene_model_state_summary_reflects_current_model(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             project = default_project("Scene Demo", Path(temp_dir))

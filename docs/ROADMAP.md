@@ -1,339 +1,176 @@
-# Roadmap
+﻿# GPRMax Workbench Roadmap
 
 ## Русский
 
-### Статус
+### Видение
 
-`GPRMax Workbench` остаётся продуктом в активной разработке.
+`GPRMax Workbench` должен стать современным Desktop-редактором для gprMax, рассчитанным на геологов, геофизиков, инженеров и студентов, а не на программистов. Пользователь должен скачать installer, установить приложение и сразу собрать модель, запустить расчёт и посмотреть результат без установки Python, Anaconda, репозиториев и ручной настройки зависимостей.
 
-Что уже заложено:
+Исторический ориентир: [tomsiwek/gprMax-Designer](https://github.com/tomsiwek/gprMax-Designer). В нём уже была правильная идея визуального редактора модели: toolbar, рабочая область, режимы draw/move/resize, список фигур, RMB-действия, импорт input и parse-to-gprMax. Но его слабое место для массового пользователя очевидно: установка через Python/Anaconda/clone/env/run, отсутствие готовых релизов и устаревший UX. Наша задача не просто повторить его, а сделать лучше.
 
-- Stages 0-5 достигнуты на уровне foundation/MVP: архитектура, project model, persistence, guided editor, simulation runner и results viewer уже существуют;
-- проект уже пригоден для раннего тестирования и итеративной доработки;
-- packaging для Windows и bundled runtime остаются отложенными задачами, а не ближайшим приоритетом.
+### Принципы продукта
 
-Текущий продуктовый фокус:
+- Installer-first: пользователь не ставит Python, Anaconda, gprMax и зависимости вручную.
+- Visual-first: основная модель собирается на сцене, как в хороших CAD/GIS/визуальных редакторах.
+- Precision-first: визуальные действия всегда имеют числовой инспектор, координаты, размеры, материалы и проверку.
+- Safe editing: undo/redo, preview перед изменением, понятные подсказки и защита от случайных действий.
+- Scientific traceability: каждый run хранит input, параметры запуска, версию runtime, логи и результаты.
+- Beginner-friendly, expert-capable: студент не теряется, а опытный геофизик не упирается в потолок.
 
-- `simulation workflow`
-- `scene editor`
-- `result analysis`
+### Что должно быть лучше, чем в gprMax-Designer
 
-Главный принцип текущего цикла: сначала сделать сильный пользовательский путь `собрал сцену -> запустил расчёт -> понял результат`, и только потом переходить к packaging/distribution work.
+- Установка: один Windows installer вместо ручной сборки окружения.
+- Сцена: слои, подписи, фильтры видимости, точное редактирование, multi-select и нормальный инспектор.
+- Материалы: понятная библиотека сред, presets, предпросмотр параметров и связь материалов с объектами.
+- Валидация: ошибки объясняются до запуска, не после падения gprMax.
+- Запуск: preflight, история запусков, cancel/retry/rerun, понятные логи.
+- Результаты: A-scan/B-scan анализ внутри приложения, сравнение runs, экспорт для отчётов.
+- Поддержка: issue templates, crash/log bundle, sample projects и короткие сценарии для тестеров.
 
-### Ближайший roadmap: 8-12 недель
+### Alpha 0.2.x: Scene and Materials UX
 
-## Milestone 1: Reliable Simulation Workflow
+Цель: сделать редактирование модели визуально понятным и безопасным для первых тестеров.
 
-Window:
-
-- Weeks 1-2
-
-GitHub milestone:
-
-- `v0.4 - Simulation Workflow Hardening`
-
-Epics:
-
-- `simulation-preflight-and-readiness`
-- `run-lifecycle-and-recovery`
-- `run-snapshot-and-reproducibility`
-- `simulation-integration-smoke-suite`
-- `validation-and-error-copy`
-
-Scope:
-
-- preflight перед запуском: runtime health, validation state, path checks, disk/output checks;
-- более надёжные сценарии `start / cancel / retry / rerun from history`;
-- сохранение точного generated input, run config и command line для каждого run;
-- улучшенные user-facing ошибки вместо слишком технических сообщений;
-- integration smoke tests на сценариях success, cancel, timeout, broken runtime, missing output, failed merge.
+- Сцена показывает реальные элементы модели, а не формальные фигуры.
+- Подписи объектов можно включать и выключать.
+- Слои сцены можно фильтровать: объекты, источники, приёмники, прочее.
+- Состояние модели видно прямо в редакторе: материалы, объекты, источники, приёмники, warnings/errors.
+- Материалы среды выглядят как понятная библиотека/palette, а не как таблица для программиста.
+- README и release notes ведут пользователей в GitHub Issues, а не в личную почту.
 
 Exit criteria:
 
-- новый пользователь может создать проект, запустить расчёт, отменить или повторить его без CLI;
-- по каждому run видно, что именно было запущено;
-- сбои объясняются через UI достаточно ясно, чтобы пользователь понял следующий шаг.
+- тестер может открыть приложение, создать простую модель, понять что находится на сцене и где это редактируется;
+- типовая жалоба “интерфейс странно себя ведёт” превращается в конкретные UX-issue, а не в растерянность;
+- scene editor покрыт unit-тестами на основные пользовательские действия.
 
-## Milestone 2: Scene Editor Core UX
+### Alpha 0.3: Installer-first Public Testing
 
-Window:
+Цель: убрать “танцы с бубнами” вокруг установки.
 
-- Weeks 3-5
-
-GitHub milestone:
-
-- `v0.5 - Scene Editor Core UX`
-
-Epics:
-
-- `scene-undo-redo`
-- `scene-multi-select-and-group-actions`
-- `scene-keyboard-workflow`
-- `scene-precision-editing`
-- `scene-3d-navigation-foundation`
-
-Scope:
-
-- полноценный `undo/redo` для scene actions и inspector edits;
-- multi-select, marquee selection, group move/delete/duplicate;
-- keyboard workflow: delete, duplicate, undo/redo, nudge, mode switching, fit;
-- axis locking, proportional resize, stronger snapping, exact dimension editing from canvas actions;
-- depth/slice control и лучшее соответствие 2D plane editing реальной 3D-модели.
+- Windows installer устанавливает приложение и runtime без ручных шагов.
+- First-run diagnostics проверяет bundled runtime, writable paths, disk space и базовые capabilities.
+- Settings показывают понятный статус: bundled/external runtime, пути, версии, проблемы.
+- Release assets публикуются чисто: installer, checksums, release notes RU/EN, known issues.
+- Smoke-test installer на чистой Windows VM или максимально близкой тестовой среде.
 
 Exit criteria:
 
-- типичная модель собирается через canvas быстрее и безопаснее, чем через raw input;
-- пользователь не боится редактировать сцену, потому что любое действие обратимо;
-- editor поддерживает как быстрые визуальные правки, так и точное числовое редактирование.
+- рядовой геофизик устанавливает приложение без Git, Python, Anaconda и CLI;
+- если runtime сломан, приложение объясняет проблему человеческим языком;
+- alpha-тестеры получают один понятный файл установки и понятную инструкцию.
 
-## Milestone 3: Results Analysis V2
+### Alpha 0.4: Scene Editor V1
 
-Window:
+Цель: приблизиться к уровню удобного CAD/GIS-like редактора, сохраняя простоту.
 
-- Weeks 6-8
-
-GitHub milestone:
-
-- `v0.6 - Results Analysis V2`
-
-Epics:
-
-- `ascan-analysis-tools`
-- `bscan-visual-controls`
-- `results-comparison-workflow`
-- `results-traceability`
-- `reporting-and-export`
-
-Scope:
-
-- для A-scan: cursors, delta measurements, peak picking, FFT/spectrum, export CSV/PNG;
-- для B-scan: gain, contrast, colormap presets, time-zero/background controls;
-- side-by-side и overlay compare workflows для разных run'ов;
-- явная связь results с run config, generated input и metadata;
-- экспорт изображений, графиков и компактных summary для отчётов и issue reports.
+- Полный undo/redo для create/move/resize/delete/duplicate/material changes.
+- Multi-select, group move, group duplicate, group delete, marquee selection.
+- Layer panel: visibility, labels, lock, select-only по типам объектов.
+- Snapping: grid, endpoints, centers, axis lock, numerical nudge.
+- Slice/depth controls для честной работы с 3D-моделью через 2D-плоскости.
+- Templates: простые георадарные сценарии для студентов и быстрых тестов.
 
 Exit criteria:
 
-- пользователь может не только открыть output, но и реально анализировать его внутри приложения;
-- сравнение run-to-run становится встроенной возможностью, а не ручной работой во внешних инструментах;
-- результаты можно удобно экспортировать для публикаций, отчётов и bug reports.
+- простая модель собирается быстрее через canvas, чем через raw input;
+- пользователь понимает выбранный объект, его материал, размеры и координаты без чтения кода;
+- случайное действие можно отменить, а скрытые элементы не мешают редактированию.
 
-## Milestone 4: OSS Readiness and Stabilization
+### Alpha 0.5: gprMax Command Coverage and Import
 
-Window:
+Цель: расширить покрытие gprMax, не превращая UI в форму на сотни полей.
 
-- Weeks 9-10
-
-GitHub milestone:
-
-- `v0.7 - OSS Readiness and Stabilization`
-
-Epics:
-
-- `quality-gates-and-ci`
-- `sample-projects-and-guides`
-- `project-format-stability`
-- `supportability`
-
-Scope:
-
-- CI с `tests`, lint и type checks;
-- 2-3 example projects и короткие user workflows в документации;
-- manifest versioning и foundation для migration hooks;
-- crash/log bundle, issue templates и воспроизводимый bug-report checklist.
+- Надёжный импорт существующих `.in` файлов с понятным отчётом о поддержанных и неподдержанных командах.
+- Guided editor для частых команд: materials, geometry, sources, receivers, waveforms, scans.
+- Advanced/raw command editor для редких команд с validation и preview generated input.
+- Compatibility notes: что уже поддерживается, что импортируется read-only, что пока требует raw mode.
 
 Exit criteria:
 
-- внешний пользователь может быстро понять, как начать работу;
-- внешний контрибьютор может локально поднять проект и внести изменение без скрытого контекста;
-- продукт лучше переживает эволюцию project format и пользовательские сбои.
+- пользователь может открыть существующий input и понять, что приложение смогло распознать;
+- новые модели генерируют gprMax input предсказуемо и воспроизводимо;
+- unsupported cases не ломают проект молча, а объясняются.
 
-### Что осознанно отложено
+### Alpha 0.6: Simulation and Results Workflow
 
-- Windows packaging и installer;
-- bundled engine distribution;
-- широкое покрытие редких/edge-case `gprMax` commands до стабилизации core workflow;
-- крупный архитектурный rewrite без давления реальных user scenarios.
+Цель: сделать путь “собрал модель -> запустил -> понял результат” цельным.
 
-### Suggested GitHub Labels / Milestones
+- Preflight перед запуском: validation, runtime, paths, output, disk space.
+- Run lifecycle: start, cancel, retry, rerun from history, clear status.
+- Snapshot каждого запуска: input, config, command line, runtime version, logs.
+- Results viewer V2: A-scan cursors, B-scan contrast/gain/colormap, screenshots, CSV/PNG export.
+- Compare runs: side-by-side и быстрый переход от результата к параметрам запуска.
 
-- `v0.4 - Simulation Workflow Hardening`
-- `v0.5 - Scene Editor Core UX`
-- `v0.6 - Results Analysis V2`
-- `v0.7 - OSS Readiness and Stabilization`
+Exit criteria:
 
-Cross-milestone epics:
+- пользователь запускает расчёт без CLI и понимает, что именно было запущено;
+- ошибка запуска объясняется через UI достаточно ясно для следующего действия;
+- результаты можно использовать для отчёта, публикации или issue без внешней ручной рутины.
 
-- `guided-editor-command-coverage`
-- `project-migration-and-compatibility`
-- `user-facing-diagnostics-and-recovery`
+### Beta 0.8: Stability, Documentation, Supportability
+
+Цель: подготовить приложение к широкому тестированию и внешним контрибьюторам.
+
+- CI gates: tests, lint, packaging smoke, installer smoke.
+- Sample projects: 2D cylinder B-scan, layered soil, buried utility, student starter.
+- User docs: quick start, first model, first run, troubleshooting, reporting bugs.
+- Support bundle: app logs, runtime diagnostics, project metadata, redaction of sensitive paths.
+- Project format versioning and migrations.
+
+Exit criteria:
+
+- tester can reproduce and report issues with enough context;
+- contributor can run tests locally without hidden knowledge;
+- project files survive format evolution.
+
+### 1.0 Release Candidate
+
+Цель: стабильная публичная версия для не-программистов.
+
+- Signed installer and clean GitHub release process.
+- Stable project format with migration path.
+- Documented supported gprMax feature subset.
+- Regression suite for core editor, simulation and results workflows.
+- Known limitations are explicit, not hidden.
+
+Exit criteria:
+
+- installer-first workflow is reliable enough for broad academic/engineering testing;
+- typical GPR model can be created, run and analyzed without leaving the app;
+- public GitHub release has assets, checksums, docs, issues workflow and reproducible build notes.
 
 ## English
 
-### Status
+### Vision
 
-`GPRMax Workbench` is still under active development.
+`GPRMax Workbench` should become a modern Desktop editor for gprMax aimed at geologists, geophysicists, engineers and students, not programmers. A user should download an installer, install the app, build a model, run a simulation and inspect results without installing Python, Anaconda, repositories or dependencies manually.
 
-What is already in place:
+Historical reference: [tomsiwek/gprMax-Designer](https://github.com/tomsiwek/gprMax-Designer). It had the right idea: a visual model area, toolbar, draw/move/resize modes, shape list, RMB actions, input import and parse-to-gprMax. Its weakness for broad adoption is also clear: Python/Anaconda/clone/env/run setup, no packaged releases and an outdated UX. Our job is not to copy it, but to surpass it.
 
-- Stages 0-6 exist at a foundation/MVP level: architecture, project model, persistence, guided editor, simulation runner, results viewer, and runtime-resolution foundation are already present;
-- the desktop shell is already usable for internal testing across `Welcome`, `Project`, `Simulation`, and `Results`;
-- packaging and release engineering exist only as a foundation and are still incomplete for a first public release.
+### Product Principles
 
-Current product focus:
+- Installer-first: no manual Python, Anaconda, gprMax or dependency setup.
+- Visual-first: most model work happens on the scene, like in strong CAD/GIS/visual editors.
+- Precision-first: every visual action has numeric coordinates, dimensions, materials and validation.
+- Safe editing: undo/redo, previews, clear hints and protection against accidental actions.
+- Scientific traceability: every run keeps input, launch settings, runtime version, logs and outputs.
+- Beginner-friendly, expert-capable: students can start, experts still have depth.
 
-- `simulation workflow`
-- `scene editor`
-- `result analysis`
+### Milestones
 
-The guiding principle of the current cycle is to make the core user path strong first: `build a scene -> run a simulation -> understand the result`, and only then move on to packaging and distribution work.
+- Alpha 0.2.x: scene and materials UX, labels, visibility filters, model-state summary, clearer materials.
+- Alpha 0.3: installer-first public testing, bundled runtime diagnostics, clean release assets.
+- Alpha 0.4: Scene Editor V1 with undo/redo, multi-select, layer controls, snapping and 3D slice foundation.
+- Alpha 0.5: gprMax command coverage, guided import, advanced/raw command mode and compatibility notes.
+- Alpha 0.6: simulation and results workflow with preflight, run history, snapshots and A/B-scan analysis.
+- Beta 0.8: stability, documentation, sample projects, support bundle, project format migrations.
+- 1.0 RC: signed installer, stable format, documented feature subset, regression suite and clean public release process.
 
-For the current public-release assessment see [FIRST_RELEASE_READINESS.md](./FIRST_RELEASE_READINESS.md).
+### Definition of Success
 
-### Near-term roadmap: 8-12 weeks
-
-## Milestone 1: Reliable Simulation Workflow
-
-Window:
-
-- Weeks 1-2
-
-GitHub milestone:
-
-- `v0.4 - Simulation Workflow Hardening`
-
-Epics:
-
-- `simulation-preflight-and-readiness`
-- `run-lifecycle-and-recovery`
-- `run-snapshot-and-reproducibility`
-- `simulation-integration-smoke-suite`
-- `validation-and-error-copy`
-
-Scope:
-
-- preflight checks before launch: runtime health, validation state, paths, disk/output checks;
-- more reliable `start / cancel / retry / rerun from history` flows;
-- persist exact generated input, run config, and command line for every run;
-- improve user-facing failures instead of exposing overly technical errors;
-- add integration smoke tests for success, cancel, timeout, broken runtime, missing output, and failed merge scenarios.
-
-Exit criteria:
-
-- a new user can create a project, launch a simulation, cancel or retry it without CLI usage;
-- every run clearly shows what was launched;
-- failures are explained well enough through the UI for the user to know what to do next.
-
-## Milestone 2: Scene Editor Core UX
-
-Window:
-
-- Weeks 3-5
-
-GitHub milestone:
-
-- `v0.5 - Scene Editor Core UX`
-
-Epics:
-
-- `scene-undo-redo`
-- `scene-multi-select-and-group-actions`
-- `scene-keyboard-workflow`
-- `scene-precision-editing`
-- `scene-3d-navigation-foundation`
-
-Scope:
-
-- full `undo/redo` for scene actions and inspector edits;
-- multi-select, marquee selection, group move/delete/duplicate;
-- keyboard workflow for delete, duplicate, undo/redo, nudge, mode switching, and fit;
-- axis locking, proportional resize, stronger snapping, and exact dimension editing from canvas interactions;
-- depth/slice controls and better mapping between 2D plane editing and the underlying 3D model.
-
-Exit criteria:
-
-- a typical model can be built through the canvas faster and more safely than through raw input;
-- users are not afraid to edit the scene because every action is reversible;
-- the editor supports both quick visual manipulation and precise numeric editing.
-
-## Milestone 3: Results Analysis V2
-
-Window:
-
-- Weeks 6-8
-
-GitHub milestone:
-
-- `v0.6 - Results Analysis V2`
-
-Epics:
-
-- `ascan-analysis-tools`
-- `bscan-visual-controls`
-- `results-comparison-workflow`
-- `results-traceability`
-- `reporting-and-export`
-
-Scope:
-
-- for A-scan: cursors, delta measurements, peak picking, FFT/spectrum, CSV/PNG export;
-- for B-scan: gain, contrast, colormap presets, time-zero/background controls;
-- side-by-side and overlay comparison workflows across runs;
-- explicit links from results back to run configuration, generated input, and metadata;
-- export images, plots, and compact summaries for reports and issue reports.
-
-Exit criteria:
-
-- users can meaningfully analyze outputs inside the app, not just open them;
-- run-to-run comparison becomes a built-in workflow instead of a manual external step;
-- results can be exported cleanly for publications, reports, and bug reports.
-
-## Milestone 4: OSS Readiness and Stabilization
-
-Window:
-
-- Weeks 9-10
-
-GitHub milestone:
-
-- `v0.7 - OSS Readiness and Stabilization`
-
-Epics:
-
-- `quality-gates-and-ci`
-- `sample-projects-and-guides`
-- `project-format-stability`
-- `supportability`
-
-Scope:
-
-- CI with `tests`, linting, and type checks;
-- 2-3 example projects and short user workflows in the documentation;
-- manifest versioning and a foundation for migration hooks;
-- crash/log bundles, issue templates, and a reproducible bug-report checklist.
-
-Exit criteria:
-
-- external users can understand how to start quickly;
-- external contributors can get the project running locally and contribute without hidden context;
-- the product handles project format evolution and user failures more safely.
-
-### Explicitly deferred
-
-- Windows packaging and installer work;
-- bundled engine distribution;
-- broad coverage of rare or edge-case `gprMax` commands before the core workflow is stable;
-- large architectural rewrites without pressure from real user scenarios.
-
-### Suggested GitHub Labels / Milestones
-
-- `v0.4 - Simulation Workflow Hardening`
-- `v0.5 - Scene Editor Core UX`
-- `v0.6 - Results Analysis V2`
-- `v0.7 - OSS Readiness and Stabilization`
-
-Cross-milestone epics:
-
-- `guided-editor-command-coverage`
-- `project-migration-and-compatibility`
-- `user-facing-diagnostics-and-recovery`
+- A non-programmer can install and use the application without CLI work.
+- A typical GPR model can be created, run and analyzed inside the app.
+- Errors are actionable and written for users, not just developers.
+- The scene editor is understandable at a glance and precise when needed.
+- Public releases are clean, reproducible and easy to test.
