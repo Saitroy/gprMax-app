@@ -371,6 +371,36 @@ _TRANSLATIONS["en"].update(
 
 _TRANSLATIONS["ru"].update(
     {
+        "editor.scene.entity.geometry": "Объект",
+        "editor.scene.entity_label": "{entity_type} #{number}: {label}",
+        "editor.scene.model_state.empty": "Состояние модели сейчас: проект не открыт.",
+        "editor.scene.model_state.summary": (
+            "Состояние модели сейчас\n"
+            "Материалы: {materials} | Объекты: {geometry}\n"
+            "Источники: {sources} | Приёмники: {receivers}\n"
+            "Антенны: {antennas} | Импорт: {imports}\n"
+            "Проверка: ошибок {errors}, предупреждений {warnings}"
+        ),
+    }
+)
+
+_TRANSLATIONS["en"].update(
+    {
+        "editor.scene.entity.geometry": "Object",
+        "editor.scene.entity_label": "{entity_type} #{number}: {label}",
+        "editor.scene.model_state.empty": "Current model state: no project is open.",
+        "editor.scene.model_state.summary": (
+            "Current model state\n"
+            "Materials: {materials} | Objects: {geometry}\n"
+            "Sources: {sources} | Receivers: {receivers}\n"
+            "Antennas: {antennas} | Imports: {imports}\n"
+            "Check: {errors} errors, {warnings} warnings"
+        ),
+    }
+)
+
+_TRANSLATIONS["ru"].update(
+    {
         "project.explorer.title": "\u041f\u0440\u043e\u0435\u043a\u0442",
         "project.explorer.scene": "\u0421\u0446\u0435\u043d\u0430",
         "project.explorer.project_group": "\u041c\u043e\u0434\u0435\u043b\u044c",

@@ -375,9 +375,11 @@ class _SceneEntityItem(QGraphicsObject):
         self._on_select = on_select
         self._on_release = on_release
         self._on_context_menu = on_context_menu
+        self._label_overlay_items: list[tuple[QGraphicsItem, QPointF]] = []
         self.setFlags(
             QGraphicsItem.GraphicsItemFlag.ItemIsMovable
             | QGraphicsItem.GraphicsItemFlag.ItemIsSelectable
+            | QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges
         )
         if ignores_transform:
             self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations, True)
@@ -388,8 +390,28 @@ class _SceneEntityItem(QGraphicsObject):
     def boundingRect(self) -> QRectF:
         return self._bounds.adjusted(-18.0, -18.0, 18.0, 38.0)
 
+    def visual_scene_rect(self) -> QRectF:
+        return self.mapRectToScene(self._bounds)
+
     def set_movable(self, movable: bool) -> None:
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, movable)
+
+    def set_label_overlay(
+        self,
+        items: tuple[QGraphicsItem, QGraphicsItem],
+        anchor: QPointF,
+    ) -> None:
+        self._label_overlay_items = [(item, anchor) for item in items]
+
+    def itemChange(self, change, value):
+        if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
+            base_position = self.scenePos()
+            for overlay_item, anchor in self._label_overlay_items:
+                try:
+                    overlay_item.setPos(base_position + anchor)
+                except RuntimeError:
+                    continue
+        return super().itemChange(change, value)
 
     def paint(self, painter: QPainter, option, widget=None) -> None:
         pen = QPen(self._color.darker(120), 2.2 if self.isSelected() else 1.5)
@@ -425,6 +447,9 @@ class _SceneEntityItem(QGraphicsObject):
             painter.drawLine(self._line_points[0], self._line_points[1])
         else:
             painter.drawEllipse(visual_rect)
+
+        if not (self.isSelected() or self._hovered):
+            return
 
         painter.setPen(QColor("#223341"))
         label_rect = QRectF(
@@ -624,9 +649,16 @@ class SceneCanvasPanel(QWidget):
         self._guide_label.setWordWrap(True)
         self._legend_label = QLabel()
         self._legend_label.setWordWrap(True)
+        self._model_state_label = QLabel()
+        self._model_state_label.setWordWrap(True)
+        self._model_state_label.setStyleSheet(
+            "background:#eef6f8; border:1px solid #c7dfe6; border-radius:10px; "
+            "color:#244150; padding:8px 10px;"
+        )
         guide_layout.addWidget(self._guide_title)
         guide_layout.addWidget(self._guide_label)
         guide_layout.addWidget(self._legend_label)
+        guide_layout.addWidget(self._model_state_label)
 
         self._scene = QGraphicsScene(self)
         self._view = _CanvasView()
@@ -1340,6 +1372,7 @@ class SceneCanvasPanel(QWidget):
         self._refresh_waveform_choices()
         self.refresh_validation()
         self._restore_selection(self._current_selection_context())
+        self._update_model_state_summary()
         self._update_workflow_hint()
 
     def set_project(self, project: Project | None) -> None:
@@ -1449,6 +1482,7 @@ class SceneCanvasPanel(QWidget):
                 self._localization.text("editor.scene.valid"),
             )
         )
+        self._update_model_state_summary()
 
     def _change_plane(self) -> None:
         self._plane = str(self._plane_combo.currentData() or "xy")
@@ -1553,6 +1587,7 @@ class SceneCanvasPanel(QWidget):
             self._update_rulers(1.0, 1.0)
             self._restore_selection(selection)
             self._update_cursor_status()
+            self._update_model_state_summary()
             return
 
         width, height = self._plane_limits(self._project)
@@ -1616,6 +1651,7 @@ class SceneCanvasPanel(QWidget):
         self._refresh_resize_handles()
         self._fit_scene()
         self._refresh_pointer_overlays()
+        self._update_model_state_summary()
 
     def _draw_grid(self, width: float, height: float) -> None:
         step = self._grid_step.value() if self._snap_to_grid.isChecked() else self._grid_spacing_for_scene(width, height)
@@ -1942,9 +1978,95 @@ class SceneCanvasPanel(QWidget):
     def _add_entity_item(self, entity_ref: _SceneEntityRef, item: _SceneEntityItem) -> None:
         self._entity_items[(entity_ref.kind, entity_ref.index)] = item
         self._scene.addItem(item)
-        list_item = QListWidgetItem(f"{self._entity_kind_text(entity_ref.kind)}: {entity_ref.label}")
+        label_text = self._entity_label_text(entity_ref)
+        self._add_scene_entity_label(entity_ref, item, label_text)
+        list_item = QListWidgetItem(label_text)
         list_item.setData(Qt.ItemDataRole.UserRole, entity_ref)
         self._entity_list.addItem(list_item)
+
+    def _entity_label_text(self, entity_ref: _SceneEntityRef) -> str:
+        return self._localization.text(
+            "editor.scene.entity_label",
+            number=entity_ref.index + 1,
+            entity_type=self._entity_kind_text(entity_ref.kind),
+            label=entity_ref.label,
+        )
+
+    def _add_scene_entity_label(
+        self,
+        entity_ref: _SceneEntityRef,
+        item: _SceneEntityItem,
+        label_text: str,
+    ) -> None:
+        visual_rect = item.visual_scene_rect()
+        offset_x = max(self._scene.sceneRect().width() * 0.012, 0.008)
+        offset_y = max(self._scene.sceneRect().height() * 0.012, 0.008)
+        if entity_ref.kind == "geometry":
+            position = QPointF(visual_rect.left() + offset_x, visual_rect.top() + offset_y)
+        else:
+            position = QPointF(visual_rect.right() + offset_x, visual_rect.top() - offset_y)
+
+        text_item = QGraphicsSimpleTextItem(label_text)
+        text_item.setBrush(QBrush(QColor("#20313f")))
+        text_item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations, True)
+        text_item.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+        text_item.setData(0, "scene-entity-label")
+        text_item.setToolTip(label_text)
+        text_item.setZValue(71)
+
+        padding = 4.0
+        background = QGraphicsRectItem(
+            text_item.boundingRect().adjusted(-padding, -2.0, padding, 2.0)
+        )
+        background.setBrush(QBrush(QColor(255, 255, 255, 232)))
+        background.setPen(QPen(QColor("#b9c9d4"), 0))
+        background.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations, True)
+        background.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+        background.setData(0, "scene-entity-label-background")
+        background.setToolTip(label_text)
+        background.setZValue(70)
+
+        background.setPos(position)
+        text_item.setPos(position)
+        self._scene.addItem(background)
+        self._scene.addItem(text_item)
+        item.set_label_overlay(
+            (background, text_item),
+            QPointF(position.x() - item.scenePos().x(), position.y() - item.scenePos().y()),
+        )
+
+    def _update_model_state_summary(self) -> None:
+        if not hasattr(self, "_model_state_label"):
+            return
+        if self._project is None:
+            self._model_state_label.setText(
+                self._localization.text("editor.scene.model_state.empty")
+            )
+            return
+        model = self._project.model
+        issues = self._validation_service.issues_for_prefixes(
+            "model.geometry",
+            "model.sources",
+            "model.receivers",
+            "model.geometry_imports",
+            "model.antenna_models",
+            "model.materials",
+        )
+        errors = sum(1 for issue in issues if issue.severity.value == "error")
+        warnings = sum(1 for issue in issues if issue.severity.value == "warning")
+        self._model_state_label.setText(
+            self._localization.text(
+                "editor.scene.model_state.summary",
+                materials=len(model.materials),
+                geometry=len(model.geometry),
+                sources=len(model.sources),
+                receivers=len(model.receivers),
+                antennas=len(model.antenna_models),
+                imports=len(model.geometry_imports),
+                errors=errors,
+                warnings=warnings,
+            )
+        )
 
     def _select_entities_from_list(self) -> None:
         if self._selection_syncing:
@@ -3274,12 +3396,12 @@ class SceneCanvasPanel(QWidget):
 
     def _entity_kind_text(self, kind: str) -> str:
         mapping = {
-            "geometry": self._localization.text("project.section.geometry"),
+            "geometry": self._localization.text("editor.scene.entity.geometry"),
             "box": self._localization.text("editor.scene.entity.box"),
             "sphere": self._localization.text("editor.scene.entity.sphere"),
             "cylinder": self._localization.text("editor.scene.entity.cylinder"),
-            "source": self._localization.text("project.section.sources"),
-            "receiver": self._localization.text("project.section.receivers"),
+            "source": self._localization.text("editor.scene.entity.source"),
+            "receiver": self._localization.text("editor.scene.entity.receiver"),
             "antenna": self._localization.text("editor.scene.entity.antenna"),
             "import": self._localization.text("editor.scene.entity.import"),
         }

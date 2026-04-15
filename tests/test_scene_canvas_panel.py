@@ -145,6 +145,78 @@ class SceneCanvasPanelTests(unittest.TestCase):
                 receiver_item.flags() & QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations
             )
 
+    def test_scene_entity_labels_render_as_separate_overlays(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Scene Demo", Path(temp_dir))
+            project.model.materials = [
+                MaterialDefinition(
+                    identifier="soil",
+                    relative_permittivity=4.0,
+                    conductivity=0.001,
+                )
+            ]
+            state = AppState(
+                current_project=project,
+                current_project_validation=validate_project(project),
+            )
+            editor = ModelEditorService(state)
+            validation = ValidationService(state)
+            editor.add_geometry("box")
+            editor.add_source()
+            editor.add_receiver()
+            panel = SceneCanvasPanel(LocalizationService("en"), editor, validation)
+
+            panel.set_project(project)
+            labels = [
+                item.text()
+                for item in panel._scene.items()  # noqa: SLF001
+                if item.data(0) == "scene-entity-label"
+            ]
+
+            self.assertIn("Object #1: box_1", labels)
+            self.assertIn("Source #1: source_1", labels)
+            self.assertIn("Receiver #1: receiver_1", labels)
+            receiver_label = next(
+                item
+                for item in panel._scene.items()  # noqa: SLF001
+                if item.data(0) == "scene-entity-label" and "receiver_1" in item.text()
+            )
+            label_position = receiver_label.pos()
+            receiver_item = panel._entity_items[("receiver", 0)]  # noqa: SLF001
+
+            receiver_item.setPos(receiver_item.pos() + QPointF(0.1, 0.1))
+
+            self.assertNotEqual(label_position, receiver_label.pos())
+
+    def test_scene_model_state_summary_reflects_current_model(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Scene Demo", Path(temp_dir))
+            project.model.materials = [
+                MaterialDefinition(
+                    identifier="soil",
+                    relative_permittivity=4.0,
+                    conductivity=0.001,
+                )
+            ]
+            state = AppState(
+                current_project=project,
+                current_project_validation=validate_project(project),
+            )
+            editor = ModelEditorService(state)
+            validation = ValidationService(state)
+            editor.add_geometry("box")
+            editor.add_source()
+            editor.add_receiver()
+            panel = SceneCanvasPanel(LocalizationService("en"), editor, validation)
+
+            panel.set_project(project)
+            summary = panel._model_state_label.text()  # noqa: SLF001
+
+            self.assertIn("Materials: 1", summary)
+            self.assertIn("Objects: 1", summary)
+            self.assertIn("Sources: 1", summary)
+            self.assertIn("Receivers: 1", summary)
+
     def test_scene_refresh_does_not_keep_deleted_qt_items(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             project = default_project("Scene Demo", Path(temp_dir))
