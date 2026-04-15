@@ -21,6 +21,7 @@ from ...application.services.validation_service import ValidationService
 from ...domain.models import Project
 from ...domain.validation import ValidationResult
 from ...infrastructure.gprmax.command_registry import GprMaxCommandRegistry
+from ..layouts.flow_layout import FlowLayout
 from ..splitters import configure_splitter
 from ..widgets.model_editor.advanced_panel import AdvancedPanel
 from ..widgets.model_editor.general_panel import GeneralPanel
@@ -74,6 +75,7 @@ class ProjectView(QWidget):
         self._section_nav.setObjectName("ContextNavigation")
         self._section_nav.currentRowChanged.connect(self._on_section_changed)
         self._section_stack = QStackedWidget()
+        self._section_buttons: dict[str, QPushButton] = {}
 
         self._save_button = QPushButton()
         self._save_button.clicked.connect(self.save_requested.emit)
@@ -143,8 +145,50 @@ class ProjectView(QWidget):
         card_actions.addStretch(1)
         project_layout.addLayout(card_actions)
 
+        self._section_toolbar_card = QFrame()
+        self._section_toolbar_card.setObjectName("ViewCard")
+        self._section_toolbar_card.setStyleSheet(
+            """
+            QPushButton[sectionButton="true"] {
+                background: #f7fafc;
+                border: 1px solid #c4d1dc;
+                border-radius: 12px;
+                color: #223341;
+                padding: 9px 14px;
+                font-weight: 600;
+            }
+            QPushButton[sectionButton="true"]:hover {
+                background: #edf4f8;
+                border-color: #9cb0c1;
+            }
+            QPushButton[sectionButton="true"]:checked {
+                background: #dfeef9;
+                border-color: #6b93b5;
+                color: #1f425c;
+            }
+            """
+        )
+        section_toolbar_layout = QVBoxLayout(self._section_toolbar_card)
+        section_toolbar_layout.setContentsMargins(14, 12, 14, 12)
+        section_toolbar_layout.setSpacing(8)
+        self._section_toolbar_title = QLabel()
+        self._section_toolbar_title.setObjectName("SectionTitle")
+        self._section_toolbar_hint = QLabel()
+        self._section_toolbar_hint.setObjectName("SectionBody")
+        self._section_toolbar_hint.setWordWrap(True)
+        self._section_toolbar = QWidget()
+        self._section_toolbar_layout = FlowLayout(
+            self._section_toolbar,
+            horizontal_spacing=8,
+            vertical_spacing=8,
+        )
+        section_toolbar_layout.addWidget(self._section_toolbar_title)
+        section_toolbar_layout.addWidget(self._section_toolbar_hint)
+        section_toolbar_layout.addWidget(self._section_toolbar)
+
         nav_card = QFrame()
         nav_card.setObjectName("ViewCard")
+        self._nav_card = nav_card
         nav_layout = QVBoxLayout(nav_card)
         nav_layout.setContentsMargins(12, 12, 12, 12)
         nav_layout.setSpacing(10)
@@ -152,6 +196,7 @@ class ProjectView(QWidget):
         self._nav_heading.setObjectName("SectionTitle")
         nav_layout.addWidget(self._nav_heading)
         nav_layout.addWidget(self._section_nav, 1)
+        self._nav_card.setVisible(False)
 
         for _, panel in self._all_sections:
             self._section_stack.addWidget(panel)
@@ -170,6 +215,7 @@ class ProjectView(QWidget):
         layout.addWidget(self._header)
         layout.addWidget(self._subtitle)
         layout.addWidget(project_card)
+        layout.addWidget(self._section_toolbar_card)
         layout.addWidget(self._content_splitter, 1)
 
         self.retranslate_ui()
@@ -286,6 +332,12 @@ class ProjectView(QWidget):
         self._subtitle.setText(self._localization.text("project.subtitle"))
         self._save_button.setText(self._localization.text("action.save_project"))
         self._nav_heading.setText(self._localization.text("project.navigation"))
+        self._section_toolbar_title.setText(
+            self._localization.text("project.toolbar.title")
+        )
+        self._section_toolbar_hint.setText(
+            self._localization.text("project.toolbar.hint")
+        )
         self._retranslate_sections()
         self._general_panel.retranslate_ui()
         self._materials_panel.retranslate_ui()
@@ -356,6 +408,7 @@ class ProjectView(QWidget):
             if target_row >= 0:
                 self._section_nav.setCurrentRow(target_row)
 
+        self._rebuild_section_toolbar()
         if target_row >= 0:
             self._on_section_changed(target_row)
 
@@ -368,6 +421,46 @@ class ProjectView(QWidget):
             return
         self._pending_section_key = item.data(Qt.ItemDataRole.UserRole + 1)
         self._section_stack.setCurrentIndex(stack_index)
+        self._sync_section_toolbar()
+
+    def _rebuild_section_toolbar(self) -> None:
+        while self._section_toolbar_layout.count():
+            item = self._section_toolbar_layout.takeAt(0)
+            widget = item.widget() if item is not None else None
+            if widget is not None:
+                widget.deleteLater()
+        self._section_buttons = {}
+        for row in range(self._section_nav.count()):
+            item = self._section_nav.item(row)
+            if item is None:
+                continue
+            section_key = item.data(Qt.ItemDataRole.UserRole + 1)
+            if not isinstance(section_key, str):
+                continue
+            button = QPushButton(item.text())
+            button.setCheckable(True)
+            button.setProperty("sectionButton", True)
+            button.setToolTip(
+                self._localization.text(
+                    f"project.section_tip.{section_key.removeprefix('project.section.')}"
+                )
+            )
+            button.clicked.connect(
+                lambda _checked=False, key=section_key: self._select_section_key(key)
+            )
+            self._section_buttons[section_key] = button
+            self._section_toolbar_layout.addWidget(button)
+        self._sync_section_toolbar()
+
+    def _select_section_key(self, section_key: str) -> None:
+        row = self._row_for_section_key(section_key)
+        if row >= 0:
+            self._section_nav.setCurrentRow(row)
+
+    def _sync_section_toolbar(self) -> None:
+        current_key = self._current_section_key()
+        for section_key, button in self._section_buttons.items():
+            button.setChecked(section_key == current_key)
 
     def _refresh_responsive_layout(self, *, force: bool = False) -> None:
         if self.width() < 980:

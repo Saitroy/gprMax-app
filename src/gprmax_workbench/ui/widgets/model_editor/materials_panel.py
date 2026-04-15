@@ -75,6 +75,9 @@ class MaterialsPanel(QWidget):
         self._notes_edit.setFixedHeight(90)
         self._tags_edit = QLineEdit()
         self._status_label = build_status_label("")
+        self._hint_label = QLabel()
+        self._hint_label.setWordWrap(True)
+        self._hint_label.setObjectName("SectionBody")
 
         detail_panel = QWidget()
         detail_layout = QVBoxLayout(detail_panel)
@@ -94,6 +97,7 @@ class MaterialsPanel(QWidget):
         form.addRow(self._magnetic_loss_label, self._magnetic_loss)
         form.addRow(self._notes_label, self._notes_edit)
         form.addRow(self._tags_label, self._tags_edit)
+        detail_layout.addWidget(self._hint_label)
         detail_layout.addLayout(form)
         detail_layout.addWidget(self._status_label)
         detail_layout.addStretch(1)
@@ -254,6 +258,7 @@ class MaterialsPanel(QWidget):
 
     def retranslate_ui(self) -> None:
         self._list_title.setText(self._localization.text("editor.materials.list_title"))
+        self._hint_label.setText(self._localization.text("editor.materials.hint"))
         self._add_button.setText(self._localization.text("common.add"))
         self._duplicate_button.setText(self._localization.text("common.duplicate"))
         self._delete_button.setText(self._localization.text("common.delete"))

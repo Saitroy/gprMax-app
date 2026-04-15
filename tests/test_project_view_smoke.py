@@ -83,6 +83,22 @@ class ProjectViewSmokeTests(unittest.TestCase):
 
             self.assertIn(localization.text("project.section.advanced"), labels)
 
+    def test_model_editor_toolbar_switches_sections(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            view = self._build_view(temp_dir)
+            localization = view._localization  # noqa: SLF001
+
+            materials_button = view._section_buttons["project.section.materials"]  # noqa: SLF001
+            materials_button.click()
+
+            self.assertIs(view._section_stack.currentWidget(), view._materials_panel)  # noqa: SLF001
+            self.assertTrue(materials_button.isChecked())
+            self.assertEqual(
+                materials_button.text(),
+                localization.text("project.section.materials"),
+            )
+            self.assertFalse(view._nav_card.isVisible())  # noqa: SLF001
+
     def test_scene_edit_request_switches_to_matching_section(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             view = self._build_view(temp_dir)
