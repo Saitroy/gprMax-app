@@ -1,11 +1,17 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Signal
+from dataclasses import dataclass
+
+from PySide6.QtCore import QSize, Signal
+from PySide6.QtGui import QColor, QIcon, QPixmap
 from PySide6.QtWidgets import (
+    QFrame,
     QFormLayout,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QListWidget,
+    QListWidgetItem,
     QPlainTextEdit,
     QPushButton,
     QSplitter,
@@ -28,6 +34,24 @@ from .helpers import (
 )
 
 
+@dataclass(frozen=True, slots=True)
+class _MaterialPreset:
+    key: str
+    identifier: str
+    relative_permittivity: float
+    conductivity: float
+    color: str
+
+
+_MATERIAL_PRESETS = (
+    _MaterialPreset("air", "air", 1.0, 0.0, "#d8eff8"),
+    _MaterialPreset("dry_sand", "dry_sand", 3.0, 0.0001, "#d8b46a"),
+    _MaterialPreset("wet_soil", "wet_soil", 15.0, 0.03, "#7a5b3a"),
+    _MaterialPreset("concrete", "concrete", 6.0, 0.01, "#9aa3a8"),
+    _MaterialPreset("fresh_water", "fresh_water", 80.0, 0.001, "#4ba3c7"),
+)
+
+
 class MaterialsPanel(QWidget):
     model_changed = Signal()
 
@@ -44,7 +68,34 @@ class MaterialsPanel(QWidget):
         self._validation_service = validation_service
         self._loading = False
 
+        self._preset_buttons: dict[str, QPushButton] = {}
+
+        presets_card = QFrame()
+        presets_card.setObjectName("ViewCard")
+        presets_layout = QVBoxLayout(presets_card)
+        presets_layout.setContentsMargins(14, 12, 14, 12)
+        presets_layout.setSpacing(8)
+        self._presets_title = QLabel()
+        self._presets_title.setObjectName("SectionTitle")
+        self._presets_hint = QLabel()
+        self._presets_hint.setObjectName("SectionBody")
+        self._presets_hint.setWordWrap(True)
+        presets_buttons = FlowLayout(horizontal_spacing=8, vertical_spacing=8)
+        for preset in _MATERIAL_PRESETS:
+            button = QPushButton()
+            button.setIcon(self._material_icon(preset.color))
+            button.clicked.connect(
+                lambda _checked=False, item=preset: self._apply_preset(item)
+            )
+            self._preset_buttons[preset.key] = button
+            presets_buttons.addWidget(button)
+        presets_layout.addWidget(self._presets_title)
+        presets_layout.addWidget(self._presets_hint)
+        presets_layout.addLayout(presets_buttons)
+
         self._list = QListWidget()
+        self._list.setSpacing(8)
+        self._list.setIconSize(QSize(34, 34))
         self._list.currentRowChanged.connect(self._load_current_material)
 
         self._add_button = QPushButton()
@@ -57,8 +108,13 @@ class MaterialsPanel(QWidget):
         list_panel = QWidget()
         list_layout = QVBoxLayout(list_panel)
         list_layout.setContentsMargins(0, 0, 0, 0)
+        list_layout.setSpacing(10)
         self._list_title = QLabel()
+        self._list_subtitle = QLabel()
+        self._list_subtitle.setObjectName("SectionBody")
+        self._list_subtitle.setWordWrap(True)
         list_layout.addWidget(self._list_title)
+        list_layout.addWidget(self._list_subtitle)
         list_layout.addWidget(self._list, 1)
         buttons = FlowLayout(horizontal_spacing=8, vertical_spacing=8)
         buttons.addWidget(self._add_button)
@@ -78,10 +134,40 @@ class MaterialsPanel(QWidget):
         self._hint_label = QLabel()
         self._hint_label.setWordWrap(True)
         self._hint_label.setObjectName("SectionBody")
+        self._preview_card = QFrame()
+        self._preview_card.setObjectName("ViewCard")
+        self._preview_card.setStyleSheet(
+            """
+            QFrame#MaterialSwatch {
+                border: 1px solid #c4d1dc;
+                border-radius: 14px;
+                min-width: 72px;
+                min-height: 56px;
+            }
+            """
+        )
+        preview_layout = QHBoxLayout(self._preview_card)
+        preview_layout.setContentsMargins(14, 12, 14, 12)
+        preview_layout.setSpacing(12)
+        self._preview_swatch = QFrame()
+        self._preview_swatch.setObjectName("MaterialSwatch")
+        self._preview_summary = QLabel()
+        self._preview_summary.setWordWrap(True)
+        self._usage_label = QLabel()
+        self._usage_label.setObjectName("SectionBody")
+        self._usage_label.setWordWrap(True)
+        preview_text = QVBoxLayout()
+        preview_text.setContentsMargins(0, 0, 0, 0)
+        preview_text.setSpacing(4)
+        preview_text.addWidget(self._preview_summary)
+        preview_text.addWidget(self._usage_label)
+        preview_layout.addWidget(self._preview_swatch)
+        preview_layout.addLayout(preview_text, 1)
 
         detail_panel = QWidget()
         detail_layout = QVBoxLayout(detail_panel)
         detail_layout.setContentsMargins(0, 0, 0, 0)
+        detail_layout.setSpacing(10)
         form = QFormLayout()
         self._identifier_label = QLabel()
         self._relative_permittivity_label = QLabel()
@@ -98,6 +184,7 @@ class MaterialsPanel(QWidget):
         form.addRow(self._notes_label, self._notes_edit)
         form.addRow(self._tags_label, self._tags_edit)
         detail_layout.addWidget(self._hint_label)
+        detail_layout.addWidget(self._preview_card)
         detail_layout.addLayout(form)
         detail_layout.addWidget(self._status_label)
         detail_layout.addStretch(1)
@@ -111,6 +198,8 @@ class MaterialsPanel(QWidget):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
+        layout.addWidget(presets_card)
         layout.addWidget(splitter)
 
         for widget in (
@@ -135,7 +224,7 @@ class MaterialsPanel(QWidget):
         self._list.clear()
         if project is not None:
             for material in project.model.materials:
-                self._list.addItem(self._item_text(material))
+                self._list.addItem(self._build_material_item(material))
         self._loading = False
 
         if self._list.count() > 0:
@@ -183,6 +272,7 @@ class MaterialsPanel(QWidget):
             self._magnetic_loss.setValue(0.0)
             self._notes_edit.clear()
             self._tags_edit.clear()
+            self._refresh_preview(None)
             self._loading = False
             self.refresh_validation()
             self._update_buttons()
@@ -196,6 +286,7 @@ class MaterialsPanel(QWidget):
         self._magnetic_loss.setValue(material.magnetic_loss)
         self._notes_edit.setPlainText(material.notes)
         self._tags_edit.setText(tags_to_text(material.tags))
+        self._refresh_preview(material)
         self._loading = False
         self.refresh_validation()
         self._update_buttons()
@@ -216,7 +307,8 @@ class MaterialsPanel(QWidget):
             tags=parse_tags(self._tags_edit.text()),
         )
         self._model_editor_service.update_material(row, material)
-        self._list.item(row).setText(self._item_text(material))
+        self._update_material_item(row, material)
+        self._refresh_preview(material)
         self.refresh_validation()
         self.model_changed.emit()
 
@@ -245,11 +337,121 @@ class MaterialsPanel(QWidget):
             self._list.setCurrentRow(next_index)
         self.model_changed.emit()
 
+    def _apply_preset(self, preset: _MaterialPreset) -> None:
+        project = self._model_editor_service.current_project()
+        if project is None:
+            return
+        row = self._list.currentRow()
+        if row < 0:
+            row = self._model_editor_service.add_material()
+            self.set_project(project)
+            self._list.setCurrentRow(row)
+
+        existing = [
+            material.identifier
+            for index, material in enumerate(project.model.materials)
+            if index != row
+        ]
+        identifier = self._unique_identifier(preset.identifier, existing)
+        material = MaterialDefinition(
+            identifier=identifier,
+            relative_permittivity=preset.relative_permittivity,
+            conductivity=preset.conductivity,
+            relative_permeability=1.0,
+            magnetic_loss=0.0,
+            notes=self._localization.text(f"editor.materials.preset_note.{preset.key}"),
+            tags=[self._localization.text("editor.materials.preset_tag")],
+        )
+        self._model_editor_service.update_material(row, material)
+        self.set_project(project)
+        self._list.setCurrentRow(row)
+        self.model_changed.emit()
+
+    def _build_material_item(self, material: MaterialDefinition) -> QListWidgetItem:
+        item = QListWidgetItem(self._item_text(material))
+        item.setIcon(self._material_icon(self._material_color(material).name()))
+        item.setSizeHint(QSize(220, 64))
+        return item
+
+    def _update_material_item(self, row: int, material: MaterialDefinition) -> None:
+        item = self._list.item(row)
+        if item is None:
+            return
+        item.setText(self._item_text(material))
+        item.setIcon(self._material_icon(self._material_color(material).name()))
+
     def _item_text(self, material: MaterialDefinition) -> str:
         return (
-            f"{material.identifier or self._localization.text('editor.materials.unnamed')} "
-            f"| er={material.relative_permittivity:.3g}"
+            f"{material.identifier or self._localization.text('editor.materials.unnamed')}\n"
+            f"er {material.relative_permittivity:.3g} | "
+            f"sigma {material.conductivity:.3g} S/m"
         )
+
+    def _refresh_preview(self, material: MaterialDefinition | None) -> None:
+        if material is None:
+            self._preview_swatch.setStyleSheet("background: #eef3f7;")
+            self._preview_summary.setText(
+                self._localization.text("editor.materials.preview.empty")
+            )
+            self._usage_label.setText("")
+            return
+        color = self._material_color(material).name()
+        self._preview_swatch.setStyleSheet(f"background: {color};")
+        self._preview_summary.setText(
+            self._localization.text(
+                "editor.materials.preview.summary",
+                name=material.identifier
+                or self._localization.text("editor.materials.unnamed"),
+                permittivity=f"{material.relative_permittivity:.3g}",
+                conductivity=f"{material.conductivity:.3g}",
+            )
+        )
+        self._usage_label.setText(
+            self._localization.text(
+                "editor.materials.usage",
+                count=self._material_usage_count(material.identifier),
+            )
+        )
+
+    def _material_usage_count(self, identifier: str) -> int:
+        project = self._model_editor_service.current_project()
+        if project is None or not identifier.strip():
+            return 0
+        return sum(
+            1
+            for geometry in project.model.geometry
+            if identifier in geometry.material_ids
+        )
+
+    def _material_color(self, material: MaterialDefinition) -> QColor:
+        for preset in _MATERIAL_PRESETS:
+            if material.identifier == preset.identifier:
+                return QColor(preset.color)
+        palette = (
+            "#3f7aa8",
+            "#5f8f51",
+            "#9b6a4c",
+            "#7b63ad",
+            "#0f766e",
+            "#c1702d",
+            "#51719b",
+            "#8b5e83",
+        )
+        seed = material.identifier or f"{material.relative_permittivity}:{material.conductivity}"
+        return QColor(palette[sum(ord(char) for char in seed) % len(palette)])
+
+    def _material_icon(self, color: str) -> QIcon:
+        pixmap = QPixmap(34, 34)
+        pixmap.fill(QColor(color))
+        return QIcon(pixmap)
+
+    def _unique_identifier(self, base: str, existing: list[str]) -> str:
+        if base not in existing:
+            return base
+        suffix = 2
+        while f"{base}_{suffix}" in existing:
+            suffix += 1
+        return f"{base}_{suffix}"
 
     def _update_buttons(self) -> None:
         enabled = self._list.currentRow() >= 0
@@ -258,6 +460,21 @@ class MaterialsPanel(QWidget):
 
     def retranslate_ui(self) -> None:
         self._list_title.setText(self._localization.text("editor.materials.list_title"))
+        self._list_subtitle.setText(
+            self._localization.text("editor.materials.list_subtitle")
+        )
+        self._presets_title.setText(self._localization.text("editor.materials.presets_title"))
+        self._presets_hint.setText(self._localization.text("editor.materials.presets_hint"))
+        for preset in _MATERIAL_PRESETS:
+            button = self._preset_buttons[preset.key]
+            button.setText(self._localization.text(f"editor.materials.preset.{preset.key}"))
+            button.setToolTip(
+                self._localization.text(
+                    "editor.materials.preset_tooltip",
+                    permittivity=f"{preset.relative_permittivity:.3g}",
+                    conductivity=f"{preset.conductivity:.3g}",
+                )
+            )
         self._hint_label.setText(self._localization.text("editor.materials.hint"))
         self._add_button.setText(self._localization.text("common.add"))
         self._duplicate_button.setText(self._localization.text("common.duplicate"))
@@ -279,5 +496,10 @@ class MaterialsPanel(QWidget):
         self._tags_label.setText(self._localization.text("editor.materials.tags"))
         if self._list.currentRow() < 0:
             self._status_label.setText(self._localization.text("editor.materials.select"))
+            self._refresh_preview(None)
         else:
+            row = self._list.currentRow()
+            project = self._model_editor_service.current_project()
+            if project is not None and 0 <= row < len(project.model.materials):
+                self._refresh_preview(project.model.materials[row])
             self.refresh_validation()
