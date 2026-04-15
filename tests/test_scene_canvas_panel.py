@@ -399,6 +399,31 @@ class SceneCanvasPanelTests(unittest.TestCase):
             self.assertAlmostEqual(project.model.receivers[0].position_m.x, 0.25)
             self.assertAlmostEqual(project.model.receivers[0].position_m.y, 0.35)
 
+    def test_palette_click_selects_create_tool_without_adding_surprise_entity(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Scene Demo", Path(temp_dir))
+            state = AppState(
+                current_project=project,
+                current_project_validation=validate_project(project),
+            )
+            editor = ModelEditorService(state)
+            validation = ValidationService(state)
+            localization = LocalizationService("en")
+            panel = SceneCanvasPanel(localization, editor, validation)
+
+            panel.set_project(project)
+            panel._handle_palette_click("receiver")  # noqa: SLF001
+
+            self.assertEqual(panel._scene_tool, "create")  # noqa: SLF001
+            self.assertEqual(panel._active_creation_kind, "receiver")  # noqa: SLF001
+            self.assertEqual(len(project.model.receivers), 0)
+            self.assertIn("Create", panel._guide_label.text())  # noqa: SLF001
+
+            panel._add_center_button.click()  # noqa: SLF001
+
+            self.assertEqual(len(project.model.receivers), 1)
+            self.assertEqual(panel._selected_entity_ref.kind, "receiver")  # noqa: SLF001
+
     def test_measure_tool_creates_measurement_overlay(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             project = default_project("Scene Demo", Path(temp_dir))

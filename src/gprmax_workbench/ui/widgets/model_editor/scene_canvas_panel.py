@@ -613,6 +613,20 @@ class SceneCanvasPanel(QWidget):
         self._status_label = build_status_label("")
         self._hint_label = QLabel()
         self._hint_label.setWordWrap(True)
+        self._guide_card = QFrame()
+        self._guide_card.setObjectName("ViewCard")
+        guide_layout = QVBoxLayout(self._guide_card)
+        guide_layout.setContentsMargins(12, 12, 12, 12)
+        guide_layout.setSpacing(6)
+        self._guide_title = QLabel()
+        self._guide_title.setObjectName("SectionTitle")
+        self._guide_label = QLabel()
+        self._guide_label.setWordWrap(True)
+        self._legend_label = QLabel()
+        self._legend_label.setWordWrap(True)
+        guide_layout.addWidget(self._guide_title)
+        guide_layout.addWidget(self._guide_label)
+        guide_layout.addWidget(self._legend_label)
 
         self._scene = QGraphicsScene(self)
         self._view = _CanvasView()
@@ -721,6 +735,11 @@ class SceneCanvasPanel(QWidget):
             self._palette_buttons.append(button)
             buttons_layout.addWidget(button)
         palette_layout.addLayout(buttons_layout)
+        self._add_center_button = QPushButton()
+        self._add_center_button.clicked.connect(
+            lambda: self._add_entity_at_center(self._active_creation_kind)
+        )
+        palette_layout.addWidget(self._add_center_button)
 
         self._selected_label = QLabel()
         self._selected_label.setWordWrap(True)
@@ -839,6 +858,7 @@ class SceneCanvasPanel(QWidget):
         self._side_layout = QVBoxLayout(self._side_panel)
         self._side_layout.setContentsMargins(0, 0, 0, 0)
         self._side_layout.setSpacing(12)
+        self._side_layout.addWidget(self._guide_card)
         self._side_layout.addLayout(snap_form)
         self._side_layout.addWidget(self._hint_label)
         self._side_layout.addWidget(domain_card)
@@ -1212,6 +1232,8 @@ class SceneCanvasPanel(QWidget):
         self._toolbar_history_label.setText(self._localization.text("editor.scene.history"))
         self._palette_title.setText(self._localization.text("editor.scene.palette"))
         self._entities_title.setText(self._localization.text("editor.scene.entities"))
+        self._guide_title.setText(self._localization.text("editor.scene.guide_title"))
+        self._legend_label.setText(self._localization.text("editor.scene.legend"))
         self._hint_label.setText(self._localization.text("editor.scene.hint"))
         self._snap_to_grid.setText(self._localization.text("editor.scene.snap"))
         self._grid_step_label_global.setText(self._localization.text("editor.scene.grid_step"))
@@ -1231,6 +1253,10 @@ class SceneCanvasPanel(QWidget):
         self._domain_z_label.setText(self._localization.text("editor.scene.domain_z"))
         self._apply_domain_button.setText(self._localization.text("editor.scene.apply_domain"))
         self._fit_scene_button.setText(self._localization.text("editor.scene.fit"))
+        self._add_center_button.setText(self._localization.text("editor.scene.add_center"))
+        self._add_center_button.setToolTip(
+            self._localization.text("editor.scene.add_center_tooltip")
+        )
         self._object_type_label.setText(self._localization.text("editor.scene.object_type"))
         self._material_label.setText(self._localization.text("editor.geometry.material"))
         self._waveform_label.setText(self._localization.text("editor.sources.waveform"))
@@ -1296,6 +1322,12 @@ class SceneCanvasPanel(QWidget):
             button.setToolTip(text)
         for button in self._palette_buttons:
             button.setText(self._localization.text(f"editor.scene.entity.{button.entity_kind}"))
+            button.setToolTip(
+                self._localization.text(
+                    "editor.scene.palette_tooltip",
+                    entity_type=button.text(),
+                )
+            )
         self._sync_palette_buttons()
         self._sync_toolbar_buttons()
         self._undo_button.setToolTip(self._undo_button.text())
@@ -1308,6 +1340,7 @@ class SceneCanvasPanel(QWidget):
         self._refresh_waveform_choices()
         self.refresh_validation()
         self._restore_selection(self._current_selection_context())
+        self._update_workflow_hint()
 
     def set_project(self, project: Project | None) -> None:
         self._loading = True
@@ -1325,6 +1358,8 @@ class SceneCanvasPanel(QWidget):
         self._refresh_scene()
         self.refresh_validation()
         self._refresh_history_controls()
+        self._add_center_button.setEnabled(project is not None)
+        self._update_workflow_hint()
 
     def set_workbench_mode(self, enabled: bool) -> None:
         self._workbench_mode = enabled
@@ -1438,6 +1473,7 @@ class SceneCanvasPanel(QWidget):
         self._sync_toolbar_buttons()
         self._refresh_resize_handles()
         self._refresh_pointer_overlays()
+        self._update_workflow_hint()
 
     def _change_scene_mode(self) -> None:
         self._scene_mode = str(self._scene_mode_combo.currentData() or "move")
@@ -1447,6 +1483,7 @@ class SceneCanvasPanel(QWidget):
                 item.set_movable(geometry_movable)
         self._sync_toolbar_buttons()
         self._refresh_resize_handles()
+        self._update_workflow_hint()
 
     def _fit_scene(self) -> None:
         if self._scene.sceneRect().isNull():
@@ -1461,9 +1498,9 @@ class SceneCanvasPanel(QWidget):
     def _handle_palette_click(self, entity_kind: str) -> None:
         self._active_creation_kind = entity_kind
         self._sync_palette_buttons()
-        if self._scene_tool == "create":
-            return
-        self._add_entity_at_center(entity_kind)
+        if self._scene_tool != "create":
+            self._set_scene_tool_from_toolbar("create")
+        self._update_workflow_hint()
 
     def _handle_empty_scene_click(self, scene_x: float, scene_y: float) -> None:
         if self._project is None:
@@ -1474,6 +1511,7 @@ class SceneCanvasPanel(QWidget):
             return
         if self._scene_tool == "measure":
             self._update_measurement(point)
+            self._update_workflow_hint()
             return
         if self._scene_tool == "select":
             self._apply_selection_signatures((), None)
@@ -1788,6 +1826,48 @@ class SceneCanvasPanel(QWidget):
             text = f"{text} | {self._measurement_text(self._measurement_start, self._cursor_scene_point)}"
         self._cursor_status_label.setText(text)
 
+    def _update_workflow_hint(self) -> None:
+        if not hasattr(self, "_guide_label"):
+            return
+        if self._project is None:
+            text = self._localization.text("editor.scene.guide.no_project")
+        elif self._scene_tool == "create":
+            text = self._localization.text(
+                "editor.scene.guide.create",
+                entity_type=self._entity_kind_text(self._active_creation_kind),
+            )
+        elif self._scene_tool == "measure":
+            text = self._localization.text(
+                "editor.scene.guide.measure_continue"
+                if self._measurement_start is not None
+                else "editor.scene.guide.measure_start"
+            )
+        elif (
+            self._scene_mode == "resize"
+            and self._has_single_selection()
+            and self._selected_entity_ref is not None
+            and self._selected_entity_ref.kind == "geometry"
+        ):
+            text = self._localization.text("editor.scene.guide.resize")
+        elif len(self._selected_entity_refs) > 1:
+            text = self._localization.text(
+                "editor.scene.guide.multi_selected",
+                count=len(self._selected_entity_refs),
+            )
+        elif self._has_single_selection():
+            entity_type = (
+                self._entity_kind_text(self._selected_entity_ref.kind)
+                if self._selected_entity_ref is not None
+                else ""
+            )
+            text = self._localization.text(
+                "editor.scene.guide.single_selected",
+                entity_type=entity_type,
+            )
+        else:
+            text = self._localization.text("editor.scene.guide.select_empty")
+        self._guide_label.setText(text)
+
     def _update_zoom_status(self, scale: float | None = None) -> None:
         zoom_scale = scale if scale is not None else float(self._view.transform().m11())
         percent = max(10, min(2000, int(round(zoom_scale * 100))))
@@ -1987,6 +2067,7 @@ class SceneCanvasPanel(QWidget):
                 spinbox.setValue(0.0)
             self._loading = False
             self._refresh_resize_handles()
+            self._update_workflow_hint()
             return
         entity = self._entity_for_ref(entity_ref)
         position = self._entity_position(entity_ref, entity)
@@ -2003,6 +2084,7 @@ class SceneCanvasPanel(QWidget):
         self._load_detail_fields(entity_ref, entity)
         self._loading = False
         self._refresh_resize_handles()
+        self._update_workflow_hint()
 
     def _load_multi_selection_details(
         self,
@@ -2044,6 +2126,7 @@ class SceneCanvasPanel(QWidget):
         )
         self._loading = False
         self._refresh_resize_handles()
+        self._update_workflow_hint()
 
     def _on_entity_dropped(self, entity_kind: str, scene_x: float, scene_y: float) -> None:
         if self._project is None:
@@ -2106,6 +2189,7 @@ class SceneCanvasPanel(QWidget):
         self.refresh_validation()
         self._refresh_history_controls()
         self.model_changed.emit()
+        self._update_workflow_hint()
 
     def _move_entity_from_anchor(self, entity_ref: _SceneEntityRef, point: QPointF) -> None:
         if self._project is None:
@@ -3191,6 +3275,9 @@ class SceneCanvasPanel(QWidget):
     def _entity_kind_text(self, kind: str) -> str:
         mapping = {
             "geometry": self._localization.text("project.section.geometry"),
+            "box": self._localization.text("editor.scene.entity.box"),
+            "sphere": self._localization.text("editor.scene.entity.sphere"),
+            "cylinder": self._localization.text("editor.scene.entity.cylinder"),
             "source": self._localization.text("project.section.sources"),
             "receiver": self._localization.text("project.section.receivers"),
             "antenna": self._localization.text("editor.scene.entity.antenna"),
