@@ -86,10 +86,13 @@ class ResultsView(QWidget):
         self._artifact_list = QListWidget()
 
         self._refresh_button = QPushButton()
+        self._refresh_button.setProperty("buttonRole", "secondary")
         self._refresh_button.clicked.connect(self.refresh_current_project)
         self._open_output_dir_button = QPushButton()
+        self._open_output_dir_button.setProperty("buttonRole", "ghost")
         self._open_output_dir_button.clicked.connect(self._open_output_directory)
         self._open_selected_file_button = QPushButton()
+        self._open_selected_file_button.setProperty("buttonRole", "ghost")
         self._open_selected_file_button.clicked.connect(self._open_selected_file)
 
         self._tabs = QTabWidget()

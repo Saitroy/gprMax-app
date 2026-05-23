@@ -67,6 +67,8 @@ class ProjectView(QWidget):
         self._summary_label = QLabel()
         self._summary_label.setWordWrap(True)
         self._validation_label = QLabel()
+        self._validation_label.setObjectName("StatusBadge")
+        self._validation_label.setProperty("statusTone", "neutral")
         self._validation_label.setWordWrap(True)
         self._workflow_hint = QLabel()
         self._workflow_hint.setObjectName("SectionBody")
@@ -78,6 +80,7 @@ class ProjectView(QWidget):
         self._section_buttons: dict[str, QPushButton] = {}
 
         self._save_button = QPushButton()
+        self._save_button.setObjectName("PrimaryButton")
         self._save_button.clicked.connect(self.save_requested.emit)
 
         self._general_panel = GeneralPanel(localization, model_editor_service, validation_service)
@@ -147,27 +150,6 @@ class ProjectView(QWidget):
 
         self._section_toolbar_card = QFrame()
         self._section_toolbar_card.setObjectName("ViewCard")
-        self._section_toolbar_card.setStyleSheet(
-            """
-            QPushButton[sectionButton="true"] {
-                background: #f7fafc;
-                border: 1px solid #c4d1dc;
-                border-radius: 12px;
-                color: #223341;
-                padding: 9px 14px;
-                font-weight: 600;
-            }
-            QPushButton[sectionButton="true"]:hover {
-                background: #edf4f8;
-                border-color: #9cb0c1;
-            }
-            QPushButton[sectionButton="true"]:checked {
-                background: #dfeef9;
-                border-color: #6b93b5;
-                color: #1f425c;
-            }
-            """
-        )
         section_toolbar_layout = QVBoxLayout(self._section_toolbar_card)
         section_toolbar_layout.setContentsMargins(14, 12, 14, 12)
         section_toolbar_layout.setSpacing(8)
@@ -243,7 +225,10 @@ class ProjectView(QWidget):
 
         if project is None:
             self._summary_label.setText(self._localization.text("project.summary.empty"))
-            self._validation_label.setText(self._localization.text("project.validation.empty"))
+            self._set_validation_label_text(
+                self._localization.text("project.validation.empty"),
+                "neutral",
+            )
             self._workflow_hint.setText(self._localization.text("project.workflow_hint.empty"))
             self._preview_panel.clear()
         else:
@@ -257,7 +242,7 @@ class ProjectView(QWidget):
                     receivers=len(project.model.receivers),
                 )
             )
-            self._validation_label.setText(self._format_validation(validation, is_dirty))
+            self._set_validation_label(validation, is_dirty)
             self._workflow_hint.setText(self._localization.text("project.workflow_hint"))
         self._general_panel.set_project(project)
         self._materials_panel.set_project(project)
@@ -288,7 +273,10 @@ class ProjectView(QWidget):
 
         if project is None:
             self._summary_label.setText(self._localization.text("project.summary.empty"))
-            self._validation_label.setText(self._localization.text("project.validation.empty"))
+            self._set_validation_label_text(
+                self._localization.text("project.validation.empty"),
+                "neutral",
+            )
             self._workflow_hint.setText(self._localization.text("project.workflow_hint.empty"))
         else:
             self._summary_label.setText(
@@ -301,7 +289,7 @@ class ProjectView(QWidget):
                     receivers=len(project.model.receivers),
                 )
             )
-            self._validation_label.setText(self._format_validation(validation, True))
+            self._set_validation_label(validation, True)
             self._workflow_hint.setText(self._localization.text("project.workflow_hint"))
 
         self.editor_changed.emit()
@@ -326,6 +314,28 @@ class ProjectView(QWidget):
             errors=len(validation.errors),
             warnings=len(validation.warnings),
         )
+
+    def _set_validation_label(
+        self,
+        validation: ValidationResult | None,
+        is_dirty: bool,
+    ) -> None:
+        tone = "success"
+        if validation is None:
+            tone = "neutral"
+        elif validation.errors:
+            tone = "error"
+        elif validation.warnings or is_dirty:
+            tone = "warning"
+        self._set_validation_label_text(self._format_validation(validation, is_dirty), tone)
+
+    def _set_validation_label_text(self, text: str, tone: str) -> None:
+        self._validation_label.setText(text)
+        self._validation_label.setProperty("statusTone", tone)
+        style = self._validation_label.style()
+        style.unpolish(self._validation_label)
+        style.polish(self._validation_label)
+        self._validation_label.update()
 
     def retranslate_ui(self) -> None:
         self._header.setText(self._localization.text("project.title"))

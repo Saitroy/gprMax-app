@@ -143,9 +143,11 @@ class SimulationView(QWidget):
         self._run_history.currentRowChanged.connect(lambda _row: self._update_action_state())
 
         self._preview_button = QPushButton()
+        self._preview_button.setProperty("buttonRole", "secondary")
         self._preview_button.clicked.connect(self.preview_requested.emit)
 
         self._export_button = QPushButton()
+        self._export_button.setProperty("buttonRole", "ghost")
         self._export_button.clicked.connect(self.export_requested.emit)
 
         self._start_button = QPushButton()
@@ -153,15 +155,19 @@ class SimulationView(QWidget):
         self._start_button.clicked.connect(self.start_requested.emit)
 
         self._retry_button = QPushButton()
+        self._retry_button.setProperty("buttonRole", "secondary")
         self._retry_button.clicked.connect(self.retry_requested.emit)
 
         self._cancel_button = QPushButton()
+        self._cancel_button.setProperty("buttonRole", "destructive")
         self._cancel_button.clicked.connect(self.cancel_requested.emit)
 
         self._open_run_button = QPushButton()
+        self._open_run_button.setProperty("buttonRole", "ghost")
         self._open_run_button.clicked.connect(self.open_run_directory_requested.emit)
 
         self._open_output_button = QPushButton()
+        self._open_output_button.setProperty("buttonRole", "ghost")
         self._open_output_button.clicked.connect(self.open_output_directory_requested.emit)
 
         self._action_bar = FlowLayout(horizontal_spacing=10, vertical_spacing=10)

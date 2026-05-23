@@ -70,8 +70,10 @@ class WelcomeView(QWidget):
         self._new_button.setObjectName("PrimaryButton")
         self._new_button.clicked.connect(self.new_project_requested.emit)
         self._open_button = QPushButton()
+        self._open_button.setProperty("buttonRole", "secondary")
         self._open_button.clicked.connect(self.open_project_requested.emit)
         self._documentation_button = QPushButton()
+        self._documentation_button.setProperty("buttonRole", "ghost")
         self._documentation_button.clicked.connect(self.documentation_requested.emit)
 
         hero = QFrame()
@@ -99,10 +101,16 @@ class WelcomeView(QWidget):
         self._status_heading = QLabel()
         self._status_heading.setObjectName("SectionTitle")
         self._status_project = QLabel()
+        self._status_project.setObjectName("StatusBadge")
+        self._status_project.setProperty("statusTone", "neutral")
         self._status_project.setWordWrap(True)
         self._status_readiness = QLabel()
+        self._status_readiness.setObjectName("StatusBadge")
+        self._status_readiness.setProperty("statusTone", "neutral")
         self._status_readiness.setWordWrap(True)
         self._status_activity = QLabel()
+        self._status_activity.setObjectName("StatusBadge")
+        self._status_activity.setProperty("statusTone", "neutral")
         self._status_activity.setWordWrap(True)
         status_content = QWidget()
         status_layout = QVBoxLayout(status_content)
@@ -114,6 +122,7 @@ class WelcomeView(QWidget):
         self._status_card = self._build_card(self._status_heading, status_content)
 
         self._recent_list = QListWidget()
+        self._recent_list.setObjectName("RecentProjectsList")
         self._recent_list.itemActivated.connect(self._emit_recent_project)
         self._recent_card_heading = QLabel()
         self._recent_card_heading.setObjectName("SectionTitle")
@@ -197,42 +206,131 @@ class WelcomeView(QWidget):
 
     def _refresh_project_status(self) -> None:
         if self._current_project is None:
-            self._status_project.setText(
-                self._localization.text("welcome.status.empty_project")
+            self._set_status_badge(
+                self._status_project,
+                self._localization.text("welcome.status.empty_project"),
+                "neutral",
             )
-            self._status_readiness.setText(
-                self._localization.text(
-                    "welcome.status.readiness_line",
-                    value=(
-                        self._readiness_text
-                        or self._localization.text("welcome.status.no_project")
-                    ),
-                )
+            readiness_text = self._localization.text(
+                "welcome.status.readiness_line",
+                value=(
+                    self._readiness_text
+                    or self._localization.text("welcome.status.no_project")
+                ),
             )
-            self._status_activity.setText(
-                self._localization.text("welcome.status.activity_line", value=self._activity_text or self._localization.text("workspace.value.no_run"))
+            self._set_status_badge(
+                self._status_readiness,
+                readiness_text,
+                self._readiness_tone(readiness_text),
+            )
+            activity_text = self._localization.text(
+                "welcome.status.activity_line",
+                value=(
+                    self._activity_text
+                    or self._localization.text("workspace.value.no_run")
+                ),
+            )
+            self._set_status_badge(
+                self._status_activity,
+                activity_text,
+                self._activity_tone(activity_text),
             )
             return
 
-        self._status_project.setText(
+        self._set_status_badge(
+            self._status_project,
             self._localization.text(
                 "welcome.status.project_line",
                 name=self._current_project.metadata.name,
                 path=self._current_project.root,
-            )
+            ),
+            "info",
         )
-        self._status_readiness.setText(
-            self._localization.text(
-                "welcome.status.readiness_line",
-                value=self._readiness_text or self._localization.text("workspace.value.validation_ready"),
-            )
+        readiness_text = self._localization.text(
+            "welcome.status.readiness_line",
+            value=(
+                self._readiness_text
+                or self._localization.text("workspace.value.validation_ready")
+            ),
         )
-        self._status_activity.setText(
-            self._localization.text(
-                "welcome.status.activity_line",
-                value=self._activity_text or self._localization.text("workspace.value.no_run"),
-            )
+        self._set_status_badge(
+            self._status_readiness,
+            readiness_text,
+            self._readiness_tone(readiness_text),
         )
+        activity_text = self._localization.text(
+            "welcome.status.activity_line",
+            value=(
+                self._activity_text
+                or self._localization.text("workspace.value.no_run")
+            ),
+        )
+        self._set_status_badge(
+            self._status_activity,
+            activity_text,
+            self._activity_tone(activity_text),
+        )
+
+    def _set_status_badge(self, label: QLabel, text: str, tone: str) -> None:
+        label.setText(text)
+        label.setProperty("statusTone", tone)
+        style = label.style()
+        style.unpolish(label)
+        style.polish(label)
+        label.update()
+
+    def _readiness_tone(self, text: str) -> str:
+        normalized = text.casefold()
+        if any(
+            token in normalized
+            for token in ("no project", "open a project", "откройте проект", "сначала")
+        ):
+            return "neutral"
+        if any(
+            token in normalized
+            for token in (
+                "error",
+                "errors",
+                "ошиб",
+                "not ready",
+                "не готов",
+            )
+        ):
+            return "error"
+        if any(
+            token in normalized
+            for token in (
+                "warning",
+                "warnings",
+                "предупреж",
+                "unsaved",
+                "несохран",
+            )
+        ):
+            return "warning"
+        if any(token in normalized for token in ("ready", "готов")):
+            return "success"
+        return "info"
+
+    def _activity_tone(self, text: str) -> str:
+        normalized = text.casefold()
+        if any(token in normalized for token in ("failed", "ошиб", "error")):
+            return "error"
+        if any(token in normalized for token in ("cancel", "отмен")):
+            return "warning"
+        if any(token in normalized for token in ("completed", "заверш")):
+            return "success"
+        if any(
+            token in normalized
+            for token in (
+                "no run",
+                "нет запуск",
+                "запусков нет",
+                "не запуск",
+            )
+        ):
+            return "neutral"
+        return "info"
 
     def _reflow_cards(self) -> None:
         while self._dashboard_grid.count():
