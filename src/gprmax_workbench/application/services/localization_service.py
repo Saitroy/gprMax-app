@@ -489,6 +489,11 @@ _TRANSLATIONS["ru"].update(
         "editor.scene.zoom": "Масштаб {percent}%",
         "status.run_results_ready": "Расчёт {run_id} завершён. Результаты готовы на вкладке «Результаты».",
         "status.run_finished": "Запуск {run_id} завершён со статусом: {status}.",
+        "shell.status.title": "Состояние",
+        "shell.status.project": "Проект: {value}",
+        "shell.status.runtime": "Runtime: {value}",
+        "shell.status.run": "Запуск: {value}",
+        "shell.runtime.issue": "Нужна проверка в настройках",
     }
 )
 
@@ -504,6 +509,11 @@ _TRANSLATIONS["en"].update(
         "editor.scene.zoom": "Zoom {percent}%",
         "status.run_results_ready": "Run {run_id} completed. Results are ready on the Results page.",
         "status.run_finished": "Run {run_id} finished with status: {status}.",
+        "shell.status.title": "Status",
+        "shell.status.project": "Project: {value}",
+        "shell.status.runtime": "Runtime: {value}",
+        "shell.status.run": "Run: {value}",
+        "shell.runtime.issue": "Check settings",
     }
 )
 

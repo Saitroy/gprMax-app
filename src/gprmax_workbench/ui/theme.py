@@ -162,6 +162,35 @@ QLabel#AppSubtitle {{
     color: {c["text_muted"]};
     font-size: 9pt;
 }}
+QFrame#SidebarStatus {{
+    background: {c["surface_alt"]};
+    border: 1px solid {c["border"]};
+    border-radius: {r["md"]}px;
+}}
+QLabel#SidebarSectionTitle {{
+    background: transparent;
+    color: {c["text_muted"]};
+    font-size: 8.8pt;
+    font-weight: 700;
+    text-transform: uppercase;
+}}
+QPushButton[buttonRole="sidebar"] {{
+    background: {c["surface"]};
+    color: {c["text"]};
+    border: 1px solid {c["border"]};
+    border-radius: {r["md"]}px;
+    padding: 7px 10px;
+    text-align: left;
+}}
+QPushButton[buttonRole="sidebar"]:hover {{
+    background: {c["primary_soft"]};
+    color: {c["primary_pressed"]};
+    border-color: #bfdbfe;
+}}
+QPushButton[buttonRole="sidebar"]:pressed {{
+    background: #dbeafe;
+    border-color: #93c5fd;
+}}
 QListWidget#Navigation {{
     background: transparent;
     border: none;

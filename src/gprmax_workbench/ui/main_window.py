@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMainWindow,
     QMessageBox,
+    QPushButton,
     QScrollArea,
     QSizePolicy,
     QSplitter,
@@ -107,6 +108,7 @@ class MainWindow(QMainWindow):
         self._open_project_action = QAction(self)
         self._save_project_action = QAction(self)
         self._open_settings_action = QAction(self)
+        self._open_documentation_action = QAction(self)
         self._about_action = QAction(self)
         self._file_menu = self.menuBar().addMenu("")
         self._settings_menu = self.menuBar().addMenu("")
@@ -182,12 +184,15 @@ class MainWindow(QMainWindow):
         self._open_project_action.triggered.connect(self._on_open_project)
         self._save_project_action.triggered.connect(self._on_save_project)
         self._open_settings_action.triggered.connect(self._open_settings_page)
+        self._open_documentation_action.triggered.connect(self._open_documentation_dialog)
         self._about_action.triggered.connect(self._show_about_dialog)
 
         self._file_menu.addAction(self._new_project_action)
         self._file_menu.addAction(self._open_project_action)
         self._file_menu.addAction(self._save_project_action)
         self._settings_menu.addAction(self._open_settings_action)
+        self._help_menu.addAction(self._open_documentation_action)
+        self._help_menu.addSeparator()
         self._help_menu.addAction(self._about_action)
 
     def _build_ui(self) -> None:
@@ -256,6 +261,7 @@ class MainWindow(QMainWindow):
         )
         self._refresh_results_view()
         self._refresh_welcome_summary()
+        self._refresh_shell_status()
         self._simulation_view.set_runtime_label(
             self._context.simulation_service.runtime_label()
         )
@@ -272,9 +278,17 @@ class MainWindow(QMainWindow):
         self._open_project_action.setText(self._localization.text("action.open_project"))
         self._save_project_action.setText(self._localization.text("action.save_project"))
         self._open_settings_action.setText(self._localization.text("action.open_settings"))
+        self._open_documentation_action.setText(
+            self._localization.text("action.open_documentation")
+        )
         self._about_action.setText(self._localization.text("action.about"))
         self._sidebar_title.setText(self._localization.text("sidebar.title"))
         self._sidebar_subtitle.setText(self._localization.text("sidebar.subtitle"))
+        self._sidebar_status_title.setText(self._localization.text("shell.status.title"))
+        self._sidebar_settings_button.setText(self._localization.text("settings.title"))
+        self._sidebar_documentation_button.setText(
+            self._localization.text("action.open_documentation")
+        )
         self._retranslate_navigation()
         self._welcome_view.retranslate_ui()
         self._project_view.retranslate_ui()
@@ -286,6 +300,7 @@ class MainWindow(QMainWindow):
         self._welcome_view.set_example_projects(self._discover_example_projects())
         self._documentation_dialog.set_examples(self._discover_example_projects())
         self._refresh_welcome_summary()
+        self._refresh_shell_status()
         self._update_window_title()
 
     def _retranslate_navigation(self) -> None:
@@ -307,7 +322,99 @@ class MainWindow(QMainWindow):
         )
         self._save_project_action.setEnabled(project is not None)
         self._refresh_welcome_summary()
+        self._refresh_shell_status()
         self._update_window_title()
+
+    def _refresh_shell_status(self) -> None:
+        if not hasattr(self, "_sidebar_project_status"):
+            return
+
+        project_text, project_tone = self._project_shell_status()
+        runtime_text, runtime_tone = self._runtime_shell_status()
+        run_text, run_tone = self._run_shell_status()
+
+        self._set_sidebar_status(self._sidebar_project_status, project_text, project_tone)
+        self._set_sidebar_status(self._sidebar_runtime_status, runtime_text, runtime_tone)
+        self._set_sidebar_status(self._sidebar_run_status, run_text, run_tone)
+
+    def _project_shell_status(self) -> tuple[str, str]:
+        state = self._context.workspace_service.state
+        project = state.current_project
+        if project is None:
+            value = self._localization.text("workspace.value.no_project")
+            return self._localization.text("shell.status.project", value=value), "neutral"
+
+        if state.current_project_dirty:
+            state_text = self._localization.text("workspace.value.project_dirty")
+            tone = "warning"
+        else:
+            state_text = self._localization.text("workspace.value.project_saved")
+            tone = "success"
+        value = f"{project.metadata.name} - {state_text}"
+        return self._localization.text("shell.status.project", value=value), tone
+
+    def _runtime_shell_status(self) -> tuple[str, str]:
+        runtime_info = self._context.runtime_service.runtime_info()
+        if not runtime_info.is_healthy:
+            value = self._localization.text("shell.runtime.issue")
+            return self._localization.text("shell.status.runtime", value=value), "error"
+
+        mode = self._localization.text(
+            f"settings.runtime_mode.{runtime_info.engine.mode.value}"
+        )
+        version = (
+            runtime_info.gprmax_version
+            or runtime_info.bundled_engine_version
+            or self._localization.text("common.not_set")
+        )
+        value = self._localization.text(
+            "workspace.value.runtime_state",
+            mode=mode,
+            version=version,
+        )
+        return self._localization.text("shell.status.runtime", value=value), "success"
+
+    def _run_shell_status(self) -> tuple[str, str]:
+        state = self._context.workspace_service.state
+        active_run = state.active_run
+        if active_run is not None and active_run.status.value in {"preparing", "running"}:
+            value = self._localization.text(
+                "workspace.value.run_active",
+                run_id=active_run.run_id,
+                status=self._localization.simulation_status_text(active_run.status.value),
+            )
+            return self._localization.text("shell.status.run", value=value), "info"
+
+        if state.run_history:
+            latest = state.run_history[0]
+            value = self._localization.text(
+                "workspace.value.run_last",
+                run_id=latest.run_id,
+                status=self._localization.simulation_status_text(latest.status.value),
+            )
+            return (
+                self._localization.text("shell.status.run", value=value),
+                self._tone_for_run_status(latest.status.value),
+            )
+
+        value = self._localization.text("workspace.value.no_run")
+        return self._localization.text("shell.status.run", value=value), "neutral"
+
+    def _tone_for_run_status(self, status: str) -> str:
+        if status == "completed":
+            return "success"
+        if status == "failed":
+            return "error"
+        if status == "cancelled":
+            return "warning"
+        return "info"
+
+    def _set_sidebar_status(self, label: QLabel, text: str, tone: str) -> None:
+        label.setText(text)
+        label.setToolTip(text)
+        label.setProperty("statusTone", tone)
+        label.style().unpolish(label)
+        label.style().polish(label)
 
     def _build_sidebar(self) -> QWidget:
         frame = QFrame()
@@ -348,8 +455,50 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._sidebar_subtitle)
         layout.addSpacing(8)
         layout.addWidget(self._navigation)
+        layout.addSpacing(8)
+        layout.addWidget(self._build_sidebar_status_area())
 
         self._retranslate_navigation()
+        return frame
+
+    def _build_sidebar_status_area(self) -> QWidget:
+        frame = QFrame()
+        frame.setObjectName("SidebarStatus")
+
+        layout = QVBoxLayout(frame)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(8)
+
+        self._sidebar_status_title = QLabel()
+        self._sidebar_status_title.setObjectName("SidebarSectionTitle")
+
+        self._sidebar_project_status = QLabel()
+        self._sidebar_project_status.setObjectName("StatusBadge")
+        self._sidebar_project_status.setWordWrap(True)
+
+        self._sidebar_runtime_status = QLabel()
+        self._sidebar_runtime_status.setObjectName("StatusBadge")
+        self._sidebar_runtime_status.setWordWrap(True)
+
+        self._sidebar_run_status = QLabel()
+        self._sidebar_run_status.setObjectName("StatusBadge")
+        self._sidebar_run_status.setWordWrap(True)
+
+        self._sidebar_settings_button = QPushButton()
+        self._sidebar_settings_button.setProperty("buttonRole", "sidebar")
+        self._sidebar_settings_button.clicked.connect(self._open_settings_page)
+
+        self._sidebar_documentation_button = QPushButton()
+        self._sidebar_documentation_button.setProperty("buttonRole", "sidebar")
+        self._sidebar_documentation_button.clicked.connect(self._open_documentation_dialog)
+
+        layout.addWidget(self._sidebar_status_title)
+        layout.addWidget(self._sidebar_project_status)
+        layout.addWidget(self._sidebar_runtime_status)
+        layout.addWidget(self._sidebar_run_status)
+        layout.addSpacing(4)
+        layout.addWidget(self._sidebar_settings_button)
+        layout.addWidget(self._sidebar_documentation_button)
         return frame
 
     def _apply_screen_adaptive_geometry(self) -> None:
@@ -889,6 +1038,7 @@ class MainWindow(QMainWindow):
             self._simulation_view.set_run_state(None, [])
             self._simulation_view.set_log_output("")
             self._last_polled_run_state = None
+            self._refresh_shell_status()
             return
 
         state = self._context.workspace_service.state
@@ -906,6 +1056,7 @@ class MainWindow(QMainWindow):
         self._simulation_view.set_run_state(active_run, history)
         self._simulation_view.set_log_output(log_snapshot.combined_text)
         self._refresh_welcome_summary()
+        self._refresh_shell_status()
         self._update_window_title()
         self._last_polled_run_state = current_run_state
 
