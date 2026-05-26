@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shlex
 from contextlib import ExitStack
+from datetime import UTC, datetime
 
 from PySide6.QtCore import QSignalBlocker, Qt, Signal
 from PySide6.QtWidgets import (
@@ -14,6 +15,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QPlainTextEdit,
+    QProgressBar,
     QPushButton,
     QSizePolicy,
     QSplitter,
@@ -44,6 +46,7 @@ class SimulationView(QWidget):
     cancel_requested = Signal()
     open_run_directory_requested = Signal()
     open_output_directory_requested = Signal()
+    results_requested = Signal()
     configuration_changed = Signal()
 
     def __init__(
@@ -68,6 +71,11 @@ class SimulationView(QWidget):
         self._persisted_content_splitter: dict[str, object] | None = None
         self._pending_section_key: str | None = None
         self._run_state_signature: tuple[object, ...] | None = None
+        self._active_run: SimulationRunRecord | None = None
+        self._run_history_records: list[SimulationRunRecord] = []
+        self._latest_log_text = ""
+        self._last_readiness_summary = ""
+        self._validation_messages: list[str] = []
 
         self._title = QLabel()
         self._title.setObjectName("ViewTitle")
@@ -79,6 +87,12 @@ class SimulationView(QWidget):
         self._runtime_label = QLabel(runtime_label)
         self._readiness_state_label = QLabel()
         self._readiness_state_label.setWordWrap(True)
+        self._readiness_badge = QLabel()
+        self._readiness_badge.setObjectName("StatusBadge")
+        self._readiness_badge.setWordWrap(True)
+        self._readiness_next_step_label = QLabel()
+        self._readiness_next_step_label.setObjectName("StatusDetail")
+        self._readiness_next_step_label.setWordWrap(True)
         self._project_state_label = QLabel()
         self._project_state_label.setWordWrap(True)
         self._status_label = QLabel()
@@ -138,9 +152,40 @@ class SimulationView(QWidget):
         self._log_text = QPlainTextEdit()
         self._log_text.setReadOnly(True)
         self._log_text.setPlaceholderText("")
+        self._log_summary_label = QLabel()
+        self._log_summary_label.setObjectName("LogSummary")
+        self._log_summary_label.setWordWrap(True)
 
         self._run_history = QListWidget()
-        self._run_history.currentRowChanged.connect(lambda _row: self._update_action_state())
+        self._run_history.setWordWrap(True)
+        self._run_history.setSpacing(4)
+        self._run_history.currentRowChanged.connect(self._on_history_selection_changed)
+
+        self._monitor_status_badge = QLabel()
+        self._monitor_status_badge.setObjectName("StatusBadge")
+        self._monitor_status_badge.setWordWrap(True)
+        self._monitor_stage_label = QLabel()
+        self._monitor_stage_label.setObjectName("RunStageLabel")
+        self._monitor_stage_label.setWordWrap(True)
+        self._monitor_run_id_label = QLabel()
+        self._monitor_run_id_label.setWordWrap(True)
+        self._monitor_project_label = QLabel()
+        self._monitor_project_label.setWordWrap(True)
+        self._monitor_runtime_label = QLabel()
+        self._monitor_runtime_label.setWordWrap(True)
+        self._monitor_created_label = QLabel()
+        self._monitor_started_label = QLabel()
+        self._monitor_finished_label = QLabel()
+        self._monitor_duration_label = QLabel()
+        self._monitor_error_label = QLabel()
+        self._monitor_error_label.setObjectName("RunIssueSummary")
+        self._monitor_error_label.setWordWrap(True)
+        self._monitor_next_step_label = QLabel()
+        self._monitor_next_step_label.setObjectName("StatusDetail")
+        self._monitor_next_step_label.setWordWrap(True)
+        self._monitor_progress = QProgressBar()
+        self._monitor_progress.setObjectName("RunStageProgress")
+        self._monitor_progress.setTextVisible(False)
 
         self._preview_button = QPushButton()
         self._preview_button.setProperty("buttonRole", "secondary")
@@ -169,6 +214,26 @@ class SimulationView(QWidget):
         self._open_output_button = QPushButton()
         self._open_output_button.setProperty("buttonRole", "ghost")
         self._open_output_button.clicked.connect(self.open_output_directory_requested.emit)
+
+        self._monitor_cancel_button = QPushButton()
+        self._monitor_cancel_button.setProperty("buttonRole", "destructive")
+        self._monitor_cancel_button.clicked.connect(self.cancel_requested.emit)
+
+        self._monitor_retry_button = QPushButton()
+        self._monitor_retry_button.setProperty("buttonRole", "secondary")
+        self._monitor_retry_button.clicked.connect(self.retry_requested.emit)
+
+        self._monitor_results_button = QPushButton()
+        self._monitor_results_button.setProperty("buttonRole", "secondary")
+        self._monitor_results_button.clicked.connect(self.results_requested.emit)
+
+        self._monitor_open_run_button = QPushButton()
+        self._monitor_open_run_button.setProperty("buttonRole", "ghost")
+        self._monitor_open_run_button.clicked.connect(self.open_run_directory_requested.emit)
+
+        self._monitor_open_output_button = QPushButton()
+        self._monitor_open_output_button.setProperty("buttonRole", "ghost")
+        self._monitor_open_output_button.clicked.connect(self.open_output_directory_requested.emit)
 
         self._action_bar = FlowLayout(horizontal_spacing=10, vertical_spacing=10)
         self._action_bar.addWidget(self._start_button)
@@ -226,6 +291,22 @@ class SimulationView(QWidget):
         )
         self._launch_page = launch_page
 
+        monitor_page = QWidget()
+        monitor_layout = QVBoxLayout(monitor_page)
+        monitor_layout.setContentsMargins(0, 0, 0, 0)
+        monitor_layout.setSpacing(16)
+        monitor_card = self._build_card(
+            "simulation.monitor.card",
+            self._build_monitor_widget(),
+        )
+        monitor_card.setObjectName("SimulationMonitorCard")
+        monitor_layout.addWidget(monitor_card, 1)
+        monitor_page.setSizePolicy(
+            QSizePolicy.Policy.Ignored,
+            QSizePolicy.Policy.Expanding,
+        )
+        self._monitor_page = monitor_page
+
         preview_page = QWidget()
         preview_layout = QVBoxLayout(preview_page)
         preview_layout.setContentsMargins(0, 0, 0, 0)
@@ -245,7 +326,7 @@ class SimulationView(QWidget):
         logs_layout.setContentsMargins(0, 0, 0, 0)
         logs_layout.setSpacing(16)
         logs_layout.addWidget(
-            self._build_card("simulation.log_card", self._log_text),
+            self._build_card("simulation.log_card", self._build_log_widget()),
             1,
         )
         logs_layout.addWidget(history_card, 1)
@@ -257,10 +338,12 @@ class SimulationView(QWidget):
 
         self._sections = [
             "simulation.section.launch",
+            "simulation.section.monitor",
             "simulation.section.preview",
             "simulation.section.logs",
         ]
         self._section_stack.addWidget(self._launch_page)
+        self._section_stack.addWidget(self._monitor_page)
         self._section_stack.addWidget(self._preview_page)
         self._section_stack.addWidget(self._log_page)
 
@@ -369,6 +452,7 @@ class SimulationView(QWidget):
             value=self._readiness_state_label.text(),
             caption=runtime_label,
         )
+        self._refresh_monitor()
 
     def set_project_state(self, *, project_name: str | None, is_dirty: bool) -> None:
         if project_name is None:
@@ -378,6 +462,8 @@ class SimulationView(QWidget):
                 eyebrow=self._localization.text("simulation.metric.activity"),
                 value=self._project_state_label.text(),
             )
+            self._refresh_readiness_guidance()
+            self._refresh_monitor()
             self._update_action_state()
             return
         self._has_project = True
@@ -395,15 +481,20 @@ class SimulationView(QWidget):
             eyebrow=self._localization.text("simulation.metric.activity"),
             value=self._project_state_label.text(),
         )
+        self._refresh_readiness_guidance()
+        self._refresh_monitor()
         self._update_action_state()
 
     def set_validation_messages(self, messages: list[str]) -> None:
+        self._validation_messages = list(messages)
         if not messages:
             self._validation_label.setText(
                 self._localization.text("simulation.validation_placeholder")
             )
+            self._refresh_readiness_guidance()
             return
         self._validation_label.setText("\n".join(messages))
+        self._refresh_readiness_guidance()
 
     def set_readiness_state(
         self,
@@ -412,19 +503,28 @@ class SimulationView(QWidget):
         caption: str = "",
         start_allowed: bool,
     ) -> None:
+        self._last_readiness_summary = summary
         self._readiness_state_label.setText(summary)
+        self._readiness_badge.setText(summary)
         self._start_allowed = start_allowed
+        self._set_status_tone(
+            self._readiness_badge,
+            self._readiness_tone(summary, start_allowed),
+        )
         self._readiness_tile.set_content(
             eyebrow=self._localization.text("simulation.metric.readiness"),
             value=summary,
             caption=caption or self._runtime_label.text(),
         )
+        self._refresh_readiness_guidance()
         self._update_action_state()
 
     def set_input_preview(self, preview_text: str) -> None:
         self._preview_text.setPlainText(preview_text)
 
     def set_log_output(self, log_text: str) -> None:
+        self._latest_log_text = log_text
+        self._refresh_log_summary()
         if self._log_text.toPlainText() == log_text:
             return
         self._log_text.setPlainText(log_text)
@@ -441,11 +541,26 @@ class SimulationView(QWidget):
             active_run.run_id if active_run is not None else None,
             active_run.status.value if active_run is not None else None,
             active_run.error_summary if active_run is not None else None,
+            active_run.started_at.isoformat()
+            if active_run is not None and active_run.started_at is not None
+            else None,
+            active_run.finished_at.isoformat()
+            if active_run is not None and active_run.finished_at is not None
+            else None,
             tuple(
-                (run.run_id, run.status.value, run.created_at.isoformat())
+                (
+                    run.run_id,
+                    run.status.value,
+                    run.created_at.isoformat(),
+                    run.started_at.isoformat() if run.started_at is not None else None,
+                    run.finished_at.isoformat() if run.finished_at is not None else None,
+                    run.error_summary,
+                )
                 for run in history
             ),
         )
+        self._active_run = active_run
+        self._run_history_records = list(history)
         if active_run is None:
             self._status_label.setText(
                 self._localization.text("simulation.run_state.none")
@@ -467,6 +582,9 @@ class SimulationView(QWidget):
             eyebrow=self._localization.text("simulation.metric.activity"),
             value=self._status_label.text(),
         )
+        self._refresh_readiness_guidance()
+        self._refresh_monitor()
+        self._refresh_log_summary()
 
         if self._run_state_signature == signature:
             self._has_retry_target = bool(history)
@@ -476,12 +594,29 @@ class SimulationView(QWidget):
         current_selection = self.selected_run_id()
         self._run_history.clear()
         for run in history:
+            status_text = self._localization.simulation_status_text(run.status.value)
+            duration_text = self._duration_for_run(run)
             item = QListWidgetItem(
-                f"{run.run_id} | "
-                f"{self._localization.simulation_status_text(run.status.value)} | "
-                f"{run.created_at.isoformat()}"
+                self._localization.text(
+                    "simulation.history.item",
+                    run_id=run.run_id,
+                    status=status_text,
+                    created=self._format_timestamp(run.created_at),
+                    duration=duration_text,
+                )
             )
             item.setData(Qt.ItemDataRole.UserRole, run.run_id)
+            item.setToolTip(
+                self._localization.text(
+                    "simulation.history.tooltip",
+                    run_id=run.run_id,
+                    status=status_text,
+                    created=self._format_timestamp(run.created_at),
+                    started=self._format_optional_timestamp(run.started_at),
+                    finished=self._format_optional_timestamp(run.finished_at),
+                    duration=duration_text,
+                )
+            )
             self._run_history.addItem(item)
             if current_selection and current_selection == run.run_id:
                 self._run_history.setCurrentItem(item)
@@ -489,6 +624,8 @@ class SimulationView(QWidget):
             self._run_history.setCurrentRow(0)
         self._has_retry_target = bool(history)
         self._run_state_signature = signature
+        self._refresh_monitor()
+        self._refresh_log_summary()
         self._update_action_state()
 
     def selected_run_id(self) -> str | None:
@@ -500,17 +637,24 @@ class SimulationView(QWidget):
 
     def _build_runtime_widget(self) -> QWidget:
         widget = QWidget()
-        layout = QFormLayout(widget)
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
+        layout.addWidget(self._readiness_badge)
+        layout.addWidget(self._readiness_next_step_label)
+
+        form = QFormLayout()
         self._runtime_row_label = QLabel()
         self._readiness_row_label = QLabel()
         self._project_state_row_label = QLabel()
         self._run_state_row_label = QLabel()
         self._messages_row_label = QLabel()
-        layout.addRow(self._runtime_row_label, self._runtime_label)
-        layout.addRow(self._readiness_row_label, self._readiness_state_label)
-        layout.addRow(self._project_state_row_label, self._project_state_label)
-        layout.addRow(self._run_state_row_label, self._status_label)
-        layout.addRow(self._messages_row_label, self._validation_label)
+        form.addRow(self._runtime_row_label, self._runtime_label)
+        form.addRow(self._readiness_row_label, self._readiness_state_label)
+        form.addRow(self._project_state_row_label, self._project_state_label)
+        form.addRow(self._run_state_row_label, self._status_label)
+        form.addRow(self._messages_row_label, self._validation_label)
+        layout.addLayout(form)
         return widget
 
     def _build_config_widget(self) -> QWidget:
@@ -522,8 +666,12 @@ class SimulationView(QWidget):
         self._restart_label = QLabel()
         self._mpi_tasks_label = QLabel()
         self._extra_args_label = QLabel()
+        self._advanced_hint_label = QLabel()
+        self._advanced_hint_label.setObjectName("SimulationAdvancedHint")
+        self._advanced_hint_label.setWordWrap(True)
         layout.addRow(self._mode_label, self._mode_combo)
         layout.addRow(self._num_runs_label, self._num_runs_spinbox)
+        layout.addRow(self._advanced_hint_label)
         layout.addRow(self._restart_label, self._restart_spinbox)
         layout.addRow(self._mpi_tasks_label, self._mpi_tasks_spinbox)
         layout.addRow("", self._geometry_fixed_checkbox)
@@ -531,6 +679,52 @@ class SimulationView(QWidget):
         layout.addRow("", self._benchmark_checkbox)
         layout.addRow("", self._mpi_no_spawn_checkbox)
         layout.addRow(self._extra_args_label, self._extra_args_edit)
+        return widget
+
+    def _build_monitor_widget(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(14)
+        layout.addWidget(self._monitor_status_badge)
+        layout.addWidget(self._monitor_stage_label)
+        layout.addWidget(self._monitor_progress)
+
+        form = QFormLayout()
+        self._monitor_run_id_row_label = QLabel()
+        self._monitor_project_row_label = QLabel()
+        self._monitor_runtime_row_label = QLabel()
+        self._monitor_created_row_label = QLabel()
+        self._monitor_started_row_label = QLabel()
+        self._monitor_finished_row_label = QLabel()
+        self._monitor_duration_row_label = QLabel()
+        form.addRow(self._monitor_run_id_row_label, self._monitor_run_id_label)
+        form.addRow(self._monitor_project_row_label, self._monitor_project_label)
+        form.addRow(self._monitor_runtime_row_label, self._monitor_runtime_label)
+        form.addRow(self._monitor_created_row_label, self._monitor_created_label)
+        form.addRow(self._monitor_started_row_label, self._monitor_started_label)
+        form.addRow(self._monitor_finished_row_label, self._monitor_finished_label)
+        form.addRow(self._monitor_duration_row_label, self._monitor_duration_label)
+        layout.addLayout(form)
+        layout.addWidget(self._monitor_error_label)
+        layout.addWidget(self._monitor_next_step_label)
+
+        actions = FlowLayout(horizontal_spacing=10, vertical_spacing=10)
+        actions.addWidget(self._monitor_cancel_button)
+        actions.addWidget(self._monitor_retry_button)
+        actions.addWidget(self._monitor_results_button)
+        actions.addWidget(self._monitor_open_output_button)
+        actions.addWidget(self._monitor_open_run_button)
+        layout.addLayout(actions)
+        return widget
+
+    def _build_log_widget(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
+        layout.addWidget(self._log_summary_label)
+        layout.addWidget(self._log_text, 1)
         return widget
 
     def resizeEvent(self, event) -> None:  # noqa: N802
@@ -616,6 +810,21 @@ class SimulationView(QWidget):
         self._open_output_button.setText(
             self._localization.text("simulation.action.open_output")
         )
+        self._monitor_cancel_button.setText(
+            self._localization.text("simulation.action.cancel")
+        )
+        self._monitor_retry_button.setText(
+            self._localization.text("simulation.action.retry")
+        )
+        self._monitor_results_button.setText(
+            self._localization.text("simulation.action.open_results")
+        )
+        self._monitor_open_run_button.setText(
+            self._localization.text("simulation.action.open_run")
+        )
+        self._monitor_open_output_button.setText(
+            self._localization.text("simulation.action.open_output")
+        )
         self._runtime_row_label.setText(self._localization.text("simulation.runtime"))
         self._readiness_row_label.setText(
             self._localization.text("simulation.readiness_label")
@@ -634,11 +843,35 @@ class SimulationView(QWidget):
         self._restart_label.setText(self._localization.text("simulation.restart"))
         self._mpi_tasks_label.setText(self._localization.text("simulation.mpi_tasks"))
         self._extra_args_label.setText(self._localization.text("simulation.extra_args"))
+        self._monitor_run_id_row_label.setText(
+            self._localization.text("simulation.monitor.run_id")
+        )
+        self._monitor_project_row_label.setText(
+            self._localization.text("simulation.monitor.project")
+        )
+        self._monitor_runtime_row_label.setText(
+            self._localization.text("simulation.monitor.runtime")
+        )
+        self._monitor_created_row_label.setText(
+            self._localization.text("simulation.monitor.created")
+        )
+        self._monitor_started_row_label.setText(
+            self._localization.text("simulation.monitor.started")
+        )
+        self._monitor_finished_row_label.setText(
+            self._localization.text("simulation.monitor.finished")
+        )
+        self._monitor_duration_row_label.setText(
+            self._localization.text("simulation.monitor.duration")
+        )
         for key, heading in self._card_headings.items():
             heading.setText(self._localization.text(key))
         self._refresh_configuration_summary()
         self._refresh_section_selection()
         self._update_advanced_rows()
+        self._refresh_readiness_guidance()
+        self._refresh_monitor()
+        self._refresh_log_summary()
 
     def set_advanced_mode(self, enabled: bool) -> None:
         if self._advanced_mode == enabled:
@@ -697,9 +930,214 @@ class SimulationView(QWidget):
         self._refresh_configuration_summary()
         self.configuration_changed.emit()
 
+    def _on_history_selection_changed(self, _row: int) -> None:
+        self._refresh_monitor()
+        self._refresh_log_summary()
+        self._update_action_state()
+
+    def _refresh_readiness_guidance(self) -> None:
+        if not self._has_project:
+            text = self._localization.text("simulation.readiness.next.no_project")
+        elif self._run_in_progress:
+            text = self._localization.text("simulation.readiness.next.running")
+        elif self._start_allowed:
+            text = self._localization.text("simulation.readiness.next.ready")
+        elif self._validation_messages:
+            text = self._localization.text(
+                "simulation.readiness.next.fix_first",
+                message=self._validation_messages[0],
+            )
+        else:
+            text = self._localization.text("simulation.readiness.next.not_ready")
+        self._readiness_next_step_label.setText(text)
+
+    def _refresh_monitor(self) -> None:
+        run = self._monitor_run_record()
+        if run is None:
+            self._monitor_status_badge.setText(
+                self._localization.text("simulation.monitor.status.none")
+            )
+            self._set_status_tone(self._monitor_status_badge, "neutral")
+            self._monitor_stage_label.setText(
+                self._localization.text("simulation.monitor.stage.none")
+            )
+            self._monitor_run_id_label.setText(self._localization.text("common.not_set"))
+            self._monitor_project_label.setText(
+                self._localization.text("simulation.no_project")
+                if not self._has_project
+                else self._localization.text("simulation.no_run_prepared")
+            )
+            self._monitor_runtime_label.setText(self._runtime_label.text())
+            self._monitor_created_label.setText(self._localization.text("common.not_set"))
+            self._monitor_started_label.setText(self._localization.text("common.not_set"))
+            self._monitor_finished_label.setText(self._localization.text("common.not_set"))
+            self._monitor_duration_label.setText(
+                self._localization.text("simulation.duration.not_available")
+            )
+            self._monitor_error_label.setText("")
+            self._monitor_error_label.setVisible(False)
+            self._monitor_next_step_label.setText(
+                self._localization.text("simulation.monitor.next.none")
+            )
+            self._set_monitor_progress("none")
+            return
+
+        status = run.status.value
+        status_text = self._localization.simulation_status_text(status)
+        self._monitor_status_badge.setText(status_text)
+        self._set_status_tone(self._monitor_status_badge, self._tone_for_run_status(status))
+        self._monitor_stage_label.setText(
+            self._localization.text(f"simulation.monitor.stage.{status}")
+        )
+        self._monitor_run_id_label.setText(run.run_id)
+        self._monitor_project_label.setText(run.project_name)
+        self._monitor_runtime_label.setText(run.runtime_label or self._runtime_label.text())
+        self._monitor_created_label.setText(self._format_timestamp(run.created_at))
+        self._monitor_started_label.setText(self._format_optional_timestamp(run.started_at))
+        self._monitor_finished_label.setText(
+            self._format_optional_timestamp(run.finished_at)
+        )
+        self._monitor_duration_label.setText(self._duration_for_run(run))
+        error_text = (
+            self._localization.translate_message(run.error_summary)
+            if run.error_summary and status in {"failed", "cancelled"}
+            else ""
+        )
+        self._monitor_error_label.setText(error_text)
+        self._monitor_error_label.setVisible(bool(error_text))
+        self._monitor_next_step_label.setText(
+            self._localization.text(f"simulation.monitor.next.{status}")
+        )
+        self._set_monitor_progress(status)
+
+    def _refresh_log_summary(self) -> None:
+        run = self._monitor_run_record()
+        has_logs = bool(self._latest_log_text.strip())
+        if run is None:
+            key = "simulation.logs.summary.empty"
+            tone = "neutral"
+        elif run.status.value in {"preparing", "running"}:
+            key = "simulation.logs.summary.live" if has_logs else "simulation.logs.summary.waiting"
+            tone = "info"
+        elif run.status.value == "completed":
+            key = "simulation.logs.summary.completed"
+            tone = "success"
+        elif run.status.value == "failed":
+            key = "simulation.logs.summary.failed"
+            tone = "error"
+        elif run.status.value == "cancelled":
+            key = "simulation.logs.summary.cancelled"
+            tone = "warning"
+        else:
+            key = "simulation.logs.summary.empty"
+            tone = "neutral"
+        self._log_summary_label.setText(self._localization.text(key))
+        self._set_status_tone(self._log_summary_label, tone)
+
+    def _monitor_run_record(self) -> SimulationRunRecord | None:
+        if self._active_run is not None and self._active_run.status.value in {
+            "preparing",
+            "running",
+        }:
+            return self._active_run
+        selected = self._selected_run_record()
+        if selected is not None:
+            return selected
+        return self._run_history_records[0] if self._run_history_records else None
+
+    def _selected_run_record(self) -> SimulationRunRecord | None:
+        selected_run_id = self.selected_run_id()
+        if selected_run_id is None:
+            return None
+        for run in self._run_history_records:
+            if run.run_id == selected_run_id:
+                return run
+        return None
+
+    def _set_monitor_progress(self, status: str) -> None:
+        if status in {"preparing", "running"}:
+            self._monitor_progress.setRange(0, 0)
+            return
+        self._monitor_progress.setRange(0, 1)
+        self._monitor_progress.setValue(1 if status == "completed" else 0)
+
+    def _readiness_tone(self, summary: str, start_allowed: bool) -> str:
+        if start_allowed:
+            return "success"
+        if summary == self._localization.text("simulation.readiness.no_project"):
+            return "neutral"
+        if summary == self._localization.text("simulation.readiness.busy"):
+            return "info"
+        return "warning"
+
+    def _tone_for_run_status(self, status: str) -> str:
+        if status == "completed":
+            return "success"
+        if status == "failed":
+            return "error"
+        if status == "cancelled":
+            return "warning"
+        if status in {"preparing", "running"}:
+            return "info"
+        return "neutral"
+
+    def _set_status_tone(self, widget: QLabel, tone: str) -> None:
+        widget.setProperty("statusTone", tone)
+        widget.style().unpolish(widget)
+        widget.style().polish(widget)
+
+    def _format_timestamp(self, value: datetime) -> str:
+        local_value = value.astimezone()
+        return local_value.strftime("%Y-%m-%d %H:%M:%S")
+
+    def _format_optional_timestamp(self, value: datetime | None) -> str:
+        if value is None:
+            return self._localization.text("common.not_set")
+        return self._format_timestamp(value)
+
+    def _duration_for_run(self, run: SimulationRunRecord) -> str:
+        seconds = run.duration_seconds
+        if seconds is None and run.started_at is not None and run.status.value in {
+            "preparing",
+            "running",
+        }:
+            started_at = run.started_at
+            now = (
+                datetime.now(tz=started_at.tzinfo)
+                if started_at.tzinfo is not None
+                else datetime.now(tz=UTC).replace(tzinfo=None)
+            )
+            seconds = max(0.0, (now - started_at).total_seconds())
+        if seconds is None:
+            return self._localization.text("simulation.duration.not_available")
+        total_seconds = int(seconds)
+        minutes, second_part = divmod(total_seconds, 60)
+        hours, minute_part = divmod(minutes, 60)
+        if hours:
+            return self._localization.text(
+                "simulation.duration.hms",
+                hours=hours,
+                minutes=minute_part,
+                seconds=second_part,
+            )
+        if minutes:
+            return self._localization.text(
+                "simulation.duration.ms",
+                minutes=minutes,
+                seconds=second_part,
+            )
+        return self._localization.text(
+            "simulation.duration.seconds",
+            seconds=second_part,
+        )
+
     def _update_action_state(self) -> None:
         has_selected_run = self.selected_run_id() is not None
         launch_available = self._has_project and not self._run_in_progress
+        selected_run = self._selected_run_record()
+        has_completed_run = (
+            selected_run is not None and selected_run.status.value == "completed"
+        )
         self._start_button.setEnabled(
             self._has_project and self._start_allowed and not self._run_in_progress
         )
@@ -709,6 +1147,14 @@ class SimulationView(QWidget):
         self._retry_button.setEnabled(self._has_retry_target and not self._run_in_progress)
         self._open_run_button.setEnabled(has_selected_run)
         self._open_output_button.setEnabled(has_selected_run)
+        self._monitor_cancel_button.setEnabled(self._run_in_progress)
+        self._monitor_retry_button.setEnabled(
+            self._has_retry_target and not self._run_in_progress
+        )
+        self._monitor_results_button.setEnabled(has_completed_run)
+        self._monitor_open_run_button.setEnabled(has_selected_run)
+        self._monitor_open_output_button.setEnabled(has_selected_run)
+        self._start_button.setToolTip(self._readiness_next_step_label.text())
 
     def _refresh_responsive_layout(self, *, force: bool = False) -> None:
         wide = self.width() >= 1020
@@ -831,6 +1277,13 @@ class SimulationView(QWidget):
         )
         for widget in advanced_rows:
             self._config_form.setRowVisible(widget, self._advanced_mode)
+        if hasattr(self, "_advanced_hint_label"):
+            key = (
+                "simulation.advanced.visible"
+                if self._advanced_mode
+                else "simulation.advanced.hidden"
+            )
+            self._advanced_hint_label.setText(self._localization.text(key))
 
     def _current_section_key(self) -> str | None:
         item = self._section_nav.currentItem()
