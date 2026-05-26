@@ -232,10 +232,26 @@ QListWidget#ContextNavigation::item:hover:!selected {{
     color: {c["text"]};
 }}
 QFrame#ViewCard,
+QFrame#ModelOverviewCard,
+QFrame#ValidationSummaryCard,
 QFrame#WorkbenchSidebar {{
     background: {c["surface"]};
     border: 1px solid {c["border"]};
     border-radius: {r["md"]}px;
+}}
+QFrame#ModelOverviewCard {{
+    border-color: #dbeafe;
+}}
+QFrame#ValidationSummaryCard {{
+    background: {c["surface_alt"]};
+}}
+QFrame[scenePanelRole="guide"],
+QFrame[scenePanelRole="domain"],
+QFrame[scenePanelRole="palette"],
+QFrame[scenePanelRole="inspector"],
+QFrame[scenePanelRole="entities"] {{
+    background: {c["surface"]};
+    border-color: {c["border"]};
 }}
 QFrame#AppHeader {{
     background: {c["surface"]};
@@ -303,6 +319,26 @@ QLabel#MetricValue {{
 }}
 QLabel#MetricCaption {{
     font-size: 8.8pt;
+}}
+QLabel#ModelOverviewCounts {{
+    color: {c["text"]};
+    background: {c["surface_alt"]};
+    border: 1px solid {c["border"]};
+    border-radius: {r["md"]}px;
+    padding: 8px 10px;
+    font-size: 9pt;
+}}
+QLabel#ModelNextAction {{
+    color: #1e3a8a;
+    background: {c["primary_soft"]};
+    border: 1px solid #bfdbfe;
+    border-radius: {r["md"]}px;
+    padding: 8px 10px;
+    font-weight: 600;
+}}
+QLabel#ValidationIssueText {{
+    color: {c["text_muted"]};
+    background: transparent;
 }}
 QLabel#ViewTitle {{
     font-family: "Segoe UI";
@@ -453,6 +489,52 @@ QPushButton[sectionButton="true"]:checked {{
     background: {c["primary_soft"]};
     border-color: #93c5fd;
     color: {c["primary_pressed"]};
+}}
+QPushButton[sectionButton="true"][sectionStatus="complete"] {{
+    border-color: #bbf7d0;
+    color: #166534;
+}}
+QPushButton[sectionButton="true"][sectionStatus="warning"] {{
+    border-color: #fed7aa;
+    color: #92400e;
+}}
+QPushButton[sectionButton="true"][sectionStatus="error"] {{
+    border-color: #fecaca;
+    color: #991b1b;
+}}
+QPushButton[sectionButton="true"][sectionStatus="empty"] {{
+    color: {c["text_soft"]};
+}}
+QPushButton[sectionButton="true"][sectionStatus="advanced"] {{
+    border-color: #c4b5fd;
+    color: #5b21b6;
+    background: #f5f3ff;
+}}
+QPushButton[buttonRole="validationIssue"] {{
+    background: {c["surface"]};
+    color: {c["text"]};
+    border: 1px solid {c["border"]};
+    border-radius: {r["md"]}px;
+    padding: 8px 10px;
+    text-align: left;
+}}
+QPushButton[buttonRole="validationIssue"]:hover {{
+    background: {c["primary_soft"]};
+    border-color: #bfdbfe;
+}}
+QPushButton[buttonRole="validationIssue"][issueSeverity="error"] {{
+    border-left: 4px solid {c["error"]};
+}}
+QPushButton[buttonRole="validationIssue"][issueSeverity="warning"] {{
+    border-left: 4px solid {c["warning"]};
+}}
+QLabel#AdvancedWarning {{
+    color: #92400e;
+    background: {c["warning_soft"]};
+    border: 1px solid #fed7aa;
+    border-radius: {r["md"]}px;
+    padding: 9px 10px;
+    font-weight: 600;
 }}
 QToolButton#InfoButton {{
     background: {c["primary_soft"]};

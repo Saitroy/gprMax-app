@@ -654,6 +654,7 @@ class SceneCanvasPanel(QWidget):
         self._hint_label.setWordWrap(True)
         self._guide_card = QFrame()
         self._guide_card.setObjectName("ViewCard")
+        self._guide_card.setProperty("scenePanelRole", "guide")
         guide_layout = QVBoxLayout(self._guide_card)
         guide_layout.setContentsMargins(12, 12, 12, 12)
         guide_layout.setSpacing(6)
@@ -664,11 +665,9 @@ class SceneCanvasPanel(QWidget):
         self._legend_label = QLabel()
         self._legend_label.setWordWrap(True)
         self._model_state_label = QLabel()
+        self._model_state_label.setObjectName("StatusBadge")
+        self._model_state_label.setProperty("statusTone", "neutral")
         self._model_state_label.setWordWrap(True)
-        self._model_state_label.setStyleSheet(
-            "background:#eef6f8; border:1px solid #c7dfe6; border-radius:10px; "
-            "color:#244150; padding:8px 10px;"
-        )
         guide_layout.addWidget(self._guide_title)
         guide_layout.addWidget(self._guide_label)
         guide_layout.addWidget(self._legend_label)
@@ -771,6 +770,7 @@ class SceneCanvasPanel(QWidget):
         self._palette_buttons: list[_PaletteButton] = []
         self._palette_card = QFrame()
         self._palette_card.setObjectName("ViewCard")
+        self._palette_card.setProperty("scenePanelRole", "palette")
         palette_layout = QVBoxLayout(self._palette_card)
         palette_layout.setContentsMargins(12, 12, 12, 12)
         palette_layout.setSpacing(10)
@@ -852,6 +852,7 @@ class SceneCanvasPanel(QWidget):
 
         inspector = QFrame()
         inspector.setObjectName("ViewCard")
+        inspector.setProperty("scenePanelRole", "inspector")
         inspector_layout = QVBoxLayout(inspector)
         inspector_layout.setContentsMargins(12, 12, 12, 12)
         inspector_layout.setSpacing(10)
@@ -877,6 +878,7 @@ class SceneCanvasPanel(QWidget):
 
         domain_card = QFrame()
         domain_card.setObjectName("ViewCard")
+        domain_card.setProperty("scenePanelRole", "domain")
         self._domain_card = domain_card
         domain_layout = QVBoxLayout(domain_card)
         domain_layout.setContentsMargins(12, 12, 12, 12)
@@ -893,6 +895,7 @@ class SceneCanvasPanel(QWidget):
 
         self._entities_card = QFrame()
         self._entities_card.setObjectName("ViewCard")
+        self._entities_card.setProperty("scenePanelRole", "entities")
         entities_layout = QVBoxLayout(self._entities_card)
         entities_layout.setContentsMargins(12, 12, 12, 12)
         entities_layout.setSpacing(10)
@@ -2174,6 +2177,7 @@ class SceneCanvasPanel(QWidget):
             self._model_state_label.setText(
                 self._localization.text("editor.scene.model_state.empty")
             )
+            self._set_model_state_tone("neutral")
             return
         model = self._project.model
         issues = self._validation_service.issues_for_prefixes(
@@ -2199,6 +2203,19 @@ class SceneCanvasPanel(QWidget):
                 warnings=warnings,
             )
         )
+        if errors:
+            self._set_model_state_tone("error")
+        elif warnings:
+            self._set_model_state_tone("warning")
+        else:
+            self._set_model_state_tone("success")
+
+    def _set_model_state_tone(self, tone: str) -> None:
+        self._model_state_label.setProperty("statusTone", tone)
+        style = self._model_state_label.style()
+        style.unpolish(self._model_state_label)
+        style.polish(self._model_state_label)
+        self._model_state_label.update()
 
     def _select_entities_from_list(self) -> None:
         if self._selection_syncing:

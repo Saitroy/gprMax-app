@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QSignalBlocker, Qt, Signal
+from PySide6.QtCore import QSize, QSignalBlocker, Qt, Signal
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -19,7 +20,7 @@ from ...application.services.localization_service import LocalizationService
 from ...application.services.model_editor_service import ModelEditorService
 from ...application.services.validation_service import ValidationService
 from ...domain.models import Project
-from ...domain.validation import ValidationResult
+from ...domain.validation import ValidationIssue, ValidationResult, ValidationSeverity
 from ...infrastructure.gprmax.command_registry import GprMaxCommandRegistry
 from ..layouts.flow_layout import FlowLayout
 from ..splitters import configure_splitter
@@ -73,11 +74,22 @@ class ProjectView(QWidget):
         self._workflow_hint = QLabel()
         self._workflow_hint.setObjectName("SectionBody")
         self._workflow_hint.setWordWrap(True)
+        self._project_state_badge = QLabel()
+        self._project_state_badge.setObjectName("StatusBadge")
+        self._project_state_badge.setProperty("statusTone", "neutral")
+        self._model_counts_label = QLabel()
+        self._model_counts_label.setObjectName("ModelOverviewCounts")
+        self._model_counts_label.setWordWrap(True)
+        self._next_action_label = QLabel()
+        self._next_action_label.setObjectName("ModelNextAction")
+        self._next_action_label.setWordWrap(True)
         self._section_nav = QListWidget()
         self._section_nav.setObjectName("ContextNavigation")
+        self._section_nav.setWordWrap(True)
         self._section_nav.currentRowChanged.connect(self._on_section_changed)
         self._section_stack = QStackedWidget()
         self._section_buttons: dict[str, QPushButton] = {}
+        self._validation_issue_buttons: list[QPushButton] = []
 
         self._save_button = QPushButton()
         self._save_button.setObjectName("PrimaryButton")
@@ -133,14 +145,20 @@ class ProjectView(QWidget):
         self._subtitle.setWordWrap(True)
 
         project_card = QFrame()
-        project_card.setObjectName("ViewCard")
+        project_card.setObjectName("ModelOverviewCard")
         project_layout = QVBoxLayout(project_card)
         project_layout.setContentsMargins(20, 18, 20, 18)
         project_layout.setSpacing(8)
-        project_layout.addWidget(self._project_root_label)
+
+        project_heading = QHBoxLayout()
+        project_heading.addWidget(self._project_root_label, 1)
+        project_heading.addWidget(self._project_state_badge)
+        project_layout.addLayout(project_heading)
         project_layout.addWidget(self._project_file_label)
         project_layout.addWidget(self._summary_label)
+        project_layout.addWidget(self._model_counts_label)
         project_layout.addWidget(self._validation_label)
+        project_layout.addWidget(self._next_action_label)
         project_layout.addWidget(self._workflow_hint)
 
         card_actions = QHBoxLayout()
@@ -168,6 +186,26 @@ class ProjectView(QWidget):
         section_toolbar_layout.addWidget(self._section_toolbar_hint)
         section_toolbar_layout.addWidget(self._section_toolbar)
 
+        self._validation_summary_card = QFrame()
+        self._validation_summary_card.setObjectName("ValidationSummaryCard")
+        validation_summary_layout = QVBoxLayout(self._validation_summary_card)
+        validation_summary_layout.setContentsMargins(14, 12, 14, 12)
+        validation_summary_layout.setSpacing(8)
+        validation_summary_header = QHBoxLayout()
+        self._validation_summary_title = QLabel()
+        self._validation_summary_title.setObjectName("SectionTitle")
+        self._validation_summary_badge = QLabel()
+        self._validation_summary_badge.setObjectName("StatusBadge")
+        self._validation_summary_badge.setProperty("statusTone", "neutral")
+        validation_summary_header.addWidget(self._validation_summary_title, 1)
+        validation_summary_header.addWidget(self._validation_summary_badge)
+        self._validation_issue_container = QWidget()
+        self._validation_issue_layout = QVBoxLayout(self._validation_issue_container)
+        self._validation_issue_layout.setContentsMargins(0, 0, 0, 0)
+        self._validation_issue_layout.setSpacing(6)
+        validation_summary_layout.addLayout(validation_summary_header)
+        validation_summary_layout.addWidget(self._validation_issue_container)
+
         nav_card = QFrame()
         nav_card.setObjectName("ViewCard")
         self._nav_card = nav_card
@@ -178,7 +216,7 @@ class ProjectView(QWidget):
         self._nav_heading.setObjectName("SectionTitle")
         nav_layout.addWidget(self._nav_heading)
         nav_layout.addWidget(self._section_nav, 1)
-        self._nav_card.setVisible(False)
+        self._nav_card.setVisible(True)
 
         for _, panel in self._all_sections:
             self._section_stack.addWidget(panel)
@@ -197,6 +235,7 @@ class ProjectView(QWidget):
         layout.addWidget(self._header)
         layout.addWidget(self._subtitle)
         layout.addWidget(project_card)
+        layout.addWidget(self._validation_summary_card)
         layout.addWidget(self._section_toolbar_card)
         layout.addWidget(self._content_splitter, 1)
 
@@ -253,6 +292,7 @@ class ProjectView(QWidget):
         self._scene_panel.set_project(project)
         self._libraries_panel.set_project(project)
         self._advanced_panel.set_project(project)
+        self._refresh_project_workspace(validation, is_dirty)
 
     def _on_model_changed(self) -> None:
         project = self._model_editor_service.current_project()
@@ -292,6 +332,7 @@ class ProjectView(QWidget):
             self._set_validation_label(validation, True)
             self._workflow_hint.setText(self._localization.text("project.workflow_hint"))
 
+        self._refresh_project_workspace(validation, True)
         self.editor_changed.emit()
 
     def _format_validation(
@@ -330,12 +371,323 @@ class ProjectView(QWidget):
         self._set_validation_label_text(self._format_validation(validation, is_dirty), tone)
 
     def _set_validation_label_text(self, text: str, tone: str) -> None:
-        self._validation_label.setText(text)
-        self._validation_label.setProperty("statusTone", tone)
-        style = self._validation_label.style()
-        style.unpolish(self._validation_label)
-        style.polish(self._validation_label)
-        self._validation_label.update()
+        self._set_status_badge(self._validation_label, text, tone)
+
+    def _refresh_project_workspace(
+        self,
+        validation: ValidationResult | None,
+        is_dirty: bool,
+    ) -> None:
+        self._refresh_model_overview(validation, is_dirty)
+        self._refresh_validation_summary(validation)
+        self._refresh_section_statuses(validation)
+
+    def _refresh_model_overview(
+        self,
+        validation: ValidationResult | None,
+        is_dirty: bool,
+    ) -> None:
+        project = self._current_project
+        if project is None:
+            self._set_status_badge(
+                self._project_state_badge,
+                self._localization.text("project.overview.state.no_project"),
+                "neutral",
+            )
+            self._model_counts_label.setText(
+                self._localization.text("project.overview.counts.empty")
+            )
+            self._next_action_label.setText(
+                self._localization.text("project.next.no_project")
+            )
+            return
+
+        state_key = "project.overview.state.modified" if is_dirty else "project.overview.state.saved"
+        state_tone = "warning" if is_dirty else "success"
+        self._set_status_badge(
+            self._project_state_badge,
+            self._localization.text(state_key),
+            state_tone,
+        )
+        model = project.model
+        libraries = len(model.geometry_imports) + len(model.antenna_models)
+        advanced = len(project.advanced_input_overrides) + len(model.python_blocks)
+        self._model_counts_label.setText(
+            self._localization.text(
+                "project.overview.counts",
+                materials=len(model.materials),
+                waveforms=len(model.waveforms),
+                sources=len(model.sources),
+                receivers=len(model.receivers),
+                geometry=len(model.geometry),
+                libraries=libraries,
+                advanced=advanced,
+            )
+        )
+        self._next_action_label.setText(
+            self._localization.text(self._next_action_key(project, validation))
+        )
+
+    def _next_action_key(
+        self,
+        project: Project,
+        validation: ValidationResult | None,
+    ) -> str:
+        if validation is not None and validation.errors:
+            return "project.next.fix_errors"
+        if not project.model.waveforms:
+            return "project.next.add_waveform"
+        if not project.model.sources:
+            return "project.next.add_source"
+        if not project.model.receivers:
+            return "project.next.add_receiver"
+        if not project.model.geometry and not project.model.geometry_imports and not project.model.antenna_models:
+            return "project.next.add_geometry"
+        if validation is not None and validation.warnings:
+            return "project.next.review_warnings"
+        return "project.next.ready"
+
+    def _refresh_validation_summary(
+        self,
+        validation: ValidationResult | None,
+    ) -> None:
+        self._validation_summary_title.setText(
+            self._localization.text("project.validation_summary.title")
+        )
+        self._clear_validation_issue_rows()
+
+        if self._current_project is None:
+            self._set_status_badge(
+                self._validation_summary_badge,
+                self._localization.text("project.validation_summary.no_project_badge"),
+                "neutral",
+            )
+            self._add_validation_message_row(
+                self._localization.text("project.validation_summary.no_project")
+            )
+            return
+
+        if validation is None or not validation.issues:
+            self._set_status_badge(
+                self._validation_summary_badge,
+                self._localization.text("project.validation_summary.clean_badge"),
+                "success",
+            )
+            self._add_validation_message_row(
+                self._localization.text("project.validation_summary.clean")
+            )
+            return
+
+        tone = "error" if validation.errors else "warning"
+        self._set_status_badge(
+            self._validation_summary_badge,
+            self._localization.text(
+                "project.validation_summary.count_badge",
+                errors=len(validation.errors),
+                warnings=len(validation.warnings),
+            ),
+            tone,
+        )
+        for issue in validation.issues[:5]:
+            self._add_validation_issue_row(issue)
+
+    def _clear_validation_issue_rows(self) -> None:
+        while self._validation_issue_layout.count():
+            item = self._validation_issue_layout.takeAt(0)
+            widget = item.widget() if item is not None else None
+            if widget is not None:
+                widget.deleteLater()
+        self._validation_issue_buttons = []
+
+    def _add_validation_message_row(self, text: str) -> None:
+        label = QLabel(text)
+        label.setObjectName("ValidationIssueText")
+        label.setWordWrap(True)
+        self._validation_issue_layout.addWidget(label)
+
+    def _add_validation_issue_row(self, issue: ValidationIssue) -> None:
+        section_key = self._section_key_for_validation_path(issue.path)
+        section_name = self._section_title(section_key)
+        message = self._localization.translate_message(issue.message)
+        severity = self._localization.severity_text(issue.severity.value)
+        text = self._localization.text(
+            "project.validation_summary.issue_row",
+            severity=severity,
+            section=section_name,
+            message=self._short_text(message, 112),
+        )
+        button = QPushButton(text)
+        button.setProperty("buttonRole", "validationIssue")
+        button.setProperty("issueSeverity", issue.severity.value)
+        button.setToolTip(
+            self._localization.text(
+                "project.validation_summary.issue_tooltip",
+                section=section_name,
+                message=message,
+            )
+        )
+        button.clicked.connect(lambda _checked=False, key=section_key: self._select_section_key(key))
+        self._validation_issue_buttons.append(button)
+        self._validation_issue_layout.addWidget(button)
+
+    def _refresh_section_statuses(
+        self,
+        validation: ValidationResult | None,
+    ) -> None:
+        for row in range(self._section_nav.count()):
+            item = self._section_nav.item(row)
+            if item is None:
+                continue
+            section_key = item.data(Qt.ItemDataRole.UserRole + 1)
+            if not isinstance(section_key, str):
+                continue
+            status = self._section_status_for_key(section_key, validation)
+            status_text = self._section_status_text(status)
+            title = self._section_title(section_key)
+            purpose = self._section_purpose(section_key)
+            item.setText(title)
+            item.setForeground(QColor(self._section_status_color(status)))
+            item.setToolTip(
+                self._localization.text(
+                    "project.section_status.tooltip",
+                    section=title,
+                    status=status_text,
+                    purpose=purpose,
+                )
+            )
+            item.setData(Qt.ItemDataRole.UserRole + 2, status)
+
+            button = self._section_buttons.get(section_key)
+            if button is not None:
+                button.setText(title)
+                button.setProperty("sectionStatus", status)
+                button.setToolTip(item.toolTip())
+                self._repolish(button)
+
+    def _section_status_for_key(
+        self,
+        section_key: str,
+        validation: ValidationResult | None,
+    ) -> str:
+        if self._current_project is None:
+            return "neutral"
+        issues = self._validation_issues_for_section(section_key, validation)
+        if any(issue.severity == ValidationSeverity.ERROR for issue in issues):
+            return "error"
+        if issues:
+            return "warning"
+        if section_key == "project.section.advanced":
+            return "advanced"
+        if not self._section_has_content(section_key):
+            return "empty"
+        return "complete"
+
+    def _validation_issues_for_section(
+        self,
+        section_key: str,
+        validation: ValidationResult | None,
+    ) -> list[ValidationIssue]:
+        if validation is None:
+            return []
+        return [
+            issue
+            for issue in validation.issues
+            if self._section_key_for_validation_path(issue.path) == section_key
+        ]
+
+    def _section_key_for_validation_path(self, path: str) -> str:
+        if path.startswith(("metadata.", "model.title", "model.domain", "model.scan_trace_count")):
+            return "project.section.area"
+        if path.startswith("model.materials"):
+            return "project.section.materials"
+        if path.startswith("model.waveforms"):
+            return "project.section.signal"
+        if path.startswith("model.sources"):
+            return "project.section.sources"
+        if path.startswith("model.receivers"):
+            return "project.section.receivers"
+        if path.startswith(("model.geometry_imports", "model.antenna_models")):
+            return "project.section.libraries"
+        if path.startswith("model.geometry_views"):
+            return "project.section.preview"
+        if path.startswith("model.geometry"):
+            return "project.section.geometry"
+        if path.startswith(("advanced", "raw", "python", "model.python_blocks")):
+            return "project.section.advanced"
+        if path.startswith(("preview", "input", "run_config")):
+            return "project.section.preview"
+        return "project.section.area"
+
+    def _section_has_content(self, section_key: str) -> bool:
+        project = self._current_project
+        if project is None:
+            return False
+        model = project.model
+        if section_key == "project.section.scene":
+            return any(
+                (
+                    model.geometry,
+                    model.geometry_imports,
+                    model.antenna_models,
+                    model.sources,
+                    model.receivers,
+                )
+            )
+        if section_key == "project.section.area":
+            return True
+        if section_key == "project.section.materials":
+            return bool(model.materials)
+        if section_key == "project.section.signal":
+            return bool(model.waveforms)
+        if section_key == "project.section.sources":
+            return bool(model.sources)
+        if section_key == "project.section.receivers":
+            return bool(model.receivers)
+        if section_key == "project.section.geometry":
+            return bool(model.geometry)
+        if section_key == "project.section.libraries":
+            return bool(model.geometry_imports or model.antenna_models)
+        if section_key == "project.section.preview":
+            return True
+        if section_key == "project.section.advanced":
+            return bool(project.advanced_input_overrides or model.python_blocks)
+        return False
+
+    def _section_title(self, section_key: str) -> str:
+        return self._localization.text(section_key)
+
+    def _section_purpose(self, section_key: str) -> str:
+        section_id = section_key.removeprefix("project.section.")
+        return self._localization.text(f"project.section_purpose.{section_id}")
+
+    def _section_status_text(self, status: str) -> str:
+        return self._localization.text(f"project.section_status.{status}")
+
+    def _section_status_color(self, status: str) -> str:
+        return {
+            "complete": "#166534",
+            "warning": "#92400e",
+            "error": "#991b1b",
+            "empty": "#94a3b8",
+            "advanced": "#5b21b6",
+        }.get(status, "#64748b")
+
+    def _short_text(self, text: str, limit: int) -> str:
+        normalized = " ".join(text.split())
+        if len(normalized) <= limit:
+            return normalized
+        return f"{normalized[: max(0, limit - 1)].rstrip()}..."
+
+    def _set_status_badge(self, label: QLabel, text: str, tone: str) -> None:
+        label.setText(text)
+        label.setProperty("statusTone", tone)
+        self._repolish(label)
+
+    def _repolish(self, widget: QWidget) -> None:
+        style = widget.style()
+        style.unpolish(widget)
+        style.polish(widget)
+        widget.update()
 
     def retranslate_ui(self) -> None:
         self._header.setText(self._localization.text("project.title"))
@@ -407,6 +759,7 @@ class ProjectView(QWidget):
                 if not self._advanced_mode and title_key == "project.section.advanced":
                     continue
                 item = QListWidgetItem(self._localization.text(title_key))
+                item.setSizeHint(QSize(180, 54))
                 item.setData(Qt.ItemDataRole.UserRole, stack_index)
                 item.setData(Qt.ItemDataRole.UserRole + 1, title_key)
                 self._section_nav.addItem(item)
@@ -419,6 +772,7 @@ class ProjectView(QWidget):
                 self._section_nav.setCurrentRow(target_row)
 
         self._rebuild_section_toolbar()
+        self._refresh_section_statuses(self._validation_service.current_validation())
         if target_row >= 0:
             self._on_section_changed(target_row)
 
@@ -447,9 +801,10 @@ class ProjectView(QWidget):
             section_key = item.data(Qt.ItemDataRole.UserRole + 1)
             if not isinstance(section_key, str):
                 continue
-            button = QPushButton(item.text())
+            button = QPushButton(self._section_title(section_key))
             button.setCheckable(True)
             button.setProperty("sectionButton", True)
+            button.setProperty("sectionStatus", "neutral")
             button.setToolTip(
                 self._localization.text(
                     f"project.section_tip.{section_key.removeprefix('project.section.')}"
