@@ -406,6 +406,24 @@ QPushButton[buttonRole="ghost"]:hover {{
 QPushButton[buttonRole="ghost"]:pressed {{
     background: #dbeafe;
 }}
+QPushButton[buttonRole="projectCard"] {{
+    background: {c["surface"]};
+    color: {c["text"]};
+    border: 1px solid {c["border"]};
+    border-radius: {r["md"]}px;
+    padding: 10px 12px;
+    text-align: left;
+    min-height: 34px;
+}}
+QPushButton[buttonRole="projectCard"]:hover {{
+    background: {c["primary_soft"]};
+    color: {c["primary_pressed"]};
+    border-color: #bfdbfe;
+}}
+QPushButton[buttonRole="projectCard"]:pressed {{
+    background: #dbeafe;
+    border-color: #93c5fd;
+}}
 QPushButton[buttonRole="destructive"] {{
     background: {c["error_soft"]};
     color: #991b1b;

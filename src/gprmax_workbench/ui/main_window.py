@@ -158,6 +158,8 @@ class MainWindow(QMainWindow):
         self._welcome_view.open_project_requested.connect(self._on_open_project)
         self._welcome_view.documentation_requested.connect(self._open_documentation_dialog)
         self._welcome_view.recent_project_requested.connect(self._on_open_recent_project)
+        self._welcome_view.example_project_requested.connect(self._on_open_example_project)
+        self._welcome_view.settings_requested.connect(self._open_settings_page)
         self._documentation_dialog.example_project_requested.connect(
             self._on_open_example_project
         )
@@ -261,6 +263,7 @@ class MainWindow(QMainWindow):
         )
         self._refresh_results_view()
         self._refresh_welcome_summary()
+        self._refresh_welcome_runtime_status()
         self._refresh_shell_status()
         self._simulation_view.set_runtime_label(
             self._context.simulation_service.runtime_label()
@@ -300,6 +303,7 @@ class MainWindow(QMainWindow):
         self._welcome_view.set_example_projects(self._discover_example_projects())
         self._documentation_dialog.set_examples(self._discover_example_projects())
         self._refresh_welcome_summary()
+        self._refresh_welcome_runtime_status()
         self._refresh_shell_status()
         self._update_window_title()
 
@@ -324,6 +328,34 @@ class MainWindow(QMainWindow):
         self._refresh_welcome_summary()
         self._refresh_shell_status()
         self._update_window_title()
+
+    def _refresh_welcome_runtime_status(self) -> None:
+        runtime_info = self._context.runtime_service.runtime_info()
+        if runtime_info.is_healthy:
+            mode = self._localization.text(
+                f"settings.runtime_mode.{runtime_info.engine.mode.value}"
+            )
+            version = (
+                runtime_info.gprmax_version
+                or runtime_info.bundled_engine_version
+                or self._localization.text("common.not_set")
+            )
+            self._welcome_view.set_runtime_status(
+                text=self._localization.text(
+                    "welcome.runtime.ready",
+                    mode=mode,
+                    version=version,
+                ),
+                detail=self._localization.text("welcome.runtime.ready_detail"),
+                tone="success",
+            )
+            return
+
+        self._welcome_view.set_runtime_status(
+            text=self._localization.text("welcome.runtime.issue"),
+            detail=self._localization.text("welcome.runtime.issue_detail"),
+            tone="error",
+        )
 
     def _refresh_shell_status(self) -> None:
         if not hasattr(self, "_sidebar_project_status"):
@@ -672,7 +704,113 @@ class MainWindow(QMainWindow):
             )
         )
 
+    def _confirm_project_replacement_or_close(self) -> bool:
+        if self._has_active_run():
+            QMessageBox.warning(
+                self,
+                self._localization.text("guard.active_run.title"),
+                self._localization.text("guard.active_run.body"),
+            )
+            return False
+
+        state = self._context.workspace_service.state
+        if state.current_project is None or not state.current_project_dirty:
+            return True
+
+        return self._confirm_discard_or_save_changes()
+
+    def _has_active_run(self) -> bool:
+        active_run = self._context.workspace_service.state.active_run
+        return active_run is not None and active_run.status.value in {
+            "preparing",
+            "running",
+        }
+
+    def _confirm_discard_or_save_changes(self) -> bool:
+        project = self._context.workspace_service.state.current_project
+        project_name = project.metadata.name if project is not None else ""
+
+        dialog = QMessageBox(self)
+        dialog.setIcon(QMessageBox.Icon.Warning)
+        dialog.setWindowTitle(self._localization.text("guard.unsaved.title"))
+        dialog.setText(
+            self._localization.text(
+                "guard.unsaved.body",
+                project_name=project_name,
+            )
+        )
+        dialog.setInformativeText(self._localization.text("guard.unsaved.detail"))
+
+        save_button = dialog.addButton(
+            self._localization.text("common.save"),
+            QMessageBox.ButtonRole.AcceptRole,
+        )
+        discard_button = dialog.addButton(
+            self._localization.text("guard.unsaved.discard"),
+            QMessageBox.ButtonRole.DestructiveRole,
+        )
+        cancel_button = dialog.addButton(
+            self._localization.text("guard.unsaved.cancel"),
+            QMessageBox.ButtonRole.RejectRole,
+        )
+        dialog.setDefaultButton(cancel_button)
+        dialog.setEscapeButton(cancel_button)
+        dialog.exec()
+
+        clicked = dialog.clickedButton()
+        if clicked is save_button:
+            return self._save_current_project(show_status=False)
+        if clicked is discard_button:
+            return True
+        return False
+
+    def _save_current_project(self, *, show_status: bool) -> bool:
+        if self._context.workspace_service.state.current_project is None:
+            QMessageBox.information(
+                self,
+                self._localization.text("message.save_project.title"),
+                self._localization.text("message.save_project.no_project"),
+            )
+            return False
+
+        try:
+            validation = self._context.workspace_service.save_current_project()
+        except ProjectValidationError as exc:
+            QMessageBox.warning(
+                self,
+                self._localization.text("message.save_project.title"),
+                "\n".join(
+                    f"{issue.path}: {self._localization.translate_message(issue.message)}"
+                    for issue in exc.validation.errors
+                ),
+            )
+            return False
+
+        self.refresh_views()
+
+        if show_status:
+            warning_text = ""
+            if validation.warnings:
+                warning_text = self._localization.text(
+                    "status.project_saved_warnings",
+                    warnings="; ".join(
+                        self._localization.translate_message(issue.message)
+                        for issue in validation.warnings
+                    ),
+                )
+            self.statusBar().showMessage(
+                self._localization.text(
+                    "status.project_saved",
+                    warning_text=warning_text,
+                ),
+                8000,
+            )
+        return True
+
     def _on_new_project(self) -> None:
+        if not self._confirm_project_replacement_or_close():
+            return
+
         dialog = NewProjectDialog(self._localization, self)
         if dialog.exec() == 0:
             return
@@ -720,10 +858,22 @@ class MainWindow(QMainWindow):
         self._open_project_at(Path(path))
 
     def _open_project_at(self, path: Path) -> None:
+        target = path.expanduser()
+        if not target.exists():
+            QMessageBox.warning(
+                self,
+                self._localization.text("message.open_project.title"),
+                self._localization.text("message.open_project.missing"),
+            )
+            return
+
+        if not self._confirm_project_replacement_or_close():
+            return
+
         try:
-            project = self._context.workspace_service.open_project(path)
+            project = self._context.workspace_service.open_project(target)
         except Exception as exc:
-            LOGGER.exception("Failed to open project at %s", path)
+            LOGGER.exception("Failed to open project at %s", target)
             QMessageBox.critical(
                 self,
                 self._localization.text("message.open_project.title"),
@@ -742,46 +892,7 @@ class MainWindow(QMainWindow):
         )
 
     def _on_save_project(self) -> None:
-        if self._context.workspace_service.state.current_project is None:
-            QMessageBox.information(
-                self,
-                self._localization.text("message.save_project.title"),
-                self._localization.text("message.save_project.no_project"),
-            )
-            return
-
-        try:
-            validation = self._context.workspace_service.save_current_project()
-        except ProjectValidationError as exc:
-            QMessageBox.warning(
-                self,
-                self._localization.text("message.save_project.title"),
-                "\n".join(
-                    f"{issue.path}: {self._localization.translate_message(issue.message)}"
-                    for issue in exc.validation.errors
-                ),
-            )
-            return
-
-        self.refresh_views()
-
-        warning_text = ""
-        if validation.warnings:
-            warning_text = self._localization.text(
-                "status.project_saved_warnings",
-                warnings="; ".join(
-                    self._localization.translate_message(issue.message)
-                    for issue in validation.warnings
-                ),
-            )
-
-        self.statusBar().showMessage(
-            self._localization.text(
-                "status.project_saved",
-                warning_text=warning_text,
-            ),
-            8000,
-        )
+        self._save_current_project(show_status=True)
 
     def _on_project_editor_changed(self) -> None:
         self._refresh_shell_state()
@@ -1255,6 +1366,9 @@ class MainWindow(QMainWindow):
         return list(sizes)
 
     def closeEvent(self, event) -> None:  # noqa: N802
+        if not self._confirm_project_replacement_or_close():
+            event.ignore()
+            return
         self._save_ui_state()
         super().closeEvent(event)
 

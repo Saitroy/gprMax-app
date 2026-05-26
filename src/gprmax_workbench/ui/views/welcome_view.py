@@ -35,6 +35,8 @@ class WelcomeView(QWidget):
     open_project_requested = Signal()
     documentation_requested = Signal()
     recent_project_requested = Signal(str)
+    example_project_requested = Signal(str)
+    settings_requested = Signal()
 
     def __init__(
         self,
@@ -44,9 +46,13 @@ class WelcomeView(QWidget):
         super().__init__(parent)
         self._localization = localization
         self._current_project: Project | None = None
+        self._recent_projects: list[RecentProject] = []
         self._example_projects: list[ExampleProjectItem] = []
         self._readiness_text = ""
         self._activity_text = ""
+        self._runtime_text = ""
+        self._runtime_detail = ""
+        self._runtime_tone = "neutral"
 
         self._title = QLabel()
         self._title.setObjectName("ViewTitle")
@@ -121,12 +127,64 @@ class WelcomeView(QWidget):
         status_layout.addWidget(self._status_activity)
         self._status_card = self._build_card(self._status_heading, status_content)
 
+        self._runtime_heading = QLabel()
+        self._runtime_heading.setObjectName("SectionTitle")
+        self._runtime_status = QLabel()
+        self._runtime_status.setObjectName("StatusBadge")
+        self._runtime_status.setProperty("statusTone", "neutral")
+        self._runtime_status.setWordWrap(True)
+        self._runtime_detail_label = QLabel()
+        self._runtime_detail_label.setObjectName("SectionBody")
+        self._runtime_detail_label.setWordWrap(True)
+        self._runtime_settings_button = QPushButton()
+        self._runtime_settings_button.setProperty("buttonRole", "ghost")
+        self._runtime_settings_button.clicked.connect(self.settings_requested.emit)
+        runtime_content = QWidget()
+        runtime_layout = QVBoxLayout(runtime_content)
+        runtime_layout.setContentsMargins(0, 0, 0, 0)
+        runtime_layout.setSpacing(8)
+        runtime_layout.addWidget(self._runtime_status)
+        runtime_layout.addWidget(self._runtime_detail_label)
+        runtime_layout.addWidget(
+            self._runtime_settings_button,
+            0,
+            Qt.AlignmentFlag.AlignLeft,
+        )
+        self._runtime_card = self._build_card(self._runtime_heading, runtime_content)
+
         self._recent_list = QListWidget()
         self._recent_list.setObjectName("RecentProjectsList")
         self._recent_list.itemActivated.connect(self._emit_recent_project)
         self._recent_card_heading = QLabel()
         self._recent_card_heading.setObjectName("SectionTitle")
         self._recent_card = self._build_card(self._recent_card_heading, self._recent_list)
+
+        self._examples_heading = QLabel()
+        self._examples_heading.setObjectName("SectionTitle")
+        self._examples_body = QLabel()
+        self._examples_body.setObjectName("SectionBody")
+        self._examples_body.setWordWrap(True)
+        self._examples_content = QWidget()
+        self._examples_layout = FlowLayout(horizontal_spacing=10, vertical_spacing=10)
+        examples_content_layout = QVBoxLayout(self._examples_content)
+        examples_content_layout.setContentsMargins(0, 0, 0, 0)
+        examples_content_layout.setSpacing(10)
+        examples_content_layout.addWidget(self._examples_body)
+        examples_content_layout.addLayout(self._examples_layout)
+        self._examples_card = self._build_card(
+            self._examples_heading,
+            self._examples_content,
+        )
+
+        self._quick_start_heading = QLabel()
+        self._quick_start_heading.setObjectName("SectionTitle")
+        self._quick_start_body = QLabel()
+        self._quick_start_body.setObjectName("SectionBody")
+        self._quick_start_body.setWordWrap(True)
+        self._quick_start_card = self._build_card(
+            self._quick_start_heading,
+            self._quick_start_body,
+        )
 
         self._dashboard = QWidget()
         self._dashboard_grid = QGridLayout(self._dashboard)
@@ -158,18 +216,41 @@ class WelcomeView(QWidget):
         self._activity_text = activity_text
         self._refresh_project_status()
 
+    def set_runtime_status(self, *, text: str, detail: str, tone: str) -> None:
+        self._runtime_text = text
+        self._runtime_detail = detail
+        self._runtime_tone = tone
+        self._refresh_runtime_status()
+
     def set_recent_projects(self, recent_projects: Sequence[RecentProject]) -> None:
+        self._recent_projects = list(recent_projects)
+        self._refresh_recent_projects()
+
+    def _refresh_recent_projects(self) -> None:
         self._recent_list.clear()
-        if not recent_projects:
+        if not self._recent_projects:
             item = QListWidgetItem(self._localization.text("welcome.no_recent_projects"))
             item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsSelectable)
             self._recent_list.addItem(item)
             return
 
-        for project in recent_projects:
-            item = QListWidgetItem(f"{project.name}\n{project.path}")
+        for project in self._recent_projects:
+            path_exists = project.path.exists()
+            state_text = self._localization.text(
+                "welcome.recent.available" if path_exists else "welcome.recent.missing"
+            )
+            opened_at = project.last_opened_at.strftime("%Y-%m-%d %H:%M")
+            item = QListWidgetItem(
+                self._localization.text(
+                    "welcome.recent.item",
+                    name=project.name,
+                    path=project.path,
+                    opened_at=opened_at,
+                    state=state_text,
+                )
+            )
             item.setData(Qt.ItemDataRole.UserRole, str(project.path))
-            item.setToolTip(project.last_opened_at.isoformat())
+            item.setToolTip(str(project.path))
             self._recent_list.addItem(item)
 
     def set_example_projects(
@@ -177,6 +258,7 @@ class WelcomeView(QWidget):
         examples: Sequence[ExampleProjectItem],
     ) -> None:
         self._example_projects = list(examples)
+        self._refresh_examples()
 
     def _emit_recent_project(self, item: QListWidgetItem) -> None:
         path = item.data(Qt.ItemDataRole.UserRole)
@@ -195,10 +277,21 @@ class WelcomeView(QWidget):
             self._localization.text("action.open_documentation")
         )
         self._status_heading.setText(self._localization.text("welcome.status.title"))
+        self._runtime_heading.setText(self._localization.text("welcome.runtime.title"))
+        self._runtime_settings_button.setText(
+            self._localization.text("welcome.runtime.settings_action")
+        )
         self._recent_card_heading.setText(self._localization.text("welcome.recent_projects"))
+        self._examples_heading.setText(self._localization.text("welcome.examples.title"))
+        self._examples_body.setText(self._localization.text("welcome.examples.description"))
+        self._quick_start_heading.setText(self._localization.text("welcome.quick_start.title"))
+        self._quick_start_body.setText(self._quick_start_text())
         self._workflow_info_button.setText(self._localization.text("welcome.workflow.info"))
         self._workflow_info_button.setToolTip(self._workflow_help_text())
         self._refresh_project_status()
+        self._refresh_runtime_status()
+        self._refresh_recent_projects()
+        self._refresh_examples()
 
     def resizeEvent(self, event) -> None:  # noqa: N802
         super().resizeEvent(event)
@@ -271,8 +364,45 @@ class WelcomeView(QWidget):
             self._activity_tone(activity_text),
         )
 
+    def _refresh_runtime_status(self) -> None:
+        text = self._runtime_text or self._localization.text("welcome.runtime.pending")
+        detail = self._runtime_detail or self._localization.text(
+            "welcome.runtime.pending_detail"
+        )
+        self._set_status_badge(self._runtime_status, text, self._runtime_tone)
+        self._runtime_detail_label.setText(detail)
+
+    def _refresh_examples(self) -> None:
+        while self._examples_layout.count():
+            item = self._examples_layout.takeAt(0)
+            if item is None:
+                continue
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
+        if not self._example_projects:
+            empty_label = QLabel(self._localization.text("welcome.examples.none"))
+            empty_label.setObjectName("SectionBody")
+            empty_label.setWordWrap(True)
+            self._examples_layout.addWidget(empty_label)
+            return
+
+        for example in self._example_projects:
+            button = QPushButton(example.title)
+            button.setProperty("buttonRole", "projectCard")
+            button.setToolTip(example.description)
+            button.clicked.connect(
+                lambda _checked=False, path=example.path: self._emit_example_project(path)
+            )
+            self._examples_layout.addWidget(button)
+
+    def _emit_example_project(self, path: str) -> None:
+        self.example_project_requested.emit(path)
+
     def _set_status_badge(self, label: QLabel, text: str, tone: str) -> None:
         label.setText(text)
+        label.setToolTip(text)
         label.setProperty("statusTone", tone)
         style = label.style()
         style.unpolish(label)
@@ -338,12 +468,18 @@ class WelcomeView(QWidget):
             if item is not None:
                 item.widget()
 
-        if self.width() >= 980:
+        if self.width() >= 1040:
             self._dashboard_grid.addWidget(self._status_card, 0, 0)
-            self._dashboard_grid.addWidget(self._recent_card, 0, 1)
+            self._dashboard_grid.addWidget(self._runtime_card, 0, 1)
+            self._dashboard_grid.addWidget(self._recent_card, 1, 0)
+            self._dashboard_grid.addWidget(self._examples_card, 1, 1)
+            self._dashboard_grid.addWidget(self._quick_start_card, 2, 0, 1, 2)
         else:
             self._dashboard_grid.addWidget(self._status_card, 0, 0)
-            self._dashboard_grid.addWidget(self._recent_card, 1, 0)
+            self._dashboard_grid.addWidget(self._runtime_card, 1, 0)
+            self._dashboard_grid.addWidget(self._recent_card, 2, 0)
+            self._dashboard_grid.addWidget(self._examples_card, 3, 0)
+            self._dashboard_grid.addWidget(self._quick_start_card, 4, 0)
 
         self._dashboard_grid.setColumnStretch(0, 1)
         self._dashboard_grid.setColumnStretch(1, 1)
@@ -363,6 +499,16 @@ class WelcomeView(QWidget):
             [
                 self._localization.text("welcome.workflow.title"),
                 self._localization.text("welcome.workflow.description"),
+                self._localization.text("welcome.workflow.step1"),
+                self._localization.text("welcome.workflow.step2"),
+                self._localization.text("welcome.workflow.step3"),
+                self._localization.text("welcome.workflow.step4"),
+            ]
+        )
+
+    def _quick_start_text(self) -> str:
+        return "\n".join(
+            [
                 self._localization.text("welcome.workflow.step1"),
                 self._localization.text("welcome.workflow.step2"),
                 self._localization.text("welcome.workflow.step3"),
