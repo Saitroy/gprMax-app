@@ -64,7 +64,9 @@ class ProjectView(QWidget):
         self._pending_section_key: str | None = None
 
         self._project_root_label = QLabel()
+        self._project_root_label.setObjectName("SectionTitle")
         self._project_file_label = QLabel()
+        self._project_file_label.setObjectName("SectionBody")
         self._summary_label = QLabel()
         self._summary_label.setWordWrap(True)
         self._validation_label = QLabel()
@@ -74,6 +76,7 @@ class ProjectView(QWidget):
         self._workflow_hint = QLabel()
         self._workflow_hint.setObjectName("SectionBody")
         self._workflow_hint.setWordWrap(True)
+        self._workflow_hint.setVisible(False)
         self._project_state_badge = QLabel()
         self._project_state_badge.setObjectName("StatusBadge")
         self._project_state_badge.setProperty("statusTone", "neutral")
@@ -168,6 +171,7 @@ class ProjectView(QWidget):
 
         self._section_toolbar_card = QFrame()
         self._section_toolbar_card.setObjectName("ViewCard")
+        self._section_toolbar_card.setVisible(False)
         section_toolbar_layout = QVBoxLayout(self._section_toolbar_card)
         section_toolbar_layout.setContentsMargins(14, 12, 14, 12)
         section_toolbar_layout.setSpacing(8)
@@ -236,7 +240,6 @@ class ProjectView(QWidget):
         layout.addWidget(self._subtitle)
         layout.addWidget(project_card)
         layout.addWidget(self._validation_summary_card)
-        layout.addWidget(self._section_toolbar_card)
         layout.addWidget(self._content_splitter, 1)
 
         self.retranslate_ui()
@@ -256,11 +259,14 @@ class ProjectView(QWidget):
         self._is_dirty = is_dirty
         self._save_button.setEnabled(project is not None)
         self._project_root_label.setText(
-            str(project.root) if project else self._localization.text("project.no_project")
+            project.metadata.name if project else self._localization.text("project.no_project")
         )
+        self._project_root_label.setToolTip(str(project.root) if project else "")
         self._project_file_label.setText(
             self._localization.text("project.manifest", path=project_file or "-")
         )
+        self._project_file_label.setVisible(project is not None and bool(project_file))
+        self._summary_label.setVisible(project is None)
 
         if project is None:
             self._summary_label.setText(self._localization.text("project.summary.empty"))
@@ -456,28 +462,11 @@ class ProjectView(QWidget):
         )
         self._clear_validation_issue_rows()
 
-        if self._current_project is None:
-            self._set_status_badge(
-                self._validation_summary_badge,
-                self._localization.text("project.validation_summary.no_project_badge"),
-                "neutral",
-            )
-            self._add_validation_message_row(
-                self._localization.text("project.validation_summary.no_project")
-            )
-            return
-
         if validation is None or not validation.issues:
-            self._set_status_badge(
-                self._validation_summary_badge,
-                self._localization.text("project.validation_summary.clean_badge"),
-                "success",
-            )
-            self._add_validation_message_row(
-                self._localization.text("project.validation_summary.clean")
-            )
+            self._validation_summary_card.setVisible(False)
             return
 
+        self._validation_summary_card.setVisible(True)
         tone = "error" if validation.errors else "warning"
         self._set_status_badge(
             self._validation_summary_badge,

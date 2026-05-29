@@ -83,21 +83,22 @@ class ProjectViewSmokeTests(unittest.TestCase):
 
             self.assertIn(localization.text("project.section.advanced"), labels)
 
-    def test_model_editor_toolbar_switches_sections(self) -> None:
+    def test_model_editor_context_navigation_switches_sections(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             view = self._build_view(temp_dir)
             localization = view._localization  # noqa: SLF001
 
-            materials_button = view._section_buttons["project.section.materials"]  # noqa: SLF001
-            materials_button.click()
+            materials_row = view._row_for_section_key("project.section.materials")  # noqa: SLF001
+            view._section_nav.setCurrentRow(materials_row)  # noqa: SLF001
 
             self.assertIs(view._section_stack.currentWidget(), view._materials_panel)  # noqa: SLF001
-            self.assertTrue(materials_button.isChecked())
+            self.assertEqual(view._section_nav.currentRow(), materials_row)  # noqa: SLF001
             self.assertEqual(
-                materials_button.text(),
+                view._section_nav.currentItem().text(),  # noqa: SLF001
                 localization.text("project.section.materials"),
             )
-            self.assertFalse(view._nav_card.isVisible())  # noqa: SLF001
+            self.assertFalse(view._nav_card.isHidden())  # noqa: SLF001
+            self.assertTrue(view._section_toolbar_card.isHidden())  # noqa: SLF001
 
     def test_scene_edit_request_switches_to_matching_section(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

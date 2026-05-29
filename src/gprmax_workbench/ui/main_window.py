@@ -180,9 +180,6 @@ class MainWindow(QMainWindow):
         self._simulation_view.open_output_directory_requested.connect(
             self._on_open_output_directory
         )
-        self._simulation_view.results_requested.connect(
-            self._on_open_results_from_simulation
-        )
 
     def _create_actions(self) -> None:
         self._new_project_action.triggered.connect(self._on_new_project)
@@ -1145,13 +1142,6 @@ class MainWindow(QMainWindow):
         path = self._context.simulation_service.open_output_directory(run_record)
         if path is not None:
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
-
-    def _on_open_results_from_simulation(self) -> None:
-        run_record = self._resolve_target_run()
-        if run_record is not None:
-            self._context.results_service.focus_run(run_record.run_id)
-            self._refresh_results_view()
-        self._show_results_page()
 
     def _refresh_simulation_runtime_state(self) -> None:
         project = self._context.workspace_service.state.current_project

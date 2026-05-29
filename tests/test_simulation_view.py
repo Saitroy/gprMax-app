@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 import sys
 import unittest
-from datetime import UTC, datetime
 from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -14,9 +13,8 @@ from PySide6.QtWidgets import QApplication, QWidget
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from gprmax_workbench.application.services.localization_service import LocalizationService
-from gprmax_workbench.domain.execution_status import SimulationMode, SimulationStatus
+from gprmax_workbench.domain.execution_status import SimulationMode
 from gprmax_workbench.domain.gprmax_config import SimulationRunConfig
-from gprmax_workbench.domain.simulation import SimulationRunRecord
 from gprmax_workbench.ui.views.simulation_view import (
     SimulationConfigurationError,
     SimulationView,
@@ -127,34 +125,16 @@ class SimulationViewTests(unittest.TestCase):
         self.assertTrue(view._preview_button.isEnabled())  # noqa: SLF001
         self.assertTrue(view._export_button.isEnabled())  # noqa: SLF001
 
-    def test_monitor_section_preserves_old_saved_section_keys(self) -> None:
+    def test_old_monitor_section_state_falls_back_to_logs(self) -> None:
         view = SimulationView(
             localization=LocalizationService("en"),
             runtime_label="Bundled runtime",
         )
 
-        self.assertGreaterEqual(  # noqa: SLF001
-            view._row_for_section_key("simulation.section.monitor"),
-            0,
-        )
-
-        view.apply_ui_state({"section_key": "simulation.section.logs"})
+        self.assertEqual(view._row_for_section_key("simulation.section.monitor"), -1)  # noqa: SLF001
+        view.apply_ui_state({"section_key": "simulation.section.monitor"})
 
         self.assertEqual(view._current_section_key(), "simulation.section.logs")  # noqa: SLF001
-
-    def test_completed_run_updates_monitor_and_results_action(self) -> None:
-        view = SimulationView(
-            localization=LocalizationService("en"),
-            runtime_label="Bundled runtime",
-        )
-        run = _run_record(status=SimulationStatus.COMPLETED)
-
-        view.set_project_state(project_name="Demo", is_dirty=False)
-        view.set_run_state(None, [run])
-
-        self.assertEqual(view.selected_run_id(), "run-1")
-        self.assertEqual(view._monitor_run_id_label.text(), "run-1")  # noqa: SLF001
-        self.assertTrue(view._monitor_results_button.isEnabled())  # noqa: SLF001
 
     def test_standard_desktop_width_keeps_splitters_horizontal(self) -> None:
         view = SimulationView(
@@ -210,34 +190,6 @@ class SimulationViewTests(unittest.TestCase):
         resized_sizes = view._content_splitter.sizes()  # noqa: SLF001
         self.assertGreater(resized_sizes[0], original_sizes[0] + 40)
         self.assertLess(abs(resized_sizes[0] - 320), 100)
-
-
-def _run_record(*, status: SimulationStatus) -> SimulationRunRecord:
-    started_at = datetime(2026, 5, 26, 8, 0, tzinfo=UTC)
-    finished_at = (
-        datetime(2026, 5, 26, 8, 2, tzinfo=UTC)
-        if status in {SimulationStatus.COMPLETED, SimulationStatus.FAILED, SimulationStatus.CANCELLED}
-        else None
-    )
-    return SimulationRunRecord(
-        run_id="run-1",
-        project_root=Path("D:/demo/project"),
-        project_name="Demo",
-        status=status,
-        created_at=datetime(2026, 5, 26, 7, 59, tzinfo=UTC),
-        working_directory=Path("D:/demo/project/runs/run-1"),
-        input_file=Path("D:/demo/project/runs/run-1/input/simulation.in"),
-        output_directory=Path("D:/demo/project/runs/run-1/output"),
-        stdout_log_path=Path("D:/demo/project/runs/run-1/stdout.log"),
-        stderr_log_path=Path("D:/demo/project/runs/run-1/stderr.log"),
-        combined_log_path=Path("D:/demo/project/runs/run-1/combined.log"),
-        metadata_path=Path("D:/demo/project/runs/run-1/metadata.json"),
-        configuration=SimulationRunConfig(),
-        runtime_label="Bundled runtime",
-        started_at=started_at,
-        finished_at=finished_at,
-        error_summary="Failed" if status == SimulationStatus.FAILED else None,
-    )
 
 
 if __name__ == "__main__":

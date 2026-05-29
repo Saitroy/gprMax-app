@@ -234,20 +234,16 @@ QListWidget#ContextNavigation::item:hover:!selected {{
 QFrame#ViewCard,
 QFrame#ModelOverviewCard,
 QFrame#ValidationSummaryCard,
-QFrame#SimulationMonitorCard,
 QFrame#WorkbenchSidebar {{
     background: {c["surface"]};
     border: 1px solid {c["border"]};
     border-radius: {r["md"]}px;
 }}
 QFrame#ModelOverviewCard {{
-    border-color: #dbeafe;
+    border-color: {c["border"]};
 }}
 QFrame#ValidationSummaryCard {{
     background: {c["surface_alt"]};
-}}
-QFrame#SimulationMonitorCard {{
-    border-color: #bfdbfe;
 }}
 QFrame[scenePanelRole="guide"],
 QFrame[scenePanelRole="domain"],
@@ -752,8 +748,8 @@ QLabel#StatusBadge {{
     color: #075985;
     border: 1px solid #bae6fd;
     border-radius: {r["md"]}px;
-    padding: 5px 9px;
-    font-weight: 700;
+    padding: 4px 8px;
+    font-weight: 600;
 }}
 QLabel#StatusPill[statusTone="neutral"],
 QLabel#StatusBadge[statusTone="neutral"] {{
@@ -789,62 +785,12 @@ QLabel#StatusDetail {{
     color: {c["text_muted"]};
     padding: 0 4px;
 }}
-QLabel#RunStageLabel {{
-    color: {c["text"]};
-    font-size: 11pt;
-    font-weight: 600;
-}}
-QLabel#LogSummary {{
-    background: {c["surface_muted"]};
-    color: {c["text_muted"]};
-    border: 1px solid {c["border"]};
-    border-radius: {r["md"]}px;
-    padding: 8px 10px;
-}}
-QLabel#LogSummary[statusTone="success"] {{
-    background: {c["success_soft"]};
-    color: #166534;
-    border-color: #bbf7d0;
-}}
-QLabel#LogSummary[statusTone="warning"] {{
-    background: {c["warning_soft"]};
-    color: #92400e;
-    border-color: #fed7aa;
-}}
-QLabel#LogSummary[statusTone="error"] {{
-    background: {c["error_soft"]};
-    color: #991b1b;
-    border-color: #fecaca;
-}}
-QLabel#LogSummary[statusTone="info"] {{
-    background: {c["info_soft"]};
-    color: #075985;
-    border-color: #bae6fd;
-}}
-QLabel#RunIssueSummary {{
-    color: #991b1b;
-    background: {c["error_soft"]};
-    border: 1px solid #fecaca;
-    border-radius: {r["md"]}px;
-    padding: 8px 10px;
-}}
 QLabel#SimulationAdvancedHint {{
     color: {c["text_muted"]};
     background: {c["surface_alt"]};
     border: 1px solid {c["border"]};
     border-radius: {r["md"]}px;
     padding: 8px 10px;
-}}
-QProgressBar#RunStageProgress {{
-    background: {c["surface_muted"]};
-    border: 1px solid {c["border"]};
-    border-radius: {r["md"]}px;
-    min-height: 10px;
-    max-height: 10px;
-}}
-QProgressBar#RunStageProgress::chunk {{
-    background: {c["primary"]};
-    border-radius: {r["md"]}px;
 }}
 QLabel[toolbarRole="section"] {{
     color: {c["text_muted"]};
