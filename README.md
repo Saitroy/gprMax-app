@@ -9,7 +9,7 @@
 
 Приложение рассчитано на геофизиков, инженеров, исследователей, преподавателей и студентов, которым нужен понятный рабочий интерфейс: создать проект, настроить модель, запустить расчёт и посмотреть результаты.
 
-> Статус: Alpha `0.2.1` UX-fix milestone. Эта версия закрывает первый цикл улучшений интерфейса редактирования модели. Следующий целевой этап — Alpha `0.3.0` Installer Candidate.
+> Статус: Alpha `0.3.0` Installer Candidate. Эта версия предназначена для тестеров и проверяет installer-first сценарий на Windows x64.
 
 ### Что есть в приложении
 
@@ -129,7 +129,7 @@
 К issue желательно приложить:
 
 - скриншоты проблемы;
-- версию приложения, например `0.2.1`;
+- версию приложения, например `0.3.0`;
 - версию Windows;
 - краткое описание того, что вы делали перед появлением бага;
 - по возможности support bundle, название проекта или run, в котором это произошло.
@@ -140,7 +140,7 @@
 
 It is designed for geophysicists, engineers, researchers, teachers, and students who want a practical desktop workbench: create a project, edit the model, run a simulation, and inspect the results.
 
-> Status: Alpha `0.2.1` UX-fix milestone. This release closes the first usability pass around model editing. The next target is Alpha `0.3.0` Installer Candidate.
+> Status: Alpha `0.3.0` Installer Candidate. This build is intended for testers and validates the Windows x64 installer-first path.
 
 ### What the application includes
 
@@ -194,7 +194,7 @@ The application is currently in ALPHA testing.
 Please report bugs via [GitHub Issues](https://github.com/Saitroy/gprMax-app/issues) and include:
 
 - screenshots of the problem;
-- application version, for example `0.2.1`;
+- application version, for example `0.3.0`;
 - Windows version;
 - a short note about what you were doing right before the bug appeared;
 - if possible, a support bundle, project name, or run where it happened.

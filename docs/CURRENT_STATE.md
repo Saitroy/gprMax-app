@@ -1,6 +1,6 @@
 # Current State
 
-Last updated: 2026-04-16
+Last updated: 2026-05-30
 
 This document describes the current implemented product state. It is intentionally factual and should be read as a companion to the architectural and roadmap documents.
 
@@ -113,23 +113,24 @@ Current layout behavior:
 
 The current implementation is intentionally bounded in a few places:
 
-- the first public installer pipeline now exists as repository tooling under `packaging/windows/`, and a local bundle plus installer dry-run has now succeeded, but it still has not been validated through a shipped public release or a clean-machine external pilot;
+- the first public installer pipeline now exists as repository tooling under `packaging/windows/`, and the Alpha `0.3.0` installer candidate has a fresh local bundle plus installer build for tester distribution, but it still has not been validated through a clean-machine external pilot;
 - splitter sizes are not yet persisted between sessions;
 - guided editor coverage does not yet span the full `gprMax` command surface;
 - results analysis is currently limited to the existing A-scan and bounded B-scan workflows;
 - public release support assets now exist in the repository, but they still need maintainer sign-off, clean-machine validation, and an exercised outside-user support loop.
-- Alpha `0.2.1` is treated as the UX-fix milestone; Alpha `0.3.0` should be the installer-first candidate.
+- Alpha `0.3.0` is treated as the installer-first candidate for trusted tester distribution.
 
 ## Verification Snapshot
 
 Latest local verification used for this documentation update:
 
-- `python -m ruff check src tests packaging tools` -> passed
-- `.venv\Scripts\python.exe tools\run_tests.py` -> `119` tests OK
+- `.venv\Scripts\python.exe -m ruff check src tests packaging tools` -> passed
+- `.venv\Scripts\python.exe tools\run_tests.py` -> `120` tests OK
 - offscreen UI smoke is covered by the current Project, Scene, Simulation, Results, and Settings view tests
-- last full local bundle/installer dry-run was completed on 2026-04-10
-- Alpha `0.2.1` bundle/installer still needs a fresh rebuild and smoke test before sending to testers
-- clean Windows VM install/launch/uninstall remains a gate for Alpha `0.3.0`
+- Alpha `0.3.0` desktop bundle was built under `dist/windows-0.3.0-release/GPRMax Workbench`
+- bundle smoke test passed during the Alpha `0.3.0` build
+- Alpha `0.3.0` installer and release assets were staged under `dist/installer-0.3.0-release`
+- clean Windows VM install/launch/uninstall remains pending before broader public distribution
 
 ## Related Documents
 

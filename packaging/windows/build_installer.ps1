@@ -37,9 +37,9 @@ $iscc = Find-ISCC
 function Write-ReleaseChecksums([string]$InstallerRoot, [string]$BundleRoot, [string]$AppVersion) {
     $artifacts = @(
         (Join-Path $InstallerRoot "gprmax-workbench-$AppVersion-windows-x64.exe"),
-        (Join-Path $BundleRoot "release-manifest.json"),
-        (Join-Path $BundleRoot "licenses\app-python\inventory-app-python.json"),
-        (Join-Path $BundleRoot "licenses\engine-python\inventory-engine-python.json")
+        (Join-Path $InstallerRoot "release-manifest.json"),
+        (Join-Path $InstallerRoot "inventory-app-python.json"),
+        (Join-Path $InstallerRoot "inventory-engine-python.json")
     )
 
     $lines = @()
@@ -53,6 +53,30 @@ function Write-ReleaseChecksums([string]$InstallerRoot, [string]$BundleRoot, [st
 
     $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
     [System.IO.File]::WriteAllLines((Join-Path $InstallerRoot "SHA256SUMS.txt"), $lines, $utf8NoBom)
+}
+
+function Copy-ReleaseMetadata([string]$InstallerRoot, [string]$BundleRoot) {
+    $artifacts = @(
+        @{
+            Source = Join-Path $BundleRoot "release-manifest.json"
+            Destination = Join-Path $InstallerRoot "release-manifest.json"
+        },
+        @{
+            Source = Join-Path $BundleRoot "licenses\app-python\inventory-app-python.json"
+            Destination = Join-Path $InstallerRoot "inventory-app-python.json"
+        },
+        @{
+            Source = Join-Path $BundleRoot "licenses\engine-python\inventory-engine-python.json"
+            Destination = Join-Path $InstallerRoot "inventory-engine-python.json"
+        }
+    )
+
+    foreach ($artifact in $artifacts) {
+        if (-not (Test-Path $artifact.Source)) {
+            throw "Expected release metadata not found: $($artifact.Source)"
+        }
+        Copy-Item -LiteralPath $artifact.Source -Destination $artifact.Destination -Force
+    }
 }
 
 if (-not $iscc) {
@@ -83,6 +107,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "Inno Setup build failed."
 }
 
+Copy-ReleaseMetadata $resolvedOutputRoot $resolvedBundleRoot
 Write-ReleaseChecksums $resolvedOutputRoot $resolvedBundleRoot $AppVersion
 
 Write-Host "Installer created under $resolvedOutputRoot"

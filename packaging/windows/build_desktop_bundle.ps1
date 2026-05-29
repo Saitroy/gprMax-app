@@ -79,28 +79,23 @@ function Remove-DirectoryTree([string]$PathValue) {
         return
     }
 
-    $drive = Get-FreeDriveLetter
+    $resolvedPath = [System.IO.Path]::GetFullPath($PathValue)
     $emptyRoot = Join-Path $env:TEMP "gprmax-workbench-empty-dir"
     New-Item -ItemType Directory -Path $emptyRoot -Force | Out-Null
 
-    cmd.exe /c "subst $drive `"$PathValue`""
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to map '$PathValue' to a temporary drive."
-    }
-
     try {
-        $null = robocopy $emptyRoot "$drive\" /MIR /NFL /NDL /NJH /NJS /NP
-        if ($LASTEXITCODE -gt 7) {
-            throw "robocopy failed while cleaning '$PathValue' with exit code $LASTEXITCODE"
-        }
+        Remove-Item -LiteralPath $resolvedPath -Recurse -Force -ErrorAction Stop
     }
-    finally {
-        cmd.exe /c "subst $drive /d" | Out-Null
+    catch {
+        $null = robocopy $emptyRoot $resolvedPath /MIR /NFL /NDL /NJH /NJS /NP
+        if ($LASTEXITCODE -gt 7) {
+            throw "robocopy failed while cleaning '$resolvedPath' with exit code $LASTEXITCODE"
+        }
+        Remove-Item -LiteralPath $resolvedPath -Recurse -Force -ErrorAction Stop
     }
 
-    cmd.exe /c "rmdir /s /q `"$PathValue`""
-    if (Test-Path $PathValue) {
-        throw "Failed to remove directory tree '$PathValue'"
+    if (Test-Path $resolvedPath) {
+        throw "Failed to remove directory tree '$resolvedPath'"
     }
 }
 
@@ -165,6 +160,19 @@ function Update-EngineManifestForPortableRuntime([string]$ManifestPath) {
         $notes += $portableNote
     }
     $manifest.notes = $notes
+
+    $manifestJson = $manifest | ConvertTo-Json -Depth 10
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($ManifestPath, $manifestJson, $utf8NoBom)
+}
+
+function Update-EngineManifestAppVersion([string]$ManifestPath, [string]$AppVersion) {
+    if (-not (Test-Path $ManifestPath)) {
+        return
+    }
+
+    $manifest = Get-Content $ManifestPath -Raw | ConvertFrom-Json
+    $manifest.app_version = $AppVersion
 
     $manifestJson = $manifest | ConvertTo-Json -Depth 10
     $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
@@ -453,6 +461,7 @@ New-Item -ItemType Directory -Path $supportRoot -Force | Out-Null
 
 Copy-DirectoryTree $sourceEngineRoot (Join-Path $bundleRoot "engine")
 Optimize-EngineRuntime $bundleRoot
+Update-EngineManifestAppVersion (Join-Path $bundleRoot "engine\manifest.json") $AppVersion
 Copy-Item (Join-Path $repoRoot "README.md") (Join-Path $docsRoot "README.md")
 Copy-Item (Join-Path $repoRoot "SUPPORT.md") (Join-Path $docsRoot "SUPPORT.md")
 Copy-Item (Join-Path $repoRoot "docs\PUBLIC_RELEASE_CHECKLIST.md") (Join-Path $docsRoot "PUBLIC_RELEASE_CHECKLIST.md")

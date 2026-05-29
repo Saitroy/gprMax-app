@@ -1,162 +1,144 @@
-# GPRMax Workbench Alpha 0.2.1
+# GPRMax Workbench Alpha 0.3.0
 
-Приложение доступно на двух языках: русский и английский.
-The application is available in two languages: Russian and English.
+> Приложение доступно на двух языках: русском и английском.  
+> The application is available in two languages: Russian and English.
 
 ## Русский
 
 ### Назначение релиза
 
-Эта сборка предназначена для управляемого alpha-тестирования на Windows x64 и закрывает UX-fix milestone после Alpha `0.2.0`.
+Alpha `0.3.0` — installer-first сборка для управляемого тестирования на Windows x64.
 
-Она подходит для геологов, геофизиков, студентов и ранних партнёров по тестированию, которым нужен desktop-интерфейс вокруг `gprMax` без CLI-first сценария работы.
+Главная цель этой версии: дать тестерам один установочный файл, проверить bundled runtime без отдельной установки Python или `gprMax`, собрать обратную связь по установке, запуску, диагностике runtime и базовому рабочему сценарию `Welcome -> Project -> Simulation -> Results`.
 
-Это ещё не первый публичный bundled production release. Следующий целевой milestone — Alpha `0.3.0` Installer Candidate, где главный фокус будет на installer-first сценарии.
+Это prerelease для доверенных тестеров, не первый публичный production release.
 
-### Рекомендуемые метаданные GitHub prerelease
+### GitHub prerelease
 
-- Заголовок релиза: `GPRMax Workbench Alpha 0.2.1`
+- Заголовок релиза: `GPRMax Workbench Alpha 0.3.0`
 - Тип релиза: GitHub `pre-release`
-- Рекомендуемые assets:
-  - Windows installer `gprmax-workbench-0.2.1-windows-x64.exe`
-  - `release-manifest.json`
-  - generated license inventories для runtime приложения и engine
-  - checksum file для опубликованных артефактов
-  - эти alpha release notes как body релиза
+- Рекомендуемый tag: `v0.3.0-alpha.1`
+- Application version metadata: `0.3.0`
+- Bundled engine: `gprMax 3.1.7`
 
-Рекомендуемый prerelease tag: `v0.2.1-alpha.1`. Application version metadata синхронизирована как `0.2.1`.
+### Assets для публикации
 
-### Что могут протестировать alpha-тестеры
+- `gprmax-workbench-0.3.0-windows-x64.exe`
+- `release-manifest.json`
+- `inventory-app-python.json`
+- `inventory-engine-python.json`
+- `SHA256SUMS.txt`
+- эти release notes как body релиза
 
-- создать новый проект из `Welcome`
-- открыть существующий проект и работать с recent projects
-- пройти сценарий “создать модель -> настроить материалы -> разместить источник/приёмник -> проверить сцену -> сохранить”
-- редактировать модель через guided workspace sections
-- проверить подписи сцены, фильтры слоёв и summary состояния модели
-- просматривать и экспортировать сгенерированный `gprMax` input
-- запускать CPU simulations с live logs и run history
-- анализировать outputs через `Results`, включая A-scan и bounded B-scan workflows
-- смотреть runtime diagnostics через `Settings`
+### Что тестировать
 
-### Что уже проверено для этого alpha-кандидата
+- установку на Windows x64 через installer;
+- запуск приложения без ручной настройки Python, `gprMax` или `PATH`;
+- создание нового проекта из `Welcome`;
+- открытие существующего проекта и recent projects;
+- редактирование модели в секциях `Project`;
+- preview/export сгенерированного `gprMax` input;
+- CPU simulation flow с live logs и run history;
+- просмотр результатов через `Results`, включая A-scan и bounded B-scan workflows;
+- runtime diagnostics в `Settings`;
+- сбор support bundle при воспроизводимой проблеме.
 
-- `python -m ruff check src tests packaging tools` прошёл успешно
-- `.venv\Scripts\python.exe tools\run_tests.py` прошёл: `119` tests OK
-- локальная сборка Windows desktop bundle прошла успешно
-- bundle smoke test прошёл успешно
-- сборка Windows installer прошла успешно
-- silent install, launch и uninstall dry-run прошли на рабочей машине сопровождающего
+### Проверено для этого кандидата
+
+- `.venv\Scripts\python.exe -m pip install -e .[dev,release]` синхронизировал package metadata на `0.3.0`.
+- `.venv\Scripts\python.exe -m ruff check src tests packaging tools` прошёл успешно.
+- `.venv\Scripts\python.exe tools\run_tests.py` прошёл: `120` tests OK.
+- Windows desktop bundle собран в `dist/windows-0.3.0-release/GPRMax Workbench`.
+- `packaging/windows/smoke_test_bundle.ps1` прошёл в составе bundle build.
+- Windows installer собран в `dist/installer-0.3.0-release`.
+- Release assets, manifest, license inventories и checksums находятся рядом в `dist/installer-0.3.0-release`.
 
 ### Известные ограничения
 
-- размеры splitter'ов пока не сохраняются между сессиями
-- покрытие guided editor пока намеренно неполное относительно полного набора возможностей `gprMax`
-- workflows анализа и экспорта результатов пока ограничены
-- installer для alpha-тестеров может быть неподписанным; code signing переносится на beta-подготовку
-- clean-machine validation вне рабочей машины сопровождающего остаётся обязательным gate для Alpha `0.3.0`
-- licensing и compliance sign-off всё ещё обязательны перед первым публичным bundled release
+- installer для alpha-тестеров неподписанный; code signing остаётся задачей beta/public-release подготовки;
+- clean-machine install/launch/uninstall проверка на отдельной Windows VM не выполнялась в этом локальном прогоне;
+- guided editor покрывает не весь command surface `gprMax`;
+- splitter/layout state пока не полностью сохраняется между сессиями;
+- результаты и экспорт анализа пока ограничены текущими A-scan и bounded B-scan workflows;
+- licensing/compliance sign-off всё ещё нужен перед публичным bundled release.
 
-### На что тестерам стоит обратить внимание
-
-- создание проектов и повторное открытие проектов
-- flow редактирования модели для типовых учебных и полевых сценариев
-- понятность simulation readiness feedback и live logs
-- удобство просмотра результатов на реальных project data
-- installer experience на обычных Windows x64 машинах
-- runtime diagnostics в неполной или нестандартной среде
-
-### Примечания по установке
-
-- поддерживаемая alpha-платформа: Windows x64
-- bundled application должна работать без отдельной установки Python или `gprMax`
-- optional Visual Studio Build Tools task нужен только для advanced engine rebuild или repair workflows
-
-### Сообщения об ошибках
+### Баг-репорты
 
 Используйте [GitHub Issues](https://github.com/Saitroy/gprMax-app/issues) и прикладывайте:
 
-- версию приложения, например `0.2.1`
-- версию Windows
-- краткое описание того, что вы делали
-- screenshots, если они помогают понять проблему
-- проект или run, где возникла ошибка, если это известно
-- logs или support bundle, если они доступны
+- версию приложения `0.3.0`;
+- версию Windows;
+- install type: bundled installer build;
+- key runtime diagnostics из `Settings`;
+- шаги воспроизведения;
+- screenshots, logs или support bundle, если доступны.
 
 ## English
 
-### Release intent
+### Release Intent
 
-This build is intended for guided alpha testing on Windows x64 and closes the UX-fix milestone after Alpha `0.2.0`.
+Alpha `0.3.0` is the installer-first build for guided Windows x64 testing.
 
-It is suitable for geologists, geophysicists, students, and early design partners who need a desktop workflow around `gprMax` without working directly through a CLI-first setup.
+The main goal is to give testers one installer file, validate the bundled runtime without a separate Python or `gprMax` setup, and collect feedback on installation, launch, runtime diagnostics, and the baseline `Welcome -> Project -> Simulation -> Results` workflow.
 
-This is not yet the first public bundled production release. The next target milestone is Alpha `0.3.0` Installer Candidate, focused on the installer-first path.
+This is a trusted-tester prerelease, not the first public production release.
 
-### Suggested GitHub prerelease metadata
+### GitHub Prerelease
 
-- Release title: `GPRMax Workbench Alpha 0.2.1`
+- Release title: `GPRMax Workbench Alpha 0.3.0`
 - Release type: GitHub `pre-release`
-- Suggested assets:
-  - Windows installer `gprmax-workbench-0.2.1-windows-x64.exe`
-  - `release-manifest.json`
-  - generated license inventories for app and engine runtimes
-  - checksum file for the published artifacts
-  - these alpha release notes as the release body
+- Recommended tag: `v0.3.0-alpha.1`
+- Application version metadata: `0.3.0`
+- Bundled engine: `gprMax 3.1.7`
 
-Recommended prerelease tag: `v0.2.1-alpha.1`. Application version metadata is aligned as `0.2.1`.
+### Assets To Publish
 
-### What alpha testers can do
+- `gprmax-workbench-0.3.0-windows-x64.exe`
+- `release-manifest.json`
+- `inventory-app-python.json`
+- `inventory-engine-python.json`
+- `SHA256SUMS.txt`
+- these release notes as the release body
 
-- create a new project from `Welcome`
-- open an existing project and work with recent projects
-- complete the “create model -> configure materials -> place source/receiver -> check scene -> save” workflow
-- edit the model through guided workspace sections
-- check scene labels, layer filters, and model-state summary
-- preview and export generated `gprMax` input
-- run CPU simulations with live logs and run history
-- inspect outputs through `Results`, including A-scan and bounded B-scan workflows
-- inspect runtime diagnostics through `Settings`
+### Tester Focus
 
-### Validation completed for this alpha candidate
+- install on Windows x64 through the installer;
+- launch without configuring Python, `gprMax`, or `PATH`;
+- create a new project from `Welcome`;
+- open an existing project and recent projects;
+- edit the model in `Project` sections;
+- preview/export generated `gprMax` input;
+- run the CPU simulation flow with live logs and run history;
+- inspect outputs through `Results`, including A-scan and bounded B-scan workflows;
+- inspect runtime diagnostics in `Settings`;
+- collect a support bundle for reproducible issues.
 
-- `python -m ruff check src tests packaging tools` passed
-- `.venv\Scripts\python.exe tools\run_tests.py` passed: `119` tests OK
-- local Windows desktop bundle build passed
-- bundle smoke test passed
-- Windows installer build passed
-- silent install, launch, and uninstall dry-run passed on the maintainer workstation
+### Validation Completed For This Candidate
 
-### Known limits
+- `.venv\Scripts\python.exe -m pip install -e .[dev,release]` synchronized package metadata to `0.3.0`.
+- `.venv\Scripts\python.exe -m ruff check src tests packaging tools` passed.
+- `.venv\Scripts\python.exe tools\run_tests.py` passed: `120` tests OK.
+- Windows desktop bundle was built at `dist/windows-0.3.0-release/GPRMax Workbench`.
+- `packaging/windows/smoke_test_bundle.ps1` passed as part of the bundle build.
+- Windows installer was built at `dist/installer-0.3.0-release`.
+- Release assets, manifest, license inventories, and checksums are staged together in `dist/installer-0.3.0-release`.
 
-- splitter sizes are not yet persisted between sessions
-- guided editor coverage is still intentionally partial relative to the full `gprMax` command surface
-- broader results analysis and export workflows are still limited
-- the alpha installer may be unsigned for trusted testers; code signing is deferred to beta preparation
-- clean-machine validation outside the maintainer workstation remains a required gate for Alpha `0.3.0`
-- licensing and compliance sign-off are still required before a first public bundled release
+### Known Limits
 
-### Tester focus areas
+- the alpha installer is unsigned; code signing remains deferred to beta/public-release preparation;
+- clean-machine install/launch/uninstall validation on a separate Windows VM was not performed in this local pass;
+- guided editor coverage is still partial relative to the full `gprMax` command surface;
+- splitter/layout state is not fully persisted between sessions yet;
+- broader results analysis and export workflows are still limited to the current A-scan and bounded B-scan paths;
+- licensing/compliance sign-off is still required before a public bundled release.
 
-- project creation and project reopening
-- model editing flow for common classroom and field scenarios
-- simulation readiness feedback and live log clarity
-- results browsing on real project data
-- installer experience on typical Windows x64 machines
-- runtime diagnostics when the environment is incomplete or unusual
-
-### Installation notes
-
-- Windows x64 is the supported alpha target
-- the bundled application is intended to run without requiring a separate Python or `gprMax` installation
-- the optional Visual Studio Build Tools task is only for advanced engine rebuild or repair workflows
-
-### Bug reporting
+### Bug Reporting
 
 Please use [GitHub Issues](https://github.com/Saitroy/gprMax-app/issues) and include:
 
-- application version, for example `0.2.1`
-- Windows version
-- a short description of what you were doing
-- screenshots when relevant
-- the project or run where the problem occurred, if known
-- logs or a support bundle when available
+- application version `0.3.0`;
+- Windows version;
+- install type: bundled installer build;
+- key runtime diagnostics from `Settings`;
+- reproduction steps;
+- screenshots, logs, or a support bundle when available.

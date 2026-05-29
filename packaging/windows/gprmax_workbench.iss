@@ -1,6 +1,6 @@
 #define MyAppName "GPRMax Workbench"
 #ifndef AppVersion
-  #define AppVersion "0.2.1"
+  #define AppVersion "0.3.0"
 #endif
 #ifndef SourceDir
   #error SourceDir must be defined from build_installer.ps1
