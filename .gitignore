@@ -39,3 +39,4 @@ Thumbs.db
 .DS_Store
 /demo_artifacts
 /docs/redesign
+/examples/cylinder_bscan_2d/runs
