@@ -125,16 +125,19 @@ class SimulationViewTests(unittest.TestCase):
         self.assertTrue(view._preview_button.isEnabled())  # noqa: SLF001
         self.assertTrue(view._export_button.isEnabled())  # noqa: SLF001
 
-    def test_old_monitor_section_state_falls_back_to_logs(self) -> None:
+    def test_monitor_section_state_is_restored(self) -> None:
         view = SimulationView(
             localization=LocalizationService("en"),
             runtime_label="Bundled runtime",
         )
 
-        self.assertEqual(view._row_for_section_key("simulation.section.monitor"), -1)  # noqa: SLF001
+        self.assertGreaterEqual(  # noqa: SLF001
+            view._row_for_section_key("simulation.section.monitor"),
+            0,
+        )
         view.apply_ui_state({"section_key": "simulation.section.monitor"})
 
-        self.assertEqual(view._current_section_key(), "simulation.section.logs")  # noqa: SLF001
+        self.assertEqual(view._current_section_key(), "simulation.section.monitor")  # noqa: SLF001
 
     def test_standard_desktop_width_keeps_splitters_horizontal(self) -> None:
         view = SimulationView(

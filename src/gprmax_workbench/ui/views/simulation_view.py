@@ -10,11 +10,13 @@ from PySide6.QtWidgets import (
     QComboBox,
     QFormLayout,
     QFrame,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QListWidget,
     QListWidgetItem,
     QPlainTextEdit,
+    QProgressBar,
     QPushButton,
     QSizePolicy,
     QSplitter,
@@ -70,6 +72,8 @@ class SimulationView(QWidget):
         self._pending_section_key: str | None = None
         self._run_state_signature: tuple[object, ...] | None = None
         self._validation_messages: list[str] = []
+        self._active_run: SimulationRunRecord | None = None
+        self._run_history_records: list[SimulationRunRecord] = []
 
         self._title = QLabel()
         self._title.setObjectName("ViewTitle")
@@ -152,6 +156,30 @@ class SimulationView(QWidget):
         self._run_history.setSpacing(4)
         self._run_history.currentRowChanged.connect(self._on_history_selection_changed)
 
+        self._monitor_status_badge = QLabel()
+        self._monitor_status_badge.setObjectName("StatusBadge")
+        self._monitor_status_badge.setProperty("statusTone", "neutral")
+        self._monitor_status_badge.setWordWrap(True)
+        self._monitor_stage_label = QLabel()
+        self._monitor_stage_label.setObjectName("SectionTitle")
+        self._monitor_stage_label.setWordWrap(True)
+        self._monitor_detail_label = QLabel()
+        self._monitor_detail_label.setObjectName("StatusDetail")
+        self._monitor_detail_label.setWordWrap(True)
+        self._monitor_progress = QProgressBar()
+        self._monitor_progress.setObjectName("RunStageProgress")
+        self._monitor_progress.setTextVisible(False)
+        self._monitor_run_id = QLabel("-")
+        self._monitor_created = QLabel("-")
+        self._monitor_started = QLabel("-")
+        self._monitor_finished = QLabel("-")
+        self._monitor_duration = QLabel("-")
+        self._monitor_output = QLabel("-")
+        self._monitor_output.setWordWrap(True)
+        self._monitor_error = QLabel()
+        self._monitor_error.setObjectName("StatusDetail")
+        self._monitor_error.setWordWrap(True)
+
         self._preview_button = QPushButton()
         self._preview_button.setProperty("buttonRole", "secondary")
         self._preview_button.clicked.connect(self.preview_requested.emit)
@@ -229,6 +257,20 @@ class SimulationView(QWidget):
         )
         self._launch_page = launch_page
 
+        monitor_page = QWidget()
+        monitor_layout = QVBoxLayout(monitor_page)
+        monitor_layout.setContentsMargins(0, 0, 0, 0)
+        monitor_layout.setSpacing(16)
+        monitor_layout.addWidget(
+            self._build_card("simulation.monitor_card", self._build_monitor_widget()),
+            1,
+        )
+        monitor_page.setSizePolicy(
+            QSizePolicy.Policy.Ignored,
+            QSizePolicy.Policy.Expanding,
+        )
+        self._monitor_page = monitor_page
+
         preview_page = QWidget()
         preview_layout = QVBoxLayout(preview_page)
         preview_layout.setContentsMargins(0, 0, 0, 0)
@@ -260,10 +302,12 @@ class SimulationView(QWidget):
 
         self._sections = [
             "simulation.section.launch",
+            "simulation.section.monitor",
             "simulation.section.preview",
             "simulation.section.logs",
         ]
         self._section_stack.addWidget(self._launch_page)
+        self._section_stack.addWidget(self._monitor_page)
         self._section_stack.addWidget(self._preview_page)
         self._section_stack.addWidget(self._log_page)
 
@@ -451,6 +495,8 @@ class SimulationView(QWidget):
         active_run: SimulationRunRecord | None,
         history: list[SimulationRunRecord],
     ) -> None:
+        self._active_run = active_run
+        self._run_history_records = list(history)
         signature = (
             active_run.run_id if active_run is not None else None,
             active_run.status.value if active_run is not None else None,
@@ -498,6 +544,7 @@ class SimulationView(QWidget):
 
         if self._run_state_signature == signature:
             self._has_retry_target = bool(history)
+            self._refresh_monitor()
             self._update_action_state()
             return
 
@@ -534,6 +581,7 @@ class SimulationView(QWidget):
             self._run_history.setCurrentRow(0)
         self._has_retry_target = bool(history)
         self._run_state_signature = signature
+        self._refresh_monitor()
         self._update_action_state()
 
     def selected_run_id(self) -> str | None:
@@ -595,6 +643,39 @@ class SimulationView(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
         layout.addWidget(self._log_text, 1)
+        return widget
+
+    def _build_monitor_widget(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(14)
+
+        heading_row = QHBoxLayout()
+        heading_row.setContentsMargins(0, 0, 0, 0)
+        heading_row.setSpacing(10)
+        heading_row.addWidget(self._monitor_stage_label, 1)
+        heading_row.addWidget(self._monitor_status_badge)
+        layout.addLayout(heading_row)
+        layout.addWidget(self._monitor_detail_label)
+        layout.addWidget(self._monitor_progress)
+
+        form = QFormLayout()
+        self._monitor_run_id_label = QLabel()
+        self._monitor_created_label = QLabel()
+        self._monitor_started_label = QLabel()
+        self._monitor_finished_label = QLabel()
+        self._monitor_duration_label = QLabel()
+        self._monitor_output_label = QLabel()
+        form.addRow(self._monitor_run_id_label, self._monitor_run_id)
+        form.addRow(self._monitor_created_label, self._monitor_created)
+        form.addRow(self._monitor_started_label, self._monitor_started)
+        form.addRow(self._monitor_finished_label, self._monitor_finished)
+        form.addRow(self._monitor_duration_label, self._monitor_duration)
+        form.addRow(self._monitor_output_label, self._monitor_output)
+        layout.addLayout(form)
+        layout.addWidget(self._monitor_error)
+        layout.addStretch(1)
         return widget
 
     def resizeEvent(self, event) -> None:  # noqa: N802
@@ -693,6 +774,24 @@ class SimulationView(QWidget):
         self._messages_row_label.setText(
             self._localization.text("simulation.messages")
         )
+        self._monitor_run_id_label.setText(
+            self._localization.text("simulation.monitor.run_id")
+        )
+        self._monitor_created_label.setText(
+            self._localization.text("simulation.monitor.created")
+        )
+        self._monitor_started_label.setText(
+            self._localization.text("simulation.monitor.started")
+        )
+        self._monitor_finished_label.setText(
+            self._localization.text("simulation.monitor.finished")
+        )
+        self._monitor_duration_label.setText(
+            self._localization.text("simulation.monitor.duration")
+        )
+        self._monitor_output_label.setText(
+            self._localization.text("simulation.monitor.output")
+        )
         self._mode_label.setText(self._localization.text("simulation.mode"))
         self._num_runs_label.setText(self._localization.text("simulation.num_runs"))
         self._restart_label.setText(self._localization.text("simulation.restart"))
@@ -704,6 +803,7 @@ class SimulationView(QWidget):
         self._refresh_section_selection()
         self._update_advanced_rows()
         self._refresh_readiness_guidance()
+        self._refresh_monitor()
 
     def set_advanced_mode(self, enabled: bool) -> None:
         if self._advanced_mode == enabled:
@@ -725,8 +825,6 @@ class SimulationView(QWidget):
         if not isinstance(state, dict):
             return
         section_key = state.get("section_key")
-        if section_key == "simulation.section.monitor":
-            section_key = "simulation.section.logs"
         self._pending_section_key = section_key if isinstance(section_key, str) else None
         top_state = state.get("top_splitter")
         if isinstance(top_state, dict):
@@ -765,6 +863,7 @@ class SimulationView(QWidget):
         self.configuration_changed.emit()
 
     def _on_history_selection_changed(self, _row: int) -> None:
+        self._refresh_monitor()
         self._update_action_state()
 
     def _refresh_readiness_guidance(self) -> None:
@@ -782,6 +881,96 @@ class SimulationView(QWidget):
         else:
             text = self._localization.text("simulation.readiness.next.not_ready")
         self._readiness_next_step_label.setText(text)
+
+    def _refresh_monitor(self) -> None:
+        run = self._monitor_run()
+        if run is None:
+            self._set_status_tone(self._monitor_status_badge, "neutral")
+            self._monitor_status_badge.setText(
+                self._localization.text("simulation.monitor.status.none")
+            )
+            self._monitor_stage_label.setText(
+                self._localization.text("simulation.monitor.stage.none")
+            )
+            self._monitor_detail_label.setText(
+                self._localization.text("simulation.monitor.detail.none")
+            )
+            self._monitor_progress.setRange(0, 1)
+            self._monitor_progress.setValue(0)
+            self._monitor_run_id.setText("-")
+            self._monitor_created.setText("-")
+            self._monitor_started.setText("-")
+            self._monitor_finished.setText("-")
+            self._monitor_duration.setText("-")
+            self._monitor_output.setText("-")
+            self._monitor_output.setToolTip("")
+            self._monitor_error.clear()
+            return
+
+        status = run.status.value
+        status_text = self._localization.simulation_status_text(status)
+        self._monitor_status_badge.setText(status_text)
+        self._set_status_tone(self._monitor_status_badge, self._run_status_tone(status))
+        self._monitor_stage_label.setText(
+            self._localization.text(f"simulation.monitor.stage.{status}")
+        )
+        self._monitor_detail_label.setText(self._monitor_detail_text(run))
+        if status in {"preparing", "running"}:
+            self._monitor_progress.setRange(0, 0)
+        else:
+            self._monitor_progress.setRange(0, 1)
+            self._monitor_progress.setValue(1 if status == "completed" else 0)
+        self._monitor_run_id.setText(run.run_id)
+        self._monitor_created.setText(self._format_timestamp(run.created_at))
+        self._monitor_started.setText(self._format_optional_timestamp(run.started_at))
+        self._monitor_finished.setText(self._format_optional_timestamp(run.finished_at))
+        self._monitor_duration.setText(self._duration_for_run(run))
+        output_text = run.output_directory.name or str(run.output_directory)
+        self._monitor_output.setText(output_text)
+        self._monitor_output.setToolTip(str(run.output_directory))
+        if run.error_summary:
+            self._monitor_error.setText(
+                self._localization.text(
+                    "simulation.monitor.error",
+                    message=self._localization.translate_message(run.error_summary),
+                )
+            )
+        else:
+            self._monitor_error.clear()
+
+    def _monitor_run(self) -> SimulationRunRecord | None:
+        if self._active_run is not None:
+            return self._active_run
+        selected_run_id = self.selected_run_id()
+        if selected_run_id:
+            for run in self._run_history_records:
+                if run.run_id == selected_run_id:
+                    return run
+        return self._run_history_records[0] if self._run_history_records else None
+
+    def _monitor_detail_text(self, run: SimulationRunRecord) -> str:
+        status = run.status.value
+        if status in {"preparing", "running"}:
+            return self._localization.text(
+                "simulation.monitor.detail.running",
+                duration=self._duration_for_run(run),
+            )
+        if status == "completed":
+            return self._localization.text("simulation.monitor.detail.completed")
+        if status == "failed":
+            return self._localization.text("simulation.monitor.detail.failed")
+        if status == "cancelled":
+            return self._localization.text("simulation.monitor.detail.cancelled")
+        return self._localization.text("simulation.monitor.detail.pending")
+
+    def _run_status_tone(self, status: str) -> str:
+        return {
+            "completed": "success",
+            "failed": "error",
+            "cancelled": "warning",
+            "preparing": "info",
+            "running": "info",
+        }.get(status, "neutral")
 
     def _readiness_tone(self, summary: str, start_allowed: bool) -> str:
         if start_allowed:

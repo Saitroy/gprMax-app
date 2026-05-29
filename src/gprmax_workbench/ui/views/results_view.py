@@ -106,38 +106,39 @@ class ResultsView(QWidget):
         toolbar.addWidget(self._open_output_dir_button)
         toolbar.addWidget(self._open_selected_file_button)
 
-        left_panel = self._build_card("results.card.runs", self._run_list)
-        left_panel.setMinimumWidth(200)
-
         self._summary_panel = ResultSummaryPanel(localization)
         summary_card = self._build_card("results.card.summary", self._summary_panel)
         artifact_card = self._build_card("results.card.other_artifacts", self._artifact_list)
 
         details_panel = QWidget()
+        details_panel.setMinimumWidth(260)
         details_layout = QVBoxLayout(details_panel)
         details_layout.setContentsMargins(0, 0, 0, 0)
         details_layout.setSpacing(12)
         details_layout.addWidget(summary_card)
         details_layout.addWidget(artifact_card, 1)
 
-        self._bottom_splitter = configure_splitter(QSplitter())
-        self._bottom_splitter.addWidget(left_panel)
-        self._bottom_splitter.addWidget(details_panel)
-        self._bottom_splitter.setStretchFactor(0, 0)
-        self._bottom_splitter.setStretchFactor(1, 1)
-        self._bottom_splitter.setSizes([320, 960])
-        self._bottom_splitter.splitterMoved.connect(self._on_bottom_splitter_moved)
+        left_panel = self._build_card("results.card.runs", self._run_list)
+        left_panel.setMinimumWidth(200)
 
         plot_card = self._build_card("results.card.plot", self._tabs)
         plot_card.setMinimumHeight(300 if embedded else 360)
         plot_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
-        self._page_splitter = configure_splitter(QSplitter(Qt.Orientation.Vertical))
-        self._page_splitter.addWidget(plot_card)
+        self._bottom_splitter = configure_splitter(QSplitter())
+        self._bottom_splitter.addWidget(left_panel)
+        self._bottom_splitter.addWidget(plot_card)
+        self._bottom_splitter.setStretchFactor(0, 0)
+        self._bottom_splitter.setStretchFactor(1, 1)
+        self._bottom_splitter.setSizes([260, 820])
+        self._bottom_splitter.splitterMoved.connect(self._on_bottom_splitter_moved)
+
+        self._page_splitter = configure_splitter(QSplitter(Qt.Orientation.Horizontal))
         self._page_splitter.addWidget(self._bottom_splitter)
-        self._page_splitter.setStretchFactor(0, 4)
-        self._page_splitter.setStretchFactor(1, 2)
-        self._page_splitter.setSizes([560 if embedded else 620, 280])
+        self._page_splitter.addWidget(details_panel)
+        self._page_splitter.setStretchFactor(0, 1)
+        self._page_splitter.setStretchFactor(1, 0)
+        self._page_splitter.setSizes([900, 320])
         self._page_splitter.splitterMoved.connect(self._on_page_splitter_moved)
 
         layout = QVBoxLayout(self)
@@ -933,30 +934,43 @@ class ResultsView(QWidget):
             if persisted_bottom is not None:
                 self._apply_splitter_sizes(self._bottom_splitter, persisted_bottom)
             elif main_orientation == Qt.Orientation.Horizontal:
-                left_width = max(220, min(300, int(self.width() * 0.25)))
+                left_width = max(220, min(280, int(self.width() * 0.22)))
                 self._apply_splitter_sizes(
                     self._bottom_splitter,
-                    [left_width, max(520, self.width() - left_width)],
+                    [left_width, max(520, self.width() - left_width - 320)],
                 )
             else:
-                top_height = 220 if self.height() >= 720 else 190
+                top_height = 200 if self.height() >= 720 else 170
                 self._apply_splitter_sizes(
                     self._bottom_splitter,
                     [top_height, max(280, self.height() - top_height)],
                 )
 
-        if force or not self._page_splitter_user_resized:
+        page_orientation = (
+            Qt.Orientation.Horizontal if self.width() >= 1180 else Qt.Orientation.Vertical
+        )
+        page_orientation_changed = self._page_splitter.orientation() != page_orientation
+        if page_orientation_changed:
+            self._page_splitter.setOrientation(page_orientation)
+            self._page_splitter_user_resized = False
+        if force or page_orientation_changed or not self._page_splitter_user_resized:
             persisted_page = self._splitter_sizes_for_orientation(
                 self._persisted_page_splitter,
-                Qt.Orientation.Vertical,
+                page_orientation,
             )
             if persisted_page is not None:
                 self._apply_splitter_sizes(self._page_splitter, persisted_page)
-            else:
-                plot_height = 460 if self.height() >= 860 else 380
+            elif page_orientation == Qt.Orientation.Horizontal:
+                details_width = max(280, min(360, int(self.width() * 0.24)))
                 self._apply_splitter_sizes(
                     self._page_splitter,
-                    [plot_height, max(220, self.height() - plot_height)],
+                    [max(640, self.width() - details_width), details_width],
+                )
+            else:
+                details_height = 260 if self.height() >= 760 else 220
+                self._apply_splitter_sizes(
+                    self._page_splitter,
+                    [max(360, self.height() - details_height), details_height],
                 )
 
     def _sync_run_selection(self) -> None:

@@ -236,14 +236,14 @@ QFrame#ModelOverviewCard,
 QFrame#ValidationSummaryCard,
 QFrame#WorkbenchSidebar {{
     background: {c["surface"]};
-    border: 1px solid {c["border"]};
+    border: 1px solid #e5edf5;
     border-radius: {r["md"]}px;
 }}
 QFrame#ModelOverviewCard {{
     border-color: {c["border"]};
 }}
 QFrame#ValidationSummaryCard {{
-    background: {c["surface_alt"]};
+    background: {c["surface"]};
 }}
 QFrame[scenePanelRole="guide"],
 QFrame[scenePanelRole="domain"],
@@ -251,7 +251,7 @@ QFrame[scenePanelRole="palette"],
 QFrame[scenePanelRole="inspector"],
 QFrame[scenePanelRole="entities"] {{
     background: {c["surface"]};
-    border-color: {c["border"]};
+    border-color: #e5edf5;
 }}
 QFrame#AppHeader {{
     background: {c["surface"]};
@@ -305,7 +305,7 @@ QLabel#BannerTitle {{
     font-size: 17pt;
 }}
 QLabel#HeroTitle {{
-    font-size: 20pt;
+    font-size: 18pt;
 }}
 QLabel#HeroBody,
 QLabel#BannerSubtitle,
@@ -632,6 +632,14 @@ QListWidget::item:hover:!selected,
 QTreeWidget::item:hover:!selected {{
     background: {c["surface_muted"]};
 }}
+QListWidget#RecentProjectsList::item {{
+    padding: 10px 8px;
+    margin: 2px 0;
+}}
+QListWidget#RecentProjectsList::item:selected {{
+    background: {c["primary_soft"]};
+    color: {c["primary_pressed"]};
+}}
 QTreeWidget#ProjectExplorer {{
     background: transparent;
     border: none;
@@ -791,6 +799,17 @@ QLabel#SimulationAdvancedHint {{
     border: 1px solid {c["border"]};
     border-radius: {r["md"]}px;
     padding: 8px 10px;
+}}
+QProgressBar#RunStageProgress {{
+    background: {c["surface_alt"]};
+    border: 1px solid {c["border"]};
+    border-radius: {r["sm"]}px;
+    min-height: 8px;
+    max-height: 10px;
+}}
+QProgressBar#RunStageProgress::chunk {{
+    background: {c["primary"]};
+    border-radius: {r["sm"]}px;
 }}
 QLabel[toolbarRole="section"] {{
     color: {c["text_muted"]};

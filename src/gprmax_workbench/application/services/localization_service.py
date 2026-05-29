@@ -1991,6 +1991,62 @@ _TRANSLATIONS["en"].update(
     }
 )
 
+_TRANSLATIONS["ru"].update(
+    {
+        "simulation.section.monitor": "Монитор запуска",
+        "simulation.monitor_card": "Монитор запуска",
+        "simulation.monitor.run_id": "Run ID",
+        "simulation.monitor.created": "Создан",
+        "simulation.monitor.started": "Старт",
+        "simulation.monitor.finished": "Финиш",
+        "simulation.monitor.duration": "Длительность",
+        "simulation.monitor.output": "Output",
+        "simulation.monitor.status.none": "Нет запуска",
+        "simulation.monitor.stage.none": "Запуск еще не выбран",
+        "simulation.monitor.stage.pending": "Ожидает запуска",
+        "simulation.monitor.stage.preparing": "Подготовка расчета",
+        "simulation.monitor.stage.running": "Расчет выполняется",
+        "simulation.monitor.stage.completed": "Расчет завершен",
+        "simulation.monitor.stage.failed": "Расчет завершился ошибкой",
+        "simulation.monitor.stage.cancelled": "Расчет отменен",
+        "simulation.monitor.detail.none": "После запуска здесь появится понятный статус. Raw logs остаются в разделе журнала.",
+        "simulation.monitor.detail.pending": "Запуск создан, но выполнение еще не началось.",
+        "simulation.monitor.detail.running": "Выполнение идет. Прошло: {duration}.",
+        "simulation.monitor.detail.completed": "Результаты можно открыть через страницу Results или папку output.",
+        "simulation.monitor.detail.failed": "Проверьте краткое сообщение ниже, а технические детали - в Logs.",
+        "simulation.monitor.detail.cancelled": "Запуск был остановлен пользователем.",
+        "simulation.monitor.error": "Причина: {message}",
+    }
+)
+
+_TRANSLATIONS["en"].update(
+    {
+        "simulation.section.monitor": "Run Monitor",
+        "simulation.monitor_card": "Run Monitor",
+        "simulation.monitor.run_id": "Run ID",
+        "simulation.monitor.created": "Created",
+        "simulation.monitor.started": "Started",
+        "simulation.monitor.finished": "Finished",
+        "simulation.monitor.duration": "Duration",
+        "simulation.monitor.output": "Output",
+        "simulation.monitor.status.none": "No run",
+        "simulation.monitor.stage.none": "No run selected",
+        "simulation.monitor.stage.pending": "Waiting to start",
+        "simulation.monitor.stage.preparing": "Preparing calculation",
+        "simulation.monitor.stage.running": "Calculation running",
+        "simulation.monitor.stage.completed": "Calculation completed",
+        "simulation.monitor.stage.failed": "Calculation failed",
+        "simulation.monitor.stage.cancelled": "Calculation cancelled",
+        "simulation.monitor.detail.none": "A user-facing status appears here after a run starts. Raw logs remain in Logs.",
+        "simulation.monitor.detail.pending": "The run has been created but execution has not started yet.",
+        "simulation.monitor.detail.running": "Execution is in progress. Elapsed: {duration}.",
+        "simulation.monitor.detail.completed": "Open Results or the output folder to inspect artifacts.",
+        "simulation.monitor.detail.failed": "Review the short message below; technical details stay in Logs.",
+        "simulation.monitor.detail.cancelled": "The run was stopped by the user.",
+        "simulation.monitor.error": "Reason: {message}",
+    }
+)
+
 _EXTERNAL_EXACT_TRANSLATIONS_RU.update(
     {
         "Run cancelled by user.": "Запуск отменён пользователем.",

@@ -185,7 +185,7 @@ class WelcomeView(QWidget):
             self._quick_start_heading,
             self._quick_start_body,
         )
-        self._quick_start_card.setVisible(False)
+        self._quick_start_card.setVisible(True)
 
         self._dashboard = QWidget()
         self._dashboard_grid = QGridLayout(self._dashboard)
@@ -470,18 +470,25 @@ class WelcomeView(QWidget):
                 item.widget()
 
         if self.width() >= 1040:
-            self._dashboard_grid.addWidget(self._status_card, 0, 0)
-            self._dashboard_grid.addWidget(self._runtime_card, 0, 1)
-            self._dashboard_grid.addWidget(self._recent_card, 1, 0)
-            self._dashboard_grid.addWidget(self._examples_card, 1, 1)
+            self._dashboard_grid.addWidget(self._recent_card, 0, 0, 4, 1)
+            self._dashboard_grid.addWidget(self._status_card, 0, 1)
+            self._dashboard_grid.addWidget(self._runtime_card, 1, 1)
+            self._dashboard_grid.addWidget(self._examples_card, 2, 1)
+            self._dashboard_grid.addWidget(self._quick_start_card, 3, 1)
+            self._dashboard_grid.setColumnStretch(0, 2)
+            self._dashboard_grid.setColumnStretch(1, 1)
+            self._dashboard_grid.setRowStretch(0, 0)
+            self._dashboard_grid.setRowStretch(1, 0)
+            self._dashboard_grid.setRowStretch(2, 0)
+            self._dashboard_grid.setRowStretch(3, 1)
         else:
-            self._dashboard_grid.addWidget(self._status_card, 0, 0)
-            self._dashboard_grid.addWidget(self._runtime_card, 1, 0)
-            self._dashboard_grid.addWidget(self._recent_card, 2, 0)
+            self._dashboard_grid.addWidget(self._recent_card, 0, 0)
+            self._dashboard_grid.addWidget(self._status_card, 1, 0)
+            self._dashboard_grid.addWidget(self._runtime_card, 2, 0)
             self._dashboard_grid.addWidget(self._examples_card, 3, 0)
-
-        self._dashboard_grid.setColumnStretch(0, 1)
-        self._dashboard_grid.setColumnStretch(1, 1)
+            self._dashboard_grid.addWidget(self._quick_start_card, 4, 0)
+            self._dashboard_grid.setColumnStretch(0, 1)
+            self._dashboard_grid.setColumnStretch(1, 0)
 
     def _build_card(self, heading: QLabel, content: QWidget) -> QFrame:
         card = QFrame()

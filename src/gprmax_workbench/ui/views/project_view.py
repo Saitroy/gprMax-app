@@ -159,8 +159,16 @@ class ProjectView(QWidget):
         project_layout.addLayout(project_heading)
         project_layout.addWidget(self._project_file_label)
         project_layout.addWidget(self._summary_label)
-        project_layout.addWidget(self._model_counts_label)
-        project_layout.addWidget(self._validation_label)
+        overview_metrics = QHBoxLayout()
+        overview_metrics.setContentsMargins(0, 0, 0, 0)
+        overview_metrics.setSpacing(10)
+        overview_metrics.addWidget(self._model_counts_label, 1)
+        overview_metrics.addWidget(
+            self._validation_label,
+            0,
+            Qt.AlignmentFlag.AlignTop,
+        )
+        project_layout.addLayout(overview_metrics)
         project_layout.addWidget(self._next_action_label)
         project_layout.addWidget(self._workflow_hint)
 

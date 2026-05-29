@@ -690,45 +690,45 @@ class SceneCanvasPanel(QWidget):
         self._scene_toolbar.setStyleSheet(
             """
             QFrame#SceneToolbar {
-                background: rgba(248, 250, 252, 0.96);
-                border: 1px solid #d2dbe3;
-                border-radius: 16px;
+                background: #ffffff;
+                border: 1px solid #e2e8f0;
+                border-radius: 10px;
             }
             QLabel[toolbarRole="section"] {
-                color: #687a8a;
+                color: #64748b;
                 font-size: 9pt;
                 font-weight: 600;
             }
             QLabel[toolbarRole="status"] {
-                color: #405261;
-                background: #eef3f7;
-                border: 1px solid #d2dbe3;
-                border-radius: 10px;
-                padding: 6px 10px;
+                color: #334155;
+                background: #f8fafc;
+                border: 1px solid #e2e8f0;
+                border-radius: 8px;
+                padding: 5px 9px;
             }
             QToolButton#SceneToolbarButton,
             QPushButton#SceneToolbarAction {
-                background: #f7fafc;
-                border: 1px solid #c4d1dc;
-                border-radius: 10px;
-                color: #223341;
-                padding: 7px 12px;
+                background: #ffffff;
+                border: 1px solid #dbe3ec;
+                border-radius: 8px;
+                color: #0f172a;
+                padding: 6px 10px;
                 font-weight: 600;
             }
             QToolButton#SceneToolbarButton:hover,
             QPushButton#SceneToolbarAction:hover {
-                background: #edf4f8;
-                border-color: #9cb0c1;
+                background: #f8fafc;
+                border-color: #bfdbfe;
             }
             QToolButton#SceneToolbarButton:checked {
-                background: #dfeef9;
-                border-color: #6b93b5;
-                color: #1f425c;
+                background: #dbeafe;
+                border-color: #2563eb;
+                color: #1d4ed8;
             }
             QToolButton#SceneToolbarButton:disabled {
-                background: #f1f4f6;
-                border-color: #d7dee4;
-                color: #8a98a4;
+                background: #f1f5f9;
+                border-color: #e2e8f0;
+                color: #94a3b8;
             }
             """
         )
@@ -927,8 +927,8 @@ class SceneCanvasPanel(QWidget):
         self._side_scroll.setFrameShape(QFrame.Shape.NoFrame)
         self._side_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._side_scroll.setWidget(self._side_panel)
-        self._side_scroll.setMinimumWidth(220)
-        self._side_scroll.setMaximumWidth(520)
+        self._side_scroll.setMinimumWidth(240)
+        self._side_scroll.setMaximumWidth(440)
         self._side_scroll.setSizePolicy(
             QSizePolicy.Policy.Preferred,
             QSizePolicy.Policy.Expanding,
@@ -942,7 +942,7 @@ class SceneCanvasPanel(QWidget):
         view_shell_layout.addWidget(self._scene_toolbar, 0, 0, 1, 2)
         corner = QLabel()
         corner.setMinimumSize(52, 32)
-        corner.setStyleSheet("background:#edf3f7; border: 1px solid #c7d2db;")
+        corner.setStyleSheet("background:#f8fafc; border: 1px solid #e2e8f0;")
         view_shell_layout.addWidget(corner, 1, 0)
         view_shell_layout.addWidget(self._horizontal_ruler, 1, 1)
         view_shell_layout.addWidget(self._vertical_ruler, 2, 0)
