@@ -33,6 +33,7 @@ vendor/gprMax-source/
 .tmp/
 .tmp_test_runs/
 .workbench/
+.superpowers/
 
 # OS files
 Thumbs.db
