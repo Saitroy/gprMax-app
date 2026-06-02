@@ -520,6 +520,26 @@ class SceneCanvasPanelTests(unittest.TestCase):
             self.assertGreater(updated_sizes[1], initial_sizes[1])
             self.assertFalse(panel._workspace_splitter.childrenCollapsible())  # noqa: SLF001
 
+    def test_scene_sidebar_stacks_below_canvas_on_compact_width(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Scene Demo", Path(temp_dir))
+            state = AppState(
+                current_project=project,
+                current_project_validation=validate_project(project),
+            )
+            editor = ModelEditorService(state)
+            validation = ValidationService(state)
+            panel = SceneCanvasPanel(LocalizationService("ru"), editor, validation)
+
+            panel.set_project(project)
+            panel.resize(680, 700)
+            panel.show()
+            self._app.processEvents()  # noqa: SLF001
+
+            self.assertEqual(panel._workspace_splitter.orientation(), Qt.Orientation.Vertical)  # noqa: SLF001
+            self.assertEqual(panel._side_scroll.minimumWidth(), 0)  # noqa: SLF001
+            self.assertGreaterEqual(panel._side_scroll.minimumHeight(), 220)  # noqa: SLF001
+
     def test_create_tool_adds_selected_entity_at_click_position(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             project = default_project("Scene Demo", Path(temp_dir))

@@ -111,7 +111,7 @@ class ResultsView(QWidget):
         artifact_card = self._build_card("results.card.other_artifacts", self._artifact_list)
 
         details_panel = QWidget()
-        details_panel.setMinimumWidth(260)
+        details_panel.setMinimumWidth(220)
         details_layout = QVBoxLayout(details_panel)
         details_layout.setContentsMargins(0, 0, 0, 0)
         details_layout.setSpacing(12)
@@ -119,10 +119,10 @@ class ResultsView(QWidget):
         details_layout.addWidget(artifact_card, 1)
 
         left_panel = self._build_card("results.card.runs", self._run_list)
-        left_panel.setMinimumWidth(200)
+        left_panel.setMinimumWidth(176)
 
         plot_card = self._build_card("results.card.plot", self._tabs)
-        plot_card.setMinimumHeight(300 if embedded else 360)
+        plot_card.setMinimumHeight(260 if embedded else 300)
         plot_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         self._bottom_splitter = configure_splitter(QSplitter())
@@ -208,6 +208,9 @@ class ResultsView(QWidget):
                     run_id=summary.run_record.run_id,
                     status=self._localization.simulation_status_text(
                         summary.run_record.status.value
+                    ),
+                    created=summary.run_record.created_at.astimezone().strftime(
+                        "%Y-%m-%d %H:%M"
                     ),
                 )
             )

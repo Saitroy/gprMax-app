@@ -118,6 +118,45 @@ class ProjectViewSmokeTests(unittest.TestCase):
             self.assertEqual(view._content_splitter.orientation(), Qt.Orientation.Horizontal)  # noqa: SLF001
             self.assertGreaterEqual(view._content_splitter.handleWidth(), 10)  # noqa: SLF001
 
+    def test_compact_width_keeps_project_navigation_narrow_beside_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            view = self._build_view(temp_dir)
+            view.resize(900, 700)
+            view.show()
+            self._app.processEvents()
+
+            self.assertEqual(view._content_splitter.orientation(), Qt.Orientation.Horizontal)  # noqa: SLF001
+            self.assertLessEqual(view._content_splitter.sizes()[0], 200)  # noqa: SLF001
+
+    def test_compact_width_ignores_persisted_desktop_navigation_size(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            view = self._build_view(temp_dir)
+            view.resize(700, 700)
+            view.show()
+            self._app.processEvents()
+
+            view.apply_ui_state(
+                {
+                    "content_splitter": {
+                        "orientation": "horizontal",
+                        "sizes": [250, 1190],
+                    }
+                }
+            )
+            self._app.processEvents()
+
+            self.assertLessEqual(view._content_splitter.sizes()[0], 200)  # noqa: SLF001
+
+    def test_compact_empty_state_keeps_overview_card_within_workspace_width(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            view = self._build_view(temp_dir)
+            view.set_project(None, None, False, None)
+            view.resize(650, 700)
+            view.show()
+            self._app.processEvents()
+
+            self.assertLessEqual(view.minimumSizeHint().width(), 650)
+
 
 if __name__ == "__main__":
     unittest.main()

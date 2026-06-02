@@ -1212,12 +1212,29 @@ class SceneCanvasPanel(QWidget):
             return
         if self.width() <= 0:
             return
+        orientation = (
+            Qt.Orientation.Vertical
+            if self.width() < 760
+            else Qt.Orientation.Horizontal
+        )
+        orientation_changed = self._workspace_splitter.orientation() != orientation
+        if orientation_changed:
+            self._workspace_splitter.setOrientation(orientation)
+            self._workspace_splitter_user_resized = False
+        self._refresh_side_scroll_constraints(orientation)
         if self._workspace_splitter_user_resized and not force:
             return
 
         persisted_sizes = self._splitter_sizes_for_current_orientation()
         if persisted_sizes is not None:
             self._apply_workspace_splitter_sizes(persisted_sizes)
+            return
+
+        if orientation == Qt.Orientation.Vertical:
+            total_height = max(self.height(), 1)
+            sidebar_height = max(220, min(360, int(total_height * 0.42)))
+            scene_height = max(320, total_height - sidebar_height)
+            self._apply_workspace_splitter_sizes([scene_height, sidebar_height])
             return
 
         total_width = max(self.width(), 1)
@@ -1235,6 +1252,26 @@ class SceneCanvasPanel(QWidget):
         sidebar_width = max(self._side_scroll.minimumWidth(), min(sidebar_width, 420))
         scene_width = max(320, total_width - sidebar_width)
         self._apply_workspace_splitter_sizes([scene_width, sidebar_width])
+
+    def _refresh_side_scroll_constraints(self, orientation: Qt.Orientation) -> None:
+        if orientation == Qt.Orientation.Vertical:
+            self._side_scroll.setMinimumWidth(0)
+            self._side_scroll.setMaximumWidth(16_777_215)
+            self._side_scroll.setMinimumHeight(220)
+            self._side_scroll.setMaximumHeight(16_777_215)
+            self._side_scroll.setSizePolicy(
+                QSizePolicy.Policy.Expanding,
+                QSizePolicy.Policy.Preferred,
+            )
+            return
+        self._side_scroll.setMinimumWidth(240)
+        self._side_scroll.setMaximumWidth(440)
+        self._side_scroll.setMinimumHeight(0)
+        self._side_scroll.setMaximumHeight(16_777_215)
+        self._side_scroll.setSizePolicy(
+            QSizePolicy.Policy.Preferred,
+            QSizePolicy.Policy.Expanding,
+        )
 
     def _on_workspace_splitter_moved(self, _pos: int, _index: int) -> None:
         if self._workspace_splitter_syncing:

@@ -926,7 +926,7 @@ _TRANSLATIONS["ru"].update(
         "results.show_unmerged": "Отобразить необъединённые трассы отдельно",
         "results.tab.ascan": "A-scan",
         "results.tab.bscan": "B-scan",
-        "results.run_item": "{run_id} | {status}",
+        "results.run_item": "{run_id}\n{status} · {created}",
         "results.receiver_item": "{receiver_id} | {name}",
         "results.output.stacked_bscan": "Совмещённый B-scan ({count} трасс)",
         "results.ascan_loaded": "A-scan загружен: {samples} samples, dt={dt:.6g} s.",
@@ -1286,7 +1286,7 @@ _TRANSLATIONS["en"].update(
         "results.show_unmerged": "Show unmerged traces separately",
         "results.tab.ascan": "A-scan",
         "results.tab.bscan": "B-scan",
-        "results.run_item": "{run_id} | {status}",
+        "results.run_item": "{run_id}\n{status} · {created}",
         "results.receiver_item": "{receiver_id} | {name}",
         "results.output.stacked_bscan": "Merged B-scan preview ({count} traces)",
         "results.ascan_loaded": "A-scan loaded: {samples} samples, dt={dt:.6g} s.",
@@ -2054,5 +2054,29 @@ _EXTERNAL_EXACT_TRANSLATIONS_RU.update(
         "A previous simulation run was left in a stale running state and has been reset.": "Предыдущий запуск остался в устаревшем состоянии выполнения и был сброшен.",
         "The active simulation run had no live process attached and was reset.": "У активного запуска не было привязанного живого процесса, состояние сброшено.",
         "The run was recovered from a stale in-progress state because no live process was attached.": "Запуск был восстановлен из устаревшего незавершённого состояния, потому что живой процесс не был привязан.",
+    }
+)
+
+_TRANSLATIONS["ru"].update(
+    {
+        "settings.preferences_section": "Основные настройки",
+        "settings.runtime_status.ready": "Среда gprMax готова к работе",
+        "settings.runtime_status.issue": "Среда gprMax требует внимания",
+        "settings.diagnostics_status.clean": "Диагностика не нашла проблем",
+        "settings.diagnostics_status.issues": "Диагностика: замечаний — {count}",
+        "settings.action.show_details": "Показать технические детали",
+        "settings.action.hide_details": "Скрыть технические детали",
+    }
+)
+
+_TRANSLATIONS["en"].update(
+    {
+        "settings.preferences_section": "General settings",
+        "settings.runtime_status.ready": "gprMax environment is ready",
+        "settings.runtime_status.issue": "gprMax environment needs attention",
+        "settings.diagnostics_status.clean": "Diagnostics found no issues",
+        "settings.diagnostics_status.issues": "Diagnostics issues: {count}",
+        "settings.action.show_details": "Show technical details",
+        "settings.action.hide_details": "Hide technical details",
     }
 )

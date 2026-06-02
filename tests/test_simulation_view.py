@@ -139,6 +139,28 @@ class SimulationViewTests(unittest.TestCase):
 
         self.assertEqual(view._current_section_key(), "simulation.section.monitor")  # noqa: SLF001
 
+    def test_action_bar_follows_current_simulation_section(self) -> None:
+        view = SimulationView(
+            localization=LocalizationService("en"),
+            runtime_label="Bundled runtime",
+        )
+
+        view._section_nav.setCurrentRow(  # noqa: SLF001
+            view._row_for_section_key("simulation.section.monitor")  # noqa: SLF001
+        )
+
+        self.assertFalse(view._retry_button.isHidden())  # noqa: SLF001
+        self.assertFalse(view._open_run_button.isHidden())  # noqa: SLF001
+        self.assertTrue(view._start_button.isHidden())  # noqa: SLF001
+
+        view._section_nav.setCurrentRow(  # noqa: SLF001
+            view._row_for_section_key("simulation.section.preview")  # noqa: SLF001
+        )
+
+        self.assertFalse(view._start_button.isHidden())  # noqa: SLF001
+        self.assertFalse(view._export_button.isHidden())  # noqa: SLF001
+        self.assertTrue(view._preview_button.isHidden())  # noqa: SLF001
+
     def test_standard_desktop_width_keeps_splitters_horizontal(self) -> None:
         view = SimulationView(
             localization=LocalizationService("en"),
@@ -153,6 +175,19 @@ class SimulationViewTests(unittest.TestCase):
         self.assertEqual(view._top_splitter.orientation(), Qt.Orientation.Horizontal)  # noqa: SLF001
         self.assertGreaterEqual(view._content_splitter.handleWidth(), 10)  # noqa: SLF001
         self.assertGreaterEqual(view._top_splitter.handleWidth(), 10)  # noqa: SLF001
+
+    def test_compact_width_stacks_simulation_navigation_and_setup_cards(self) -> None:
+        view = SimulationView(
+            localization=LocalizationService("en"),
+            runtime_label="Bundled runtime",
+        )
+
+        view.resize(920, 700)
+        view.show()
+        self._app.processEvents()
+
+        self.assertEqual(view._content_splitter.orientation(), Qt.Orientation.Vertical)  # noqa: SLF001
+        self.assertEqual(view._top_splitter.orientation(), Qt.Orientation.Vertical)  # noqa: SLF001
 
     def test_manual_top_splitter_resize_survives_responsive_refresh(self) -> None:
         view = SimulationView(

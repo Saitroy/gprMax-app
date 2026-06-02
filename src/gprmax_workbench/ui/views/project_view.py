@@ -4,11 +4,13 @@ from PySide6.QtCore import QSize, QSignalBlocker, Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QSizePolicy,
     QSplitter,
     QStackedWidget,
     QVBoxLayout,
@@ -91,6 +93,10 @@ class ProjectView(QWidget):
         self._section_nav.setWordWrap(True)
         self._section_nav.currentRowChanged.connect(self._on_section_changed)
         self._section_stack = QStackedWidget()
+        self._section_stack.setSizePolicy(
+            QSizePolicy.Policy.Ignored,
+            QSizePolicy.Policy.Ignored,
+        )
         self._section_buttons: dict[str, QPushButton] = {}
         self._validation_issue_buttons: list[QPushButton] = []
 
@@ -153,10 +159,14 @@ class ProjectView(QWidget):
         project_layout.setContentsMargins(20, 18, 20, 18)
         project_layout.setSpacing(8)
 
-        project_heading = QHBoxLayout()
-        project_heading.addWidget(self._project_root_label, 1)
-        project_heading.addWidget(self._project_state_badge)
-        project_layout.addLayout(project_heading)
+        self._project_heading_layout = QGridLayout()
+        self._project_heading_layout.setContentsMargins(0, 0, 0, 0)
+        self._project_heading_layout.setHorizontalSpacing(8)
+        self._project_heading_layout.setVerticalSpacing(6)
+        self._project_heading_layout.setColumnStretch(0, 1)
+        self._project_heading_layout.addWidget(self._project_root_label, 0, 0)
+        self._project_heading_layout.addWidget(self._project_state_badge, 0, 1)
+        project_layout.addLayout(self._project_heading_layout)
         project_layout.addWidget(self._project_file_label)
         project_layout.addWidget(self._summary_label)
         overview_metrics = QHBoxLayout()
@@ -171,11 +181,6 @@ class ProjectView(QWidget):
         project_layout.addLayout(overview_metrics)
         project_layout.addWidget(self._next_action_label)
         project_layout.addWidget(self._workflow_hint)
-
-        card_actions = QHBoxLayout()
-        card_actions.addWidget(self._save_button)
-        card_actions.addStretch(1)
-        project_layout.addLayout(card_actions)
 
         self._section_toolbar_card = QFrame()
         self._section_toolbar_card.setObjectName("ViewCard")
@@ -269,11 +274,21 @@ class ProjectView(QWidget):
         self._project_root_label.setText(
             project.metadata.name if project else self._localization.text("project.no_project")
         )
-        self._project_root_label.setToolTip(str(project.root) if project else "")
+        project_details = "\n".join(
+            item
+            for item in (
+                str(project.root) if project else "",
+                self._localization.text("project.manifest", path=project_file)
+                if project_file
+                else "",
+            )
+            if item
+        )
+        self._project_root_label.setToolTip(project_details)
         self._project_file_label.setText(
             self._localization.text("project.manifest", path=project_file or "-")
         )
-        self._project_file_label.setVisible(project is not None and bool(project_file))
+        self._project_file_label.setVisible(False)
         self._summary_label.setVisible(project is None)
 
         if project is None:
@@ -516,6 +531,10 @@ class ProjectView(QWidget):
         button = QPushButton(text)
         button.setProperty("buttonRole", "validationIssue")
         button.setProperty("issueSeverity", issue.severity.value)
+        button.setSizePolicy(
+            QSizePolicy.Policy.Ignored,
+            QSizePolicy.Policy.Fixed,
+        )
         button.setToolTip(
             self._localization.text(
                 "project.validation_summary.issue_tooltip",
@@ -825,36 +844,42 @@ class ProjectView(QWidget):
             button.setChecked(section_key == current_key)
 
     def _refresh_responsive_layout(self, *, force: bool = False) -> None:
-        if self.width() < 980:
-            orientation = Qt.Orientation.Vertical
-            orientation_changed = self._content_splitter.orientation() != orientation
-            if orientation_changed:
-                self._content_splitter.setOrientation(orientation)
-                self._content_splitter_user_resized = False
-            if force or orientation_changed or not self._content_splitter_user_resized:
-                persisted_sizes = self._splitter_sizes_for_orientation(orientation)
-                if persisted_sizes is not None:
-                    self._apply_splitter_sizes(persisted_sizes)
-                    return
-                top_height = 176 if self.height() >= 700 else 152
-                self._apply_splitter_sizes(
-                    [top_height, max(360, self.height() - top_height)]
-                )
-            return
+        self._refresh_project_heading_layout()
         orientation = Qt.Orientation.Horizontal
         orientation_changed = self._content_splitter.orientation() != orientation
         if orientation_changed:
             self._content_splitter.setOrientation(orientation)
             self._content_splitter_user_resized = False
         if force or orientation_changed or not self._content_splitter_user_resized:
-            persisted_sizes = self._splitter_sizes_for_orientation(orientation)
+            persisted_sizes = (
+                self._splitter_sizes_for_orientation(orientation)
+                if self.width() >= 980
+                else None
+            )
             if persisted_sizes is not None:
                 self._apply_splitter_sizes(persisted_sizes)
                 return
-            nav_width = max(210, min(250, int(self.width() * 0.23)))
+            if self.width() < 980:
+                nav_width = max(148, min(190, int(self.width() * 0.21)))
+            else:
+                nav_width = max(210, min(250, int(self.width() * 0.23)))
             self._apply_splitter_sizes(
-                [nav_width, max(680, self.width() - nav_width)]
+                [nav_width, max(320, self.width() - nav_width)]
             )
+
+    def _refresh_project_heading_layout(self) -> None:
+        self._project_heading_layout.removeWidget(self._save_button)
+        if self.width() < 760:
+            self._project_heading_layout.addWidget(
+                self._save_button,
+                1,
+                0,
+                1,
+                2,
+                Qt.AlignmentFlag.AlignLeft,
+            )
+            return
+        self._project_heading_layout.addWidget(self._save_button, 0, 2)
 
     def _on_scene_edit_requested(self, entity_kind: str) -> None:
         target_key = {

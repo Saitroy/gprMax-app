@@ -53,6 +53,18 @@ class SettingsViewTests(unittest.TestCase):
         self.assertIn("MPI", capability_text)
         self.assertNotIn("GPU", capability_text)
 
+    def test_technical_details_are_collapsed_until_requested(self) -> None:
+        view = SettingsView(LocalizationService("en"))
+
+        self.assertTrue(view._runtime_summary_label.isHidden())  # noqa: SLF001
+        self.assertTrue(view._diagnostics_label.isHidden())  # noqa: SLF001
+
+        view._runtime_details_button.setChecked(True)  # noqa: SLF001
+        view._diagnostics_details_button.setChecked(True)  # noqa: SLF001
+
+        self.assertFalse(view._runtime_summary_label.isHidden())  # noqa: SLF001
+        self.assertFalse(view._diagnostics_label.isHidden())  # noqa: SLF001
+
 
 if __name__ == "__main__":
     unittest.main()

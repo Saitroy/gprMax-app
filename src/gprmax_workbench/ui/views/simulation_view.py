@@ -216,6 +216,11 @@ class SimulationView(QWidget):
         self._action_bar.addWidget(self._cancel_button)
         self._action_bar.addWidget(self._open_run_button)
         self._action_bar.addWidget(self._open_output_button)
+        self._action_frame = QFrame()
+        self._action_frame.setObjectName("ActionBar")
+        action_frame_layout = QVBoxLayout(self._action_frame)
+        action_frame_layout.setContentsMargins(10, 8, 10, 8)
+        action_frame_layout.addLayout(self._action_bar)
 
         status_card = self._build_card(
             "simulation.status_card",
@@ -333,7 +338,7 @@ class SimulationView(QWidget):
         workspace_layout = QVBoxLayout(self._workspace_container)
         workspace_layout.setContentsMargins(0, 0, 0, 0)
         workspace_layout.setSpacing(16)
-        workspace_layout.addLayout(self._action_bar)
+        workspace_layout.addWidget(self._action_frame)
         workspace_layout.addWidget(self._content_splitter, 1)
 
         layout = QVBoxLayout(self)
@@ -1044,6 +1049,22 @@ class SimulationView(QWidget):
         self._open_run_button.setEnabled(has_selected_run)
         self._open_output_button.setEnabled(has_selected_run)
         self._start_button.setToolTip(self._readiness_next_step_label.text())
+        self._refresh_action_visibility()
+
+    def _refresh_action_visibility(self) -> None:
+        section_key = self._current_section_key() or self._pending_section_key
+        is_launch = section_key == "simulation.section.launch"
+        is_monitor = section_key == "simulation.section.monitor"
+        is_preview = section_key == "simulation.section.preview"
+        is_logs = section_key == "simulation.section.logs"
+
+        self._start_button.setVisible(is_launch or is_preview)
+        self._preview_button.setVisible(is_launch)
+        self._export_button.setVisible(is_launch or is_preview)
+        self._retry_button.setVisible(is_monitor or is_logs)
+        self._cancel_button.setVisible(self._run_in_progress)
+        self._open_run_button.setVisible(is_monitor or is_logs)
+        self._open_output_button.setVisible(is_monitor or is_logs)
 
     def _refresh_responsive_layout(self, *, force: bool = False) -> None:
         wide = self.width() >= 1020
@@ -1146,6 +1167,7 @@ class SimulationView(QWidget):
             else self._pending_section_key
         )
         self._section_stack.setCurrentIndex(row)
+        self._refresh_action_visibility()
 
     def _refresh_section_selection(self) -> None:
         row = self._row_for_section_key(self._pending_section_key)

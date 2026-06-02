@@ -167,6 +167,11 @@ QFrame#SidebarStatus {{
     border: 1px solid {c["border"]};
     border-radius: {r["md"]}px;
 }}
+QFrame#ActionBar {{
+    background: {c["surface"]};
+    border: 1px solid {c["border"]};
+    border-radius: {r["md"]}px;
+}}
 QLabel#SidebarSectionTitle {{
     background: transparent;
     color: {c["text_muted"]};
@@ -339,6 +344,15 @@ QLabel#ModelNextAction {{
 QLabel#ValidationIssueText {{
     color: {c["text_muted"]};
     background: transparent;
+}}
+QLabel#TechnicalDetails {{
+    color: {c["text_muted"]};
+    background: {c["surface_alt"]};
+    border: 1px solid {c["border"]};
+    border-radius: {r["md"]}px;
+    padding: 8px 10px;
+    font-family: "Consolas";
+    font-size: 8.8pt;
 }}
 QLabel#ViewTitle {{
     font-family: "Segoe UI";

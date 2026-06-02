@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFormLayout,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -29,7 +30,9 @@ class SettingsView(QWidget):
     ) -> None:
         super().__init__(parent)
         self._localization = localization
-        self._section_titles: list[QLabel] = []
+        self._card_titles: dict[str, QLabel] = {}
+        self._runtime_healthy = False
+        self._diagnostics_count = 0
 
         self._title = QLabel()
         self._title.setObjectName("ViewTitle")
@@ -41,16 +44,37 @@ class SettingsView(QWidget):
         self._runtime_edit = QLineEdit()
         self._language_selector = QComboBox()
         self._advanced_mode_checkbox = QCheckBox()
+        self._runtime_status_badge = QLabel()
+        self._runtime_status_badge.setObjectName("StatusBadge")
+        self._runtime_status_badge.setProperty("statusTone", "neutral")
+        self._runtime_status_badge.setWordWrap(True)
         self._runtime_summary_label = QLabel()
+        self._runtime_summary_label.setObjectName("TechnicalDetails")
+        self._runtime_summary_label.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
         self._runtime_summary_label.setWordWrap(True)
         self._capabilities_label = QLabel()
         self._capabilities_label.setWordWrap(True)
+        self._diagnostics_status_badge = QLabel()
+        self._diagnostics_status_badge.setObjectName("StatusBadge")
+        self._diagnostics_status_badge.setProperty("statusTone", "neutral")
+        self._diagnostics_status_badge.setWordWrap(True)
         self._diagnostics_label = QLabel()
+        self._diagnostics_label.setObjectName("TechnicalDetails")
+        self._diagnostics_label.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
         self._diagnostics_label.setWordWrap(True)
+        self._runtime_details_button = self._build_details_button()
+        self._diagnostics_details_button = self._build_details_button()
         self._save_button = QPushButton()
         self._save_button.setObjectName("PrimaryButton")
 
-        form = QFormLayout()
+        form_widget = QWidget()
+        form = QFormLayout(form_widget)
+        form.setContentsMargins(0, 0, 0, 0)
+        form.setSpacing(10)
         self._language_label = QLabel()
         self._runtime_label = QLabel()
         self._runtime_label.setWordWrap(True)
@@ -65,20 +89,51 @@ class SettingsView(QWidget):
         actions.addWidget(self._save_button, 0)
         actions.addStretch(1)
 
+        runtime_content = QWidget()
+        runtime_layout = QVBoxLayout(runtime_content)
+        runtime_layout.setContentsMargins(0, 0, 0, 0)
+        runtime_layout.setSpacing(8)
+        runtime_layout.addWidget(self._runtime_status_badge)
+        runtime_layout.addWidget(self._capabilities_label)
+        runtime_layout.addWidget(
+            self._runtime_details_button,
+            0,
+            Qt.AlignmentFlag.AlignLeft,
+        )
+        runtime_layout.addWidget(self._runtime_summary_label)
+
+        diagnostics_content = QWidget()
+        diagnostics_layout = QVBoxLayout(diagnostics_content)
+        diagnostics_layout.setContentsMargins(0, 0, 0, 0)
+        diagnostics_layout.setSpacing(8)
+        diagnostics_layout.addWidget(self._diagnostics_status_badge)
+        diagnostics_layout.addWidget(
+            self._diagnostics_details_button,
+            0,
+            Qt.AlignmentFlag.AlignLeft,
+        )
+        diagnostics_layout.addWidget(self._diagnostics_label)
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(18)
+        layout.setSpacing(14)
         layout.addWidget(self._title)
         layout.addWidget(self._subtitle)
+        layout.addWidget(self._build_card("settings.preferences_section", form_widget))
+        layout.addWidget(self._build_card("settings.runtime_section", runtime_content))
+        layout.addWidget(
+            self._build_card("settings.diagnostics_section", diagnostics_content)
+        )
         layout.addLayout(actions)
-        layout.addLayout(form)
-        layout.addWidget(self._build_section("settings.runtime_section", self._runtime_summary_label))
-        layout.addWidget(self._build_section("settings.capabilities_section", self._capabilities_label))
-        layout.addWidget(self._build_section("settings.diagnostics_section", self._diagnostics_label))
         layout.addStretch(1)
 
         self._advanced_mode_checkbox.toggled.connect(self._update_runtime_field_state)
+        self._runtime_details_button.toggled.connect(self._update_details_visibility)
+        self._diagnostics_details_button.toggled.connect(
+            self._update_details_visibility
+        )
         self.retranslate_ui()
+        self._update_details_visibility()
 
     def set_settings(
         self,
@@ -88,6 +143,7 @@ class SettingsView(QWidget):
         self._populate_language_selector(settings.language)
         self._runtime_edit.setText(settings.gprmax_python_executable or "")
         self._advanced_mode_checkbox.setChecked(settings.advanced_mode)
+        self._runtime_healthy = runtime_info.is_healthy
         self._runtime_summary_label.setText(
             "\n".join(
                 [
@@ -115,10 +171,13 @@ class SettingsView(QWidget):
         diagnostics = runtime_info.diagnostics or [
             self._localization.text("settings.diagnostics_placeholder")
         ]
+        self._diagnostics_count = len(runtime_info.diagnostics)
         self._diagnostics_label.setText(
             "\n".join(self._localization.translate_message(item) for item in diagnostics)
         )
+        self._refresh_status_badges()
         self._update_runtime_field_state()
+        self._update_details_visibility()
 
     def runtime_executable(self) -> str:
         return self._runtime_edit.text().strip()
@@ -145,10 +204,10 @@ class SettingsView(QWidget):
         self._runtime_edit.setPlaceholderText(
             self._localization.text("settings.external_runtime_placeholder")
         )
-        for title in self._section_titles:
-            key = title.property("title_key")
-            if isinstance(key, str):
-                title.setText(self._localization.text(key))
+        for key, title in self._card_titles.items():
+            title.setText(self._localization.text(key))
+        self._refresh_status_badges()
+        self._update_details_visibility()
 
     def _populate_language_selector(self, selected_language: str) -> None:
         current = selected_language or self.selected_language()
@@ -174,15 +233,69 @@ class SettingsView(QWidget):
         enabled = self._advanced_mode_checkbox.isChecked()
         self._runtime_edit.setEnabled(enabled)
 
-    def _build_section(self, title_key: str, content: QWidget) -> QWidget:
-        container = QWidget()
-        layout = QVBoxLayout(container)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(6)
-        title = QLabel(self._localization.text(title_key))
+    def _refresh_status_badges(self) -> None:
+        runtime_key = (
+            "settings.runtime_status.ready"
+            if self._runtime_healthy
+            else "settings.runtime_status.issue"
+        )
+        self._set_status_badge(
+            self._runtime_status_badge,
+            self._localization.text(runtime_key),
+            "success" if self._runtime_healthy else "error",
+        )
+        diagnostics_key = (
+            "settings.diagnostics_status.clean"
+            if self._diagnostics_count == 0
+            else "settings.diagnostics_status.issues"
+        )
+        self._set_status_badge(
+            self._diagnostics_status_badge,
+            self._localization.text(diagnostics_key, count=self._diagnostics_count),
+            "success" if self._diagnostics_count == 0 else "warning",
+        )
+
+    def _set_status_badge(self, badge: QLabel, text: str, tone: str) -> None:
+        badge.setText(text)
+        badge.setProperty("statusTone", tone)
+        badge.style().unpolish(badge)
+        badge.style().polish(badge)
+
+    def _build_details_button(self) -> QPushButton:
+        button = QPushButton()
+        button.setCheckable(True)
+        button.setProperty("buttonRole", "ghost")
+        return button
+
+    def _update_details_visibility(self) -> None:
+        runtime_details_visible = self._runtime_details_button.isChecked()
+        diagnostics_visible = self._diagnostics_details_button.isChecked()
+        self._runtime_summary_label.setVisible(runtime_details_visible)
+        self._diagnostics_label.setVisible(diagnostics_visible)
+        self._runtime_details_button.setText(
+            self._localization.text(
+                "settings.action.hide_details"
+                if runtime_details_visible
+                else "settings.action.show_details"
+            )
+        )
+        self._diagnostics_details_button.setText(
+            self._localization.text(
+                "settings.action.hide_details"
+                if diagnostics_visible
+                else "settings.action.show_details"
+            )
+        )
+
+    def _build_card(self, title_key: str, content: QWidget) -> QFrame:
+        card = QFrame()
+        card.setObjectName("ViewCard")
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(8)
+        title = QLabel()
         title.setObjectName("SectionTitle")
-        title.setProperty("title_key", title_key)
-        self._section_titles.append(title)
+        self._card_titles[title_key] = title
         layout.addWidget(title)
         layout.addWidget(content)
-        return container
+        return card

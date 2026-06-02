@@ -125,6 +125,7 @@ class ResultsViewTests(unittest.TestCase):
         view.refresh_project(Path("D:/demo"))
 
         self.assertEqual(results_service.viewer_state.selected_run_id, "run-1")
+        self.assertIn("2026-03-19", view._run_list.item(0).text())  # noqa: SLF001
         self.assertEqual(view._ascan_output_combo.count(), 1)
         self.assertEqual(view._ascan_receiver_combo.count(), 1)
         self.assertEqual(view._ascan_component_list.count(), 2)
@@ -257,6 +258,23 @@ class ResultsViewTests(unittest.TestCase):
         self.assertEqual(view._bottom_splitter.orientation(), Qt.Orientation.Horizontal)  # noqa: SLF001
         self.assertGreaterEqual(view._bottom_splitter.handleWidth(), 10)  # noqa: SLF001
         self.assertGreaterEqual(view._page_splitter.handleWidth(), 10)  # noqa: SLF001
+
+    def test_compact_width_stacks_results_workspace_and_details(self) -> None:
+        summary = _build_run_summary(Path("D:/demo/output/run1.out"))
+        metadata = _build_metadata(summary.output_files[0], components=["Ez"])
+        traces = _build_traces(summary.output_files[0].path, components=["Ez"])
+        view, _results_service = _build_view(
+            [summary],
+            metadata=metadata,
+            traces=traces,
+        )
+
+        view.resize(920, 700)
+        view.show()
+        self._app.processEvents()
+
+        self.assertEqual(view._bottom_splitter.orientation(), Qt.Orientation.Vertical)  # noqa: SLF001
+        self.assertEqual(view._page_splitter.orientation(), Qt.Orientation.Vertical)  # noqa: SLF001
 
 
 def _build_view(

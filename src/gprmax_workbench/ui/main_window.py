@@ -116,7 +116,7 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle(self._localization.text("window.title.base"))
         self.resize(1440, 920)
-        self.setMinimumSize(920, 680)
+        self.setMinimumSize(900, 640)
 
         self._connect_signals()
         self._create_actions()
@@ -368,6 +368,7 @@ class MainWindow(QMainWindow):
         self._set_sidebar_status(self._sidebar_project_status, project_text, project_tone)
         self._set_sidebar_status(self._sidebar_runtime_status, runtime_text, runtime_tone)
         self._set_sidebar_status(self._sidebar_run_status, run_text, run_tone)
+        self._refresh_sidebar_density()
 
     def _project_shell_status(self) -> tuple[str, str]:
         state = self._context.workspace_service.state
@@ -452,13 +453,13 @@ class MainWindow(QMainWindow):
         frame = QFrame()
         frame.setObjectName("Sidebar")
         self._sidebar = frame
-        frame.setMinimumWidth(210)
-        frame.setMaximumWidth(280)
+        frame.setMinimumWidth(196)
+        frame.setMaximumWidth(252)
         frame.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
 
         layout = QVBoxLayout(frame)
-        layout.setContentsMargins(18, 18, 18, 18)
-        layout.setSpacing(14)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
 
         self._sidebar_title = QLabel()
         self._sidebar_title.setObjectName("AppTitle")
@@ -488,9 +489,11 @@ class MainWindow(QMainWindow):
         layout.addSpacing(8)
         layout.addWidget(self._navigation)
         layout.addSpacing(8)
-        layout.addWidget(self._build_sidebar_status_area())
+        self._sidebar_status_area = self._build_sidebar_status_area()
+        layout.addWidget(self._sidebar_status_area)
 
         self._retranslate_navigation()
+        self._refresh_sidebar_density()
         return frame
 
     def _build_sidebar_status_area(self) -> QWidget:
@@ -541,8 +544,8 @@ class MainWindow(QMainWindow):
         available = screen.availableGeometry()
         width_margin = 40 if available.width() <= 1440 else 80
         height_margin = 40 if available.height() <= 900 else 96
-        target_width = min(1440, max(980, available.width() - width_margin))
-        target_height = min(920, max(700, available.height() - height_margin))
+        target_width = min(1440, max(920, available.width() - width_margin))
+        target_height = min(920, max(660, available.height() - height_margin))
         target_width = min(target_width, available.width())
         target_height = min(target_height, available.height())
         self.resize(target_width, target_height)
@@ -557,7 +560,33 @@ class MainWindow(QMainWindow):
         self.move(centered_x, centered_y)
 
     def _sidebar_width_for_window(self, window_width: int) -> int:
-        return max(210, min(280, int(window_width * 0.18)))
+        return max(196, min(252, int(window_width * 0.17)))
+
+    def _refresh_sidebar_density(self) -> None:
+        if not hasattr(self, "_sidebar_runtime_status"):
+            return
+
+        self._refresh_shell_splitter_density()
+        state = self._context.workspace_service.state
+        has_project = state.current_project is not None
+        has_run = state.active_run is not None or bool(state.run_history)
+        self._sidebar_subtitle.setVisible(self.width() >= 1080)
+        self._sidebar_project_status.setVisible(has_project and self.width() >= 1160)
+        self._sidebar_runtime_status.setVisible(True)
+        self._sidebar_run_status.setVisible(has_run and self.width() >= 1240)
+
+    def _refresh_shell_splitter_density(self) -> None:
+        if not hasattr(self, "_shell_splitter") or self.width() >= 1080:
+            return
+        sizes = self._shell_splitter.sizes()
+        if len(sizes) != 2:
+            return
+        sidebar_width = self._sidebar_width_for_window(self.width())
+        if sizes[0] == sidebar_width:
+            return
+        self._shell_splitter.setSizes(
+            [sidebar_width, max(1, sum(sizes) - sidebar_width)]
+        )
 
     def _build_content_stack(self) -> QWidget:
         for page in self._pages:
@@ -624,6 +653,7 @@ class MainWindow(QMainWindow):
             )
             if sizes is not None:
                 self._shell_splitter.setSizes(sizes)
+                self._refresh_shell_splitter_density()
         project_state = state.get("project_view")
         if isinstance(project_state, dict):
             self._project_view.apply_ui_state(project_state)
@@ -1364,6 +1394,10 @@ class MainWindow(QMainWindow):
         if not all(isinstance(item, int) and item > 0 for item in sizes):
             return None
         return list(sizes)
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._refresh_sidebar_density()
 
     def closeEvent(self, event) -> None:  # noqa: N802
         if not self._confirm_project_replacement_or_close():
