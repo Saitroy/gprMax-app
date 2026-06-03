@@ -18,7 +18,12 @@ from gprmax_workbench.application.services.localization_service import Localizat
 from gprmax_workbench.application.services.model_editor_service import ModelEditorService
 from gprmax_workbench.application.services.validation_service import ValidationService
 from gprmax_workbench.application.state import AppState
-from gprmax_workbench.domain.models import MaterialDefinition, Vector3, default_project
+from gprmax_workbench.domain.models import (
+    MaterialDefinition,
+    Vector3,
+    WaveformDefinition,
+    default_project,
+)
 from gprmax_workbench.domain.validation import validate_project
 from gprmax_workbench.ui.widgets.model_editor.scene_canvas_panel import (
     SceneCanvasPanel,
@@ -117,6 +122,87 @@ class SceneCanvasPanelTests(unittest.TestCase):
             lower = geometry.parameters["lower_left_m"]
             upper = geometry.parameters["upper_right_m"]
             self.assertAlmostEqual(upper["x"] - lower["x"], 0.4, places=6)
+
+    def test_geometry_material_change_does_not_commit_pending_size_preview(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Scene Demo", Path(temp_dir))
+            project.model.materials = [
+                MaterialDefinition(identifier="soil", relative_permittivity=4.0, conductivity=0.001),
+                MaterialDefinition(identifier="sand", relative_permittivity=3.0, conductivity=0.0005),
+            ]
+            state = AppState(current_project=project, current_project_validation=validate_project(project))
+            editor = ModelEditorService(state)
+            panel = SceneCanvasPanel(LocalizationService("en"), editor, ValidationService(state))
+            geometry_index = editor.add_geometry("box")
+            panel.set_project(project)
+            panel._set_selected_row("geometry", geometry_index)  # noqa: SLF001
+            geometry = project.model.geometry[geometry_index]
+            lower = geometry.parameters["lower_left_m"]
+            upper = geometry.parameters["upper_right_m"]
+            original_size_x = upper["x"] - lower["x"]
+            panel._size_x.setValue(0.4)  # noqa: SLF001
+
+            panel._material_combo.setCurrentIndex(panel._material_combo.findData("sand"))  # noqa: SLF001
+
+            geometry = project.model.geometry[geometry_index]
+            lower = geometry.parameters["lower_left_m"]
+            upper = geometry.parameters["upper_right_m"]
+            self.assertEqual(geometry.material_ids, ["sand"])
+            self.assertAlmostEqual(upper["x"] - lower["x"], original_size_x, places=6)
+
+            panel._apply_button.click()  # noqa: SLF001
+
+            geometry = project.model.geometry[geometry_index]
+            lower = geometry.parameters["lower_left_m"]
+            upper = geometry.parameters["upper_right_m"]
+            self.assertAlmostEqual(upper["x"] - lower["x"], 0.4, places=6)
+
+    def test_geometry_material_change_without_pending_size_does_not_render_preview(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Scene Demo", Path(temp_dir))
+            project.model.materials = [
+                MaterialDefinition(identifier="soil", relative_permittivity=4.0, conductivity=0.001),
+                MaterialDefinition(identifier="sand", relative_permittivity=3.0, conductivity=0.0005),
+            ]
+            state = AppState(current_project=project, current_project_validation=validate_project(project))
+            editor = ModelEditorService(state)
+            panel = SceneCanvasPanel(LocalizationService("en"), editor, ValidationService(state))
+            geometry_index = editor.add_geometry("box")
+            panel.set_project(project)
+            panel._set_selected_row("geometry", geometry_index)  # noqa: SLF001
+
+            panel._material_combo.setCurrentIndex(panel._material_combo.findData("sand"))  # noqa: SLF001
+
+            self.assertEqual(project.model.geometry[geometry_index].material_ids, ["sand"])
+            self.assertEqual(len(panel._preview_items), 0)  # noqa: SLF001
+
+    def test_source_detail_change_does_not_commit_pending_position_preview(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Scene Demo", Path(temp_dir))
+            project.model.waveforms = [
+                WaveformDefinition("pulse_a", "ricker", 1.0, 1.5e9),
+                WaveformDefinition("pulse_b", "ricker", 1.0, 900e6),
+            ]
+            state = AppState(current_project=project, current_project_validation=validate_project(project))
+            editor = ModelEditorService(state)
+            panel = SceneCanvasPanel(LocalizationService("en"), editor, ValidationService(state))
+            source_index = editor.add_source()
+            panel.set_project(project)
+            panel._set_selected_row("source", source_index)  # noqa: SLF001
+            original_position = project.model.sources[source_index].position_m
+            panel._pos_x.setValue(0.123)  # noqa: SLF001
+
+            panel._axis_combo.setCurrentIndex(panel._axis_combo.findData("x"))  # noqa: SLF001
+            panel._waveform_combo.setCurrentIndex(panel._waveform_combo.findData("pulse_b"))  # noqa: SLF001
+
+            source = project.model.sources[source_index]
+            self.assertEqual(source.axis, "x")
+            self.assertEqual(source.waveform_id, "pulse_b")
+            self.assertAlmostEqual(source.position_m.x, original_position.x, places=6)
+
+            panel._apply_button.click()  # noqa: SLF001
+
+            self.assertAlmostEqual(project.model.sources[source_index].position_m.x, 0.123, places=6)
 
     def test_geometry_size_preview_does_not_mutate_project_before_apply(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -512,6 +598,34 @@ class SceneCanvasPanelTests(unittest.TestCase):
             panel._outputs_edit.editingFinished.emit()  # noqa: SLF001
 
             self.assertEqual(project.model.receivers[receiver_index].outputs, ["Ez", "Hx"])
+
+    def test_receiver_outputs_change_does_not_commit_pending_position_preview(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Scene Demo", Path(temp_dir))
+            state = AppState(
+                current_project=project,
+                current_project_validation=validate_project(project),
+            )
+            editor = ModelEditorService(state)
+            validation = ValidationService(state)
+            receiver_index = editor.add_receiver()
+            panel = SceneCanvasPanel(LocalizationService("ru"), editor, validation)
+
+            panel.set_project(project)
+            panel._set_selected_row("receiver", receiver_index)  # noqa: SLF001
+            original_position = project.model.receivers[receiver_index].position_m
+            panel._pos_x.setValue(0.123)  # noqa: SLF001
+            panel._outputs_edit.setText("Ez, Hx")  # noqa: SLF001
+
+            panel._outputs_edit.editingFinished.emit()  # noqa: SLF001
+
+            receiver = project.model.receivers[receiver_index]
+            self.assertEqual(receiver.outputs, ["Ez", "Hx"])
+            self.assertAlmostEqual(receiver.position_m.x, original_position.x, places=6)
+
+            panel._apply_button.click()  # noqa: SLF001
+
+            self.assertAlmostEqual(project.model.receivers[receiver_index].position_m.x, 0.123, places=6)
 
     def test_geometry_color_depends_on_material_identifier(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

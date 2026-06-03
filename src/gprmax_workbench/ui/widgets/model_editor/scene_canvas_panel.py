@@ -1361,10 +1361,10 @@ class SceneCanvasPanel(QWidget):
         self._details_stack.addWidget(self._details_receiver)
         self._details_stack.addWidget(self._details_generic)
 
-        self._material_combo.currentIndexChanged.connect(self._apply_entity_changes)
-        self._waveform_combo.currentIndexChanged.connect(self._apply_entity_changes)
-        self._axis_combo.currentIndexChanged.connect(self._apply_entity_changes)
-        self._outputs_edit.editingFinished.connect(self._apply_entity_changes)
+        self._material_combo.currentIndexChanged.connect(self._apply_immediate_detail_changes)
+        self._waveform_combo.currentIndexChanged.connect(self._apply_immediate_detail_changes)
+        self._axis_combo.currentIndexChanged.connect(self._apply_immediate_detail_changes)
+        self._outputs_edit.editingFinished.connect(self._apply_immediate_detail_changes)
         for widget in (
             self._pos_x,
             self._pos_y,
@@ -2571,7 +2571,7 @@ class SceneCanvasPanel(QWidget):
         with self._model_editor_service.history_batch() as batch:
             batch.undo_context = selection
             batch.redo_context = selection
-            self._apply_detail_changes()
+            self._apply_detail_changes(include_numeric=True)
             self._apply_entity_position(
                 self._selected_entity_ref,
                 Vector3(self._pos_x.value(), self._pos_y.value(), self._pos_z.value()),
@@ -2582,17 +2582,59 @@ class SceneCanvasPanel(QWidget):
         self._refresh_history_controls()
         self.model_changed.emit()
 
-    def _apply_detail_changes(self) -> None:
+    def _apply_immediate_detail_changes(self, *_args: object) -> None:
+        if self._loading or not self._has_single_selection() or self._selected_entity_ref is None:
+            return
+        had_preview = bool(self._preview_items)
+        pending_position = Vector3(self._pos_x.value(), self._pos_y.value(), self._pos_z.value())
+        pending_size = Vector3(self._size_x.value(), self._size_y.value(), self._size_z.value())
+        pending_radius = self._radius.value()
+        selection = self._current_selection_context()
+        with self._model_editor_service.history_batch() as batch:
+            batch.undo_context = selection
+            batch.redo_context = selection
+            self._apply_detail_changes(include_numeric=False)
+        self._refresh_scene()
+        self._restore_selection(selection)
+        with (
+            QSignalBlocker(self._pos_x),
+            QSignalBlocker(self._pos_y),
+            QSignalBlocker(self._pos_z),
+            QSignalBlocker(self._size_x),
+            QSignalBlocker(self._size_y),
+            QSignalBlocker(self._size_z),
+            QSignalBlocker(self._radius),
+        ):
+            self._pos_x.setValue(pending_position.x)
+            self._pos_y.setValue(pending_position.y)
+            self._pos_z.setValue(pending_position.z)
+            self._size_x.setValue(pending_size.x)
+            self._size_y.setValue(pending_size.y)
+            self._size_z.setValue(pending_size.z)
+            self._radius.setValue(pending_radius)
+        if had_preview or self._has_pending_geometry_numeric_changes():
+            self._preview_entity_changes()
+        else:
+            self._clear_preview_items()
+        self.refresh_validation()
+        self._refresh_history_controls()
+        self.model_changed.emit()
+
+    def _apply_detail_changes(self, *, include_numeric: bool) -> None:
         if not self._has_single_selection() or self._selected_entity_ref is None or self._project is None:
             return
         project = self._model_editor_service.require_current_project()
         entity_ref = self._selected_entity_ref
         if entity_ref.kind == "geometry":
             geometry = copy.deepcopy(project.model.geometry[entity_ref.index])
-            center = self._geometry_center(geometry)
+            material_id = str(self._material_combo.currentData() or "")
+            geometry.material_ids = [material_id] if material_id else []
+            if include_numeric:
+                center = self._geometry_center(geometry)
+                geometry = self._geometry_with_inspector_values(geometry, center)
             self._model_editor_service.update_geometry(
                 entity_ref.index,
-                self._geometry_with_inspector_values(geometry, center),
+                geometry,
             )
             return
 
@@ -2607,6 +2649,50 @@ class SceneCanvasPanel(QWidget):
             receiver = copy.deepcopy(project.model.receivers[entity_ref.index])
             receiver.outputs = parse_csv_values(self._outputs_edit.text())
             self._model_editor_service.update_receiver(entity_ref.index, receiver)
+
+    def _has_pending_geometry_numeric_changes(self) -> bool:
+        if (
+            self._selected_entity_ref is None
+            or self._selected_entity_ref.kind != "geometry"
+            or self._project is None
+        ):
+            return False
+        geometry = self._project.model.geometry[self._selected_entity_ref.index]
+        center = self._geometry_center(geometry)
+        if (
+            self._value_changed(self._pos_x.value(), center.x)
+            or self._value_changed(self._pos_y.value(), center.y)
+            or self._value_changed(self._pos_z.value(), center.z)
+        ):
+            return True
+        if geometry.kind == "sphere":
+            return self._value_changed(
+                self._radius.value(),
+                float(geometry.parameters.get("radius_m", 0.0)),
+            )
+
+        if geometry.kind == "box":
+            lower = geometry.parameters.get("lower_left_m", {})
+            upper = geometry.parameters.get("upper_right_m", {})
+        else:
+            lower = geometry.parameters.get("start_m", {})
+            upper = geometry.parameters.get("end_m", {})
+            if self._value_changed(
+                self._radius.value(),
+                float(geometry.parameters.get("radius_m", 0.0)),
+            ):
+                return True
+        size_x = abs(float(upper.get("x", 0.0)) - float(lower.get("x", 0.0)))
+        size_y = abs(float(upper.get("y", 0.0)) - float(lower.get("y", 0.0)))
+        size_z = abs(float(upper.get("z", 0.0)) - float(lower.get("z", 0.0)))
+        return (
+            self._value_changed(self._size_x.value(), size_x)
+            or self._value_changed(self._size_y.value(), size_y)
+            or self._value_changed(self._size_z.value(), size_z)
+        )
+
+    def _value_changed(self, current: float, saved: float) -> bool:
+        return abs(current - saved) > 1e-9
 
     def _geometry_with_inspector_values(
         self,
