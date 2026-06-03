@@ -1364,9 +1364,17 @@ class SceneCanvasPanel(QWidget):
         self._material_combo.currentIndexChanged.connect(self._apply_entity_changes)
         self._waveform_combo.currentIndexChanged.connect(self._apply_entity_changes)
         self._axis_combo.currentIndexChanged.connect(self._apply_entity_changes)
-        self._outputs_edit.textChanged.connect(self._apply_entity_changes)
-        for widget in (self._size_x, self._size_y, self._size_z, self._radius):
-            widget.valueChanged.connect(self._apply_entity_changes)
+        self._outputs_edit.editingFinished.connect(self._apply_entity_changes)
+        for widget in (
+            self._pos_x,
+            self._pos_y,
+            self._pos_z,
+            self._size_x,
+            self._size_y,
+            self._size_z,
+            self._radius,
+        ):
+            widget.valueChanged.connect(self._preview_entity_changes)
 
     def retranslate_ui(self) -> None:
         self._plane_label.setText(self._localization.text("editor.scene.plane"))
@@ -2058,6 +2066,15 @@ class SceneCanvasPanel(QWidget):
         preview = self._resize_geometry(geometry, role, vector)
         self._render_geometry_preview(preview)
 
+    def _preview_entity_changes(self) -> None:
+        if self._loading or not self._has_single_selection() or self._selected_entity_ref is None:
+            return
+        if self._selected_entity_ref.kind != "geometry" or self._project is None:
+            return
+        geometry = copy.deepcopy(self._project.model.geometry[self._selected_entity_ref.index])
+        center = Vector3(self._pos_x.value(), self._pos_y.value(), self._pos_z.value())
+        self._render_geometry_preview(self._geometry_with_inspector_values(geometry, center))
+
     def _render_geometry_preview(self, geometry: GeometryPrimitive) -> None:
         self._clear_preview_items()
         pen = QPen(QColor("#2563eb"), 1.6, Qt.PenStyle.DashLine)
@@ -2567,41 +2584,11 @@ class SceneCanvasPanel(QWidget):
         entity_ref = self._selected_entity_ref
         if entity_ref.kind == "geometry":
             geometry = copy.deepcopy(project.model.geometry[entity_ref.index])
-            material_id = str(self._material_combo.currentData() or "")
-            geometry.material_ids = [material_id] if material_id else []
             center = self._geometry_center(geometry)
-            if geometry.kind == "box":
-                half_x = max(self._size_x.value(), 0.001) / 2
-                half_y = max(self._size_y.value(), 0.001) / 2
-                half_z = max(self._size_z.value(), 0.001) / 2
-                geometry.parameters["lower_left_m"] = {
-                    "x": center.x - half_x,
-                    "y": center.y - half_y,
-                    "z": center.z - half_z,
-                }
-                geometry.parameters["upper_right_m"] = {
-                    "x": center.x + half_x,
-                    "y": center.y + half_y,
-                    "z": center.z + half_z,
-                }
-            elif geometry.kind == "sphere":
-                geometry.parameters["radius_m"] = max(self._radius.value(), 0.001)
-            elif geometry.kind == "cylinder":
-                half_x = self._size_x.value() / 2
-                half_y = self._size_y.value() / 2
-                half_z = self._size_z.value() / 2
-                geometry.parameters["start_m"] = {
-                    "x": center.x - half_x,
-                    "y": center.y - half_y,
-                    "z": center.z - half_z,
-                }
-                geometry.parameters["end_m"] = {
-                    "x": center.x + half_x,
-                    "y": center.y + half_y,
-                    "z": center.z + half_z,
-                }
-                geometry.parameters["radius_m"] = max(self._radius.value(), 0.001)
-            self._model_editor_service.update_geometry(entity_ref.index, geometry)
+            self._model_editor_service.update_geometry(
+                entity_ref.index,
+                self._geometry_with_inspector_values(geometry, center),
+            )
             return
 
         if entity_ref.kind == "source":
@@ -2615,6 +2602,51 @@ class SceneCanvasPanel(QWidget):
             receiver = copy.deepcopy(project.model.receivers[entity_ref.index])
             receiver.outputs = parse_csv_values(self._outputs_edit.text())
             self._model_editor_service.update_receiver(entity_ref.index, receiver)
+
+    def _geometry_with_inspector_values(
+        self,
+        geometry: GeometryPrimitive,
+        center: Vector3,
+    ) -> GeometryPrimitive:
+        material_id = str(self._material_combo.currentData() or "")
+        geometry.material_ids = [material_id] if material_id else []
+        if geometry.kind == "box":
+            half_x = max(self._size_x.value(), 0.001) / 2
+            half_y = max(self._size_y.value(), 0.001) / 2
+            half_z = max(self._size_z.value(), 0.001) / 2
+            geometry.parameters["lower_left_m"] = {
+                "x": center.x - half_x,
+                "y": center.y - half_y,
+                "z": center.z - half_z,
+            }
+            geometry.parameters["upper_right_m"] = {
+                "x": center.x + half_x,
+                "y": center.y + half_y,
+                "z": center.z + half_z,
+            }
+        elif geometry.kind == "sphere":
+            geometry.parameters["center_m"] = {
+                "x": center.x,
+                "y": center.y,
+                "z": center.z,
+            }
+            geometry.parameters["radius_m"] = max(self._radius.value(), 0.001)
+        elif geometry.kind == "cylinder":
+            half_x = self._size_x.value() / 2
+            half_y = self._size_y.value() / 2
+            half_z = self._size_z.value() / 2
+            geometry.parameters["start_m"] = {
+                "x": center.x - half_x,
+                "y": center.y - half_y,
+                "z": center.z - half_z,
+            }
+            geometry.parameters["end_m"] = {
+                "x": center.x + half_x,
+                "y": center.y + half_y,
+                "z": center.z + half_z,
+            }
+            geometry.parameters["radius_m"] = max(self._radius.value(), 0.001)
+        return geometry
 
     def _duplicate_selected(self) -> None:
         selected_signatures = self._selected_signatures()
