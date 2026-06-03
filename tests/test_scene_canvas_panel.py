@@ -153,6 +153,32 @@ class SceneCanvasPanelTests(unittest.TestCase):
             self.assertAlmostEqual(upper["x"] - lower["x"], 0.4, places=6)
             self.assertAlmostEqual((lower["x"] + upper["x"]) / 2, 0.35, places=6)
 
+    def test_pending_source_position_survives_grid_refresh_and_apply(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Scene Demo", Path(temp_dir))
+            state = AppState(current_project=project, current_project_validation=validate_project(project))
+            editor = ModelEditorService(state)
+            panel = SceneCanvasPanel(LocalizationService("en"), editor, ValidationService(state))
+            source_index = editor.add_source()
+            panel.set_project(project)
+            panel._set_selected_row("source", source_index)  # noqa: SLF001
+            original_position = project.model.sources[source_index].position_m
+
+            panel._pos_x.setValue(0.35)  # noqa: SLF001
+            self.assertAlmostEqual(project.model.sources[source_index].position_m.x, original_position.x)
+            self.assertGreaterEqual(len(panel._preview_items), 1)  # noqa: SLF001
+
+            panel._snap_to_grid.setChecked(True)  # noqa: SLF001
+            panel._grid_step.setValue(0.05)  # noqa: SLF001
+
+            self.assertAlmostEqual(panel._pos_x.value(), 0.35, places=6)  # noqa: SLF001
+            self.assertAlmostEqual(project.model.sources[source_index].position_m.x, original_position.x)
+            self.assertGreaterEqual(len(panel._preview_items), 1)  # noqa: SLF001
+
+            panel._apply_button.click()  # noqa: SLF001
+
+            self.assertAlmostEqual(project.model.sources[source_index].position_m.x, 0.35, places=6)
+
     def test_reverting_geometry_numeric_change_to_saved_value_clears_preview(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             project = default_project("Scene Demo", Path(temp_dir))

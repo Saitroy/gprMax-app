@@ -69,6 +69,14 @@ class _SceneEntityRef:
     label: str
 
 
+@dataclass(frozen=True, slots=True)
+class _PendingInspectorValues:
+    signature: tuple[str, int]
+    position: Vector3
+    size: Vector3
+    radius: float
+
+
 @dataclass(slots=True)
 class _SceneHandleSpec:
     role: str
@@ -1793,34 +1801,35 @@ class SceneCanvasPanel(QWidget):
     def _refresh_scene_for_grid_change(self, *_args: object) -> None:
         if self._loading:
             return
-        pending_geometry_values = self._capture_pending_geometry_numeric_values()
+        pending_values = self._capture_pending_entity_numeric_values()
         self._refresh_scene()
-        if pending_geometry_values is None:
+        if pending_values is None:
             return
-        self._restore_pending_geometry_numeric_values(pending_geometry_values)
-        if self._has_pending_geometry_numeric_changes():
+        if self._restore_pending_entity_numeric_values(pending_values):
             self._preview_entity_changes()
-        else:
-            self._clear_preview_items()
 
-    def _capture_pending_geometry_numeric_values(self) -> tuple[Vector3, Vector3, float] | None:
+    def _capture_pending_entity_numeric_values(self) -> _PendingInspectorValues | None:
         if (
             not self._has_single_selection()
             or self._selected_entity_ref is None
-            or self._selected_entity_ref.kind != "geometry"
         ):
             return None
-        return (
-            Vector3(self._pos_x.value(), self._pos_y.value(), self._pos_z.value()),
-            Vector3(self._size_x.value(), self._size_y.value(), self._size_z.value()),
-            self._radius.value(),
+        return _PendingInspectorValues(
+            signature=self._entity_signature(self._selected_entity_ref),
+            position=Vector3(self._pos_x.value(), self._pos_y.value(), self._pos_z.value()),
+            size=Vector3(self._size_x.value(), self._size_y.value(), self._size_z.value()),
+            radius=self._radius.value(),
         )
 
-    def _restore_pending_geometry_numeric_values(
+    def _restore_pending_entity_numeric_values(
         self,
-        values: tuple[Vector3, Vector3, float],
-    ) -> None:
-        pending_position, pending_size, pending_radius = values
+        values: _PendingInspectorValues,
+    ) -> bool:
+        if (
+            self._selected_entity_ref is None
+            or self._entity_signature(self._selected_entity_ref) != values.signature
+        ):
+            return False
         with (
             QSignalBlocker(self._pos_x),
             QSignalBlocker(self._pos_y),
@@ -1830,13 +1839,14 @@ class SceneCanvasPanel(QWidget):
             QSignalBlocker(self._size_z),
             QSignalBlocker(self._radius),
         ):
-            self._pos_x.setValue(pending_position.x)
-            self._pos_y.setValue(pending_position.y)
-            self._pos_z.setValue(pending_position.z)
-            self._size_x.setValue(pending_size.x)
-            self._size_y.setValue(pending_size.y)
-            self._size_z.setValue(pending_size.z)
-            self._radius.setValue(pending_radius)
+            self._pos_x.setValue(values.position.x)
+            self._pos_y.setValue(values.position.y)
+            self._pos_z.setValue(values.position.z)
+            self._size_x.setValue(values.size.x)
+            self._size_y.setValue(values.size.y)
+            self._size_z.setValue(values.size.z)
+            self._radius.setValue(values.radius)
+        return True
 
     def _draw_grid(self, width: float, height: float) -> None:
         step = self._grid_step.value() if self._snap_to_grid.isChecked() else self._grid_spacing_for_scene(width, height)
@@ -2117,10 +2127,14 @@ class SceneCanvasPanel(QWidget):
     def _preview_entity_changes(self) -> None:
         if self._loading or not self._has_single_selection() or self._selected_entity_ref is None:
             return
-        if self._selected_entity_ref.kind != "geometry" or self._project is None:
+        if self._project is None:
             return
-        if not self._has_pending_geometry_numeric_changes():
+        if not self._has_pending_entity_numeric_changes():
             self._clear_preview_items()
+            return
+        if self._selected_entity_ref.kind != "geometry":
+            vector = Vector3(self._pos_x.value(), self._pos_y.value(), self._pos_z.value())
+            self._render_position_preview(self._selected_entity_ref, vector)
             return
         geometry = copy.deepcopy(self._project.model.geometry[self._selected_entity_ref.index])
         center = Vector3(self._pos_x.value(), self._pos_y.value(), self._pos_z.value())
@@ -2177,6 +2191,28 @@ class SceneCanvasPanel(QWidget):
         label.setPos(center.x(), center.y())
         label.setZValue(51)
         self._scene.addItem(label)
+        self._preview_items.append(label)
+
+    def _render_position_preview(self, entity_ref: _SceneEntityRef, vector: Vector3) -> None:
+        self._clear_preview_items()
+        point = self._project_point(self._clamp_vector_to_domain(self._snap_vector(vector)))
+        pen = QPen(QColor("#2563eb"), 1.6, Qt.PenStyle.DashLine)
+        pen.setCosmetic(True)
+        brush = QBrush(QColor(37, 99, 235, 28))
+        marker = QGraphicsEllipseItem(QRectF(-8.0, -8.0, 16.0, 16.0))
+        marker.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations, True)
+        marker.setPen(pen)
+        marker.setBrush(brush)
+        marker.setPos(point)
+        marker.setZValue(50)
+        self._scene.addItem(marker)
+        self._preview_items.append(marker)
+
+        label = QGraphicsSimpleTextItem(entity_ref.label, marker)
+        label.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations, True)
+        label.setBrush(QBrush(QColor("#1e3a5f")))
+        label.setPos(QPointF(10.0, -18.0))
+        label.setZValue(51)
         self._preview_items.append(label)
 
     def _add_entity_item(self, entity_ref: _SceneEntityRef, item: _SceneEntityItem) -> None:
@@ -2663,7 +2699,7 @@ class SceneCanvasPanel(QWidget):
             self._size_y.setValue(pending_size.y)
             self._size_z.setValue(pending_size.z)
             self._radius.setValue(pending_radius)
-        if had_preview or self._has_pending_geometry_numeric_changes():
+        if had_preview or self._has_pending_entity_numeric_changes():
             self._preview_entity_changes()
         else:
             self._clear_preview_items()
@@ -2700,6 +2736,24 @@ class SceneCanvasPanel(QWidget):
             receiver = copy.deepcopy(project.model.receivers[entity_ref.index])
             receiver.outputs = parse_csv_values(self._outputs_edit.text())
             self._model_editor_service.update_receiver(entity_ref.index, receiver)
+
+    def _has_pending_entity_numeric_changes(self) -> bool:
+        if self._selected_entity_ref is None or self._project is None:
+            return False
+        if self._selected_entity_ref.kind == "geometry":
+            return self._has_pending_geometry_numeric_changes()
+        return self._has_pending_entity_position_changes()
+
+    def _has_pending_entity_position_changes(self) -> bool:
+        if self._selected_entity_ref is None or self._project is None:
+            return False
+        entity = self._entity_for_ref(self._selected_entity_ref)
+        position = self._entity_position(self._selected_entity_ref, entity)
+        return (
+            self._value_changed(self._pos_x.value(), position.x)
+            or self._value_changed(self._pos_y.value(), position.y)
+            or self._value_changed(self._pos_z.value(), position.z)
+        )
 
     def _has_pending_geometry_numeric_changes(self) -> bool:
         if (
