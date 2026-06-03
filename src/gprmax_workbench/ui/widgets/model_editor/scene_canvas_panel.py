@@ -633,10 +633,10 @@ class SceneCanvasPanel(QWidget):
         self._scene_mode_combo = QComboBox()
         self._scene_mode_combo.currentIndexChanged.connect(self._change_scene_mode)
         self._snap_to_grid = QCheckBox()
-        self._snap_to_grid.toggled.connect(self._refresh_scene)
+        self._snap_to_grid.toggled.connect(self._refresh_scene_for_grid_change)
         self._grid_step = build_float_spinbox(minimum=0.001, maximum=10.0, decimals=4, step=0.001)
         self._grid_step.setValue(0.01)
-        self._grid_step.valueChanged.connect(self._refresh_scene)
+        self._grid_step.valueChanged.connect(self._refresh_scene_for_grid_change)
         self._domain_x = build_float_spinbox(minimum=0.001, maximum=1000.0, decimals=4, step=0.01)
         self._domain_y = build_float_spinbox(minimum=0.001, maximum=1000.0, decimals=4, step=0.01)
         self._domain_z = build_float_spinbox(minimum=0.001, maximum=1000.0, decimals=4, step=0.01)
@@ -1790,6 +1790,54 @@ class SceneCanvasPanel(QWidget):
         self._refresh_pointer_overlays()
         self._update_model_state_summary()
 
+    def _refresh_scene_for_grid_change(self, *_args: object) -> None:
+        if self._loading:
+            return
+        pending_geometry_values = self._capture_pending_geometry_numeric_values()
+        self._refresh_scene()
+        if pending_geometry_values is None:
+            return
+        self._restore_pending_geometry_numeric_values(pending_geometry_values)
+        if self._has_pending_geometry_numeric_changes():
+            self._preview_entity_changes()
+        else:
+            self._clear_preview_items()
+
+    def _capture_pending_geometry_numeric_values(self) -> tuple[Vector3, Vector3, float] | None:
+        if (
+            not self._has_single_selection()
+            or self._selected_entity_ref is None
+            or self._selected_entity_ref.kind != "geometry"
+        ):
+            return None
+        return (
+            Vector3(self._pos_x.value(), self._pos_y.value(), self._pos_z.value()),
+            Vector3(self._size_x.value(), self._size_y.value(), self._size_z.value()),
+            self._radius.value(),
+        )
+
+    def _restore_pending_geometry_numeric_values(
+        self,
+        values: tuple[Vector3, Vector3, float],
+    ) -> None:
+        pending_position, pending_size, pending_radius = values
+        with (
+            QSignalBlocker(self._pos_x),
+            QSignalBlocker(self._pos_y),
+            QSignalBlocker(self._pos_z),
+            QSignalBlocker(self._size_x),
+            QSignalBlocker(self._size_y),
+            QSignalBlocker(self._size_z),
+            QSignalBlocker(self._radius),
+        ):
+            self._pos_x.setValue(pending_position.x)
+            self._pos_y.setValue(pending_position.y)
+            self._pos_z.setValue(pending_position.z)
+            self._size_x.setValue(pending_size.x)
+            self._size_y.setValue(pending_size.y)
+            self._size_z.setValue(pending_size.z)
+            self._radius.setValue(pending_radius)
+
     def _draw_grid(self, width: float, height: float) -> None:
         step = self._grid_step.value() if self._snap_to_grid.isChecked() else self._grid_spacing_for_scene(width, height)
         grid_pen = QPen(QColor("#d8e2ea"), 0)
@@ -2070,6 +2118,9 @@ class SceneCanvasPanel(QWidget):
         if self._loading or not self._has_single_selection() or self._selected_entity_ref is None:
             return
         if self._selected_entity_ref.kind != "geometry" or self._project is None:
+            return
+        if not self._has_pending_geometry_numeric_changes():
+            self._clear_preview_items()
             return
         geometry = copy.deepcopy(self._project.model.geometry[self._selected_entity_ref.index])
         center = Vector3(self._pos_x.value(), self._pos_y.value(), self._pos_z.value())

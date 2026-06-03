@@ -123,6 +123,57 @@ class SceneCanvasPanelTests(unittest.TestCase):
             upper = geometry.parameters["upper_right_m"]
             self.assertAlmostEqual(upper["x"] - lower["x"], 0.4, places=6)
 
+    def test_pending_geometry_numeric_changes_survive_grid_refresh_and_apply(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Scene Demo", Path(temp_dir))
+            project.model.materials = [
+                MaterialDefinition(identifier="soil", relative_permittivity=4.0, conductivity=0.001)
+            ]
+            state = AppState(current_project=project, current_project_validation=validate_project(project))
+            editor = ModelEditorService(state)
+            panel = SceneCanvasPanel(LocalizationService("en"), editor, ValidationService(state))
+            geometry_index = editor.add_geometry("box")
+            panel.set_project(project)
+            panel._set_selected_row("geometry", geometry_index)  # noqa: SLF001
+
+            panel._size_x.setValue(0.4)  # noqa: SLF001
+            panel._pos_x.setValue(0.35)  # noqa: SLF001
+            panel._snap_to_grid.setChecked(True)  # noqa: SLF001
+            panel._grid_step.setValue(0.05)  # noqa: SLF001
+
+            self.assertAlmostEqual(panel._size_x.value(), 0.4, places=6)  # noqa: SLF001
+            self.assertAlmostEqual(panel._pos_x.value(), 0.35, places=6)  # noqa: SLF001
+            self.assertGreaterEqual(len(panel._preview_items), 1)  # noqa: SLF001
+
+            panel._apply_button.click()  # noqa: SLF001
+
+            geometry = project.model.geometry[geometry_index]
+            lower = geometry.parameters["lower_left_m"]
+            upper = geometry.parameters["upper_right_m"]
+            self.assertAlmostEqual(upper["x"] - lower["x"], 0.4, places=6)
+            self.assertAlmostEqual((lower["x"] + upper["x"]) / 2, 0.35, places=6)
+
+    def test_reverting_geometry_numeric_change_to_saved_value_clears_preview(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Scene Demo", Path(temp_dir))
+            project.model.materials = [
+                MaterialDefinition(identifier="soil", relative_permittivity=4.0, conductivity=0.001)
+            ]
+            state = AppState(current_project=project, current_project_validation=validate_project(project))
+            editor = ModelEditorService(state)
+            panel = SceneCanvasPanel(LocalizationService("en"), editor, ValidationService(state))
+            geometry_index = editor.add_geometry("box")
+            panel.set_project(project)
+            panel._set_selected_row("geometry", geometry_index)  # noqa: SLF001
+            saved_size_x = panel._size_x.value()  # noqa: SLF001
+
+            panel._size_x.setValue(0.4)  # noqa: SLF001
+            self.assertGreaterEqual(len(panel._preview_items), 1)  # noqa: SLF001
+
+            panel._size_x.setValue(saved_size_x)  # noqa: SLF001
+
+            self.assertEqual(len(panel._preview_items), 0)  # noqa: SLF001
+
     def test_geometry_material_change_does_not_commit_pending_size_preview(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             project = default_project("Scene Demo", Path(temp_dir))
