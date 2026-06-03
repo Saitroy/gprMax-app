@@ -2073,7 +2073,9 @@ class SceneCanvasPanel(QWidget):
             return
         geometry = copy.deepcopy(self._project.model.geometry[self._selected_entity_ref.index])
         center = Vector3(self._pos_x.value(), self._pos_y.value(), self._pos_z.value())
-        self._render_geometry_preview(self._geometry_with_inspector_values(geometry, center))
+        geometry = self._geometry_with_inspector_values(geometry, self._geometry_center(geometry))
+        constrained = self._constrain_geometry_anchor(geometry, self._snap_vector(center))
+        self._render_geometry_preview(self._move_geometry_to_anchor(geometry, constrained))
 
     def _render_geometry_preview(self, geometry: GeometryPrimitive) -> None:
         self._clear_preview_items()
@@ -2371,6 +2373,8 @@ class SceneCanvasPanel(QWidget):
         self._loading = True
         self._selected_entity_ref = entity_ref
         self._selected_entity_refs = [entity_ref] if entity_ref is not None else []
+        if entity_ref is None or entity_ref.kind != "geometry":
+            self._clear_preview_items()
         enabled = entity_ref is not None
         for widget in (
             self._pos_x,
@@ -2419,6 +2423,7 @@ class SceneCanvasPanel(QWidget):
         self._loading = True
         self._selected_entity_refs = list(entity_refs)
         self._selected_entity_ref = primary_ref
+        self._clear_preview_items()
         for widget in (self._pos_x, self._pos_y, self._pos_z, self._apply_button):
             widget.setEnabled(False)
         for widget in (
@@ -3399,6 +3404,8 @@ class SceneCanvasPanel(QWidget):
         primary: tuple[str, int] | None,
     ) -> None:
         context = self._selection_context(signatures, primary)
+        if context.selections != self._selected_signatures() or context.primary != self._primary_selection_signature():
+            self._clear_preview_items()
         target_set = set(context.selections)
         resolved_refs: list[_SceneEntityRef] = []
         self._selection_syncing = True

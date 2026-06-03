@@ -118,6 +118,78 @@ class SceneCanvasPanelTests(unittest.TestCase):
             upper = geometry.parameters["upper_right_m"]
             self.assertAlmostEqual(upper["x"] - lower["x"], 0.4, places=6)
 
+    def test_geometry_size_preview_does_not_mutate_project_before_apply(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Scene Demo", Path(temp_dir))
+            project.model.materials = [
+                MaterialDefinition(identifier="soil", relative_permittivity=4.0, conductivity=0.001)
+            ]
+            state = AppState(current_project=project, current_project_validation=validate_project(project))
+            editor = ModelEditorService(state)
+            panel = SceneCanvasPanel(LocalizationService("en"), editor, ValidationService(state))
+            geometry_index = editor.add_geometry("box")
+            panel.set_project(project)
+            panel._set_selected_row("geometry", geometry_index)  # noqa: SLF001
+            geometry = project.model.geometry[geometry_index]
+            original_lower = dict(geometry.parameters["lower_left_m"])
+            original_upper = dict(geometry.parameters["upper_right_m"])
+
+            panel._size_x.setValue(0.4)  # noqa: SLF001
+
+            self.assertEqual(geometry.parameters["lower_left_m"], original_lower)
+            self.assertEqual(geometry.parameters["upper_right_m"], original_upper)
+            self.assertGreaterEqual(len(panel._preview_items), 1)  # noqa: SLF001
+
+    def test_geometry_size_preview_clears_on_selection_change(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Scene Demo", Path(temp_dir))
+            project.model.materials = [
+                MaterialDefinition(identifier="soil", relative_permittivity=4.0, conductivity=0.001)
+            ]
+            state = AppState(current_project=project, current_project_validation=validate_project(project))
+            editor = ModelEditorService(state)
+            panel = SceneCanvasPanel(LocalizationService("en"), editor, ValidationService(state))
+            geometry_index = editor.add_geometry("box")
+            receiver_index = editor.add_receiver()
+            panel.set_project(project)
+            panel._set_selected_row("geometry", geometry_index)  # noqa: SLF001
+            panel._size_x.setValue(0.4)  # noqa: SLF001
+            self.assertGreaterEqual(len(panel._preview_items), 1)  # noqa: SLF001
+
+            panel._set_selected_row("receiver", receiver_index)  # noqa: SLF001
+
+            self.assertEqual(len(panel._preview_items), 0)  # noqa: SLF001
+
+    def test_geometry_size_preview_matches_snapped_constrained_apply_position(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Scene Demo", Path(temp_dir))
+            project.model.domain.size_m.x = 1.0
+            project.model.domain.size_m.y = 1.0
+            project.model.domain.size_m.z = 0.2
+            project.model.materials = [
+                MaterialDefinition(identifier="soil", relative_permittivity=4.0, conductivity=0.001)
+            ]
+            state = AppState(current_project=project, current_project_validation=validate_project(project))
+            editor = ModelEditorService(state)
+            panel = SceneCanvasPanel(LocalizationService("en"), editor, ValidationService(state))
+            geometry_index = editor.add_geometry("box")
+            panel.set_project(project)
+            panel._snap_to_grid.setChecked(True)  # noqa: SLF001
+            panel._grid_step.setValue(0.25)  # noqa: SLF001
+            panel._set_selected_row("geometry", geometry_index)  # noqa: SLF001
+            panel._size_x.setValue(0.4)  # noqa: SLF001
+            panel._pos_x.setValue(0.93)  # noqa: SLF001
+            preview_rect = panel._preview_items[0].rect()  # noqa: SLF001
+
+            panel._apply_button.click()  # noqa: SLF001
+
+            geometry = project.model.geometry[geometry_index]
+            lower = geometry.parameters["lower_left_m"]
+            upper = geometry.parameters["upper_right_m"]
+            self.assertAlmostEqual(preview_rect.left(), lower["x"], places=6)
+            self.assertAlmostEqual(preview_rect.right(), upper["x"], places=6)
+            self.assertAlmostEqual(upper["x"], 1.0, places=6)
+
     def test_snap_to_grid_rounds_receiver_position(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             project = default_project("Scene Demo", Path(temp_dir))
