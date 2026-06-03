@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import Qt, QTimer, QUrl
+from PySide6.QtCore import QSize, Qt, QTimer, QUrl
 from PySide6.QtGui import QAction, QDesktopServices, QGuiApplication
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -53,6 +53,7 @@ class PageSpec:
     title_key: str
     description_key: str
     widget: QWidget
+    rail_label: str
 
 
 class MainWindow(QMainWindow):
@@ -135,21 +136,25 @@ class MainWindow(QMainWindow):
                 title_key="page.welcome.title",
                 description_key="page.welcome.description",
                 widget=self._welcome_view,
+                rail_label="H",
             ),
             PageSpec(
                 title_key="page.project.title",
                 description_key="page.project.description",
                 widget=self._project_view,
+                rail_label="M",
             ),
             PageSpec(
                 title_key="page.simulation.title",
                 description_key="page.simulation.description",
                 widget=self._simulation_view,
+                rail_label="S",
             ),
             PageSpec(
                 title_key="page.results.title",
                 description_key="page.results.description",
                 widget=self._results_view,
+                rail_label="R",
             ),
         ]
 
@@ -285,11 +290,16 @@ class MainWindow(QMainWindow):
             self._localization.text("action.open_documentation")
         )
         self._about_action.setText(self._localization.text("action.about"))
-        self._sidebar_title.setText(self._localization.text("sidebar.title"))
+        self._sidebar_title.setText("g")
+        self._sidebar_title.setToolTip(self._localization.text("sidebar.title"))
         self._sidebar_subtitle.setText(self._localization.text("sidebar.subtitle"))
         self._sidebar_status_title.setText(self._localization.text("shell.status.title"))
         self._sidebar_settings_button.setText(self._localization.text("settings.title"))
         self._sidebar_documentation_button.setText(
+            self._localization.text("action.open_documentation")
+        )
+        self._rail_settings_button.setToolTip(self._localization.text("settings.title"))
+        self._rail_documentation_button.setToolTip(
             self._localization.text("action.open_documentation")
         )
         self._retranslate_navigation()
@@ -313,8 +323,9 @@ class MainWindow(QMainWindow):
             if item is None:
                 continue
             page = self._pages[page_index]
-            item.setText(self._localization.text(page.title_key))
-            item.setToolTip(self._localization.text(page.description_key))
+            title = self._localization.text(page.title_key)
+            item.setText(page.rail_label)
+            item.setToolTip(f"{title}\n{self._localization.text(page.description_key)}")
 
     def _refresh_shell_state(self) -> None:
         workspace = self._context.workspace_service
@@ -453,26 +464,26 @@ class MainWindow(QMainWindow):
         frame = QFrame()
         frame.setObjectName("Sidebar")
         self._sidebar = frame
-        frame.setMinimumWidth(196)
-        frame.setMaximumWidth(252)
+        frame.setMinimumWidth(68)
+        frame.setMaximumWidth(84)
         frame.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
 
         layout = QVBoxLayout(frame)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(12)
+        layout.setContentsMargins(8, 10, 8, 10)
+        layout.setSpacing(8)
 
         self._sidebar_title = QLabel()
         self._sidebar_title.setObjectName("AppTitle")
-        self._sidebar_title.setAlignment(
-            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
-        )
+        self._sidebar_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self._sidebar_subtitle = QLabel()
         self._sidebar_subtitle.setObjectName("AppSubtitle")
         self._sidebar_subtitle.setWordWrap(True)
+        self._sidebar_subtitle.hide()
 
         self._navigation.setObjectName("Navigation")
-        self._navigation.setSpacing(4)
+        self._navigation.setSpacing(6)
+        self._navigation.setUniformItemSizes(True)
         self._navigation.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
@@ -480,21 +491,41 @@ class MainWindow(QMainWindow):
         for page_index in self._navigation_page_indexes:
             item = QListWidgetItem()
             item.setData(Qt.ItemDataRole.UserRole, page_index)
+            item.setSizeHint(QSize(44, 44))
+            item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             self._navigation.addItem(item)
 
         self._navigation.currentRowChanged.connect(self._on_navigation_changed)
 
         layout.addWidget(self._sidebar_title)
         layout.addWidget(self._sidebar_subtitle)
-        layout.addSpacing(8)
         layout.addWidget(self._navigation)
-        layout.addSpacing(8)
         self._sidebar_status_area = self._build_sidebar_status_area()
+        self._sidebar_status_area.hide()
         layout.addWidget(self._sidebar_status_area)
+        layout.addStretch(1)
+        self._rail_settings_button = self._build_rail_action_button(
+            "Set",
+            self._open_settings_page,
+        )
+        self._rail_documentation_button = self._build_rail_action_button(
+            "Doc",
+            self._open_documentation_dialog,
+        )
+        layout.addWidget(self._rail_settings_button)
+        layout.addWidget(self._rail_documentation_button)
 
         self._retranslate_navigation()
         self._refresh_sidebar_density()
         return frame
+
+    def _build_rail_action_button(self, text: str, handler) -> QPushButton:
+        button = QPushButton(text)
+        button.setObjectName("RailActionButton")
+        button.setProperty("buttonRole", "rail")
+        button.clicked.connect(handler)
+        button.setCursor(Qt.CursorShape.PointingHandCursor)
+        return button
 
     def _build_sidebar_status_area(self) -> QWidget:
         frame = QFrame()
@@ -560,23 +591,21 @@ class MainWindow(QMainWindow):
         self.move(centered_x, centered_y)
 
     def _sidebar_width_for_window(self, window_width: int) -> int:
-        return max(196, min(252, int(window_width * 0.17)))
+        return 76
 
     def _refresh_sidebar_density(self) -> None:
         if not hasattr(self, "_sidebar_runtime_status"):
             return
 
         self._refresh_shell_splitter_density()
-        state = self._context.workspace_service.state
-        has_project = state.current_project is not None
-        has_run = state.active_run is not None or bool(state.run_history)
-        self._sidebar_subtitle.setVisible(self.width() >= 1080)
-        self._sidebar_project_status.setVisible(has_project and self.width() >= 1160)
-        self._sidebar_runtime_status.setVisible(True)
-        self._sidebar_run_status.setVisible(has_run and self.width() >= 1240)
+        self._sidebar_subtitle.hide()
+        self._sidebar_status_area.hide()
+        self._sidebar_project_status.hide()
+        self._sidebar_runtime_status.hide()
+        self._sidebar_run_status.hide()
 
     def _refresh_shell_splitter_density(self) -> None:
-        if not hasattr(self, "_shell_splitter") or self.width() >= 1080:
+        if not hasattr(self, "_shell_splitter"):
             return
         sizes = self._shell_splitter.sizes()
         if len(sizes) != 2:

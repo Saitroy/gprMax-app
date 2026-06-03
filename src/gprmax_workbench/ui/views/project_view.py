@@ -846,6 +846,12 @@ class ProjectView(QWidget):
     def _refresh_responsive_layout(self, *, force: bool = False) -> None:
         self._refresh_project_heading_layout()
         orientation = Qt.Orientation.Horizontal
+        if self.width() < 980:
+            self._nav_card.setMinimumWidth(148)
+            self._nav_card.setMaximumWidth(196)
+        else:
+            self._nav_card.setMinimumWidth(0)
+            self._nav_card.setMaximumWidth(16777215)
         orientation_changed = self._content_splitter.orientation() != orientation
         if orientation_changed:
             self._content_splitter.setOrientation(orientation)

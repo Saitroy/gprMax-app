@@ -147,6 +147,19 @@ class ProjectViewSmokeTests(unittest.TestCase):
 
             self.assertLessEqual(view._content_splitter.sizes()[0], 200)  # noqa: SLF001
 
+    def test_desktop_width_releases_compact_navigation_cap(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            view = self._build_view(temp_dir)
+            view.resize(700, 700)
+            view.show()
+            self._app.processEvents()
+            self.assertLessEqual(view._nav_card.maximumWidth(), 196)  # noqa: SLF001
+
+            view.resize(1100, 720)
+            self._app.processEvents()
+
+            self.assertGreater(view._nav_card.maximumWidth(), 1000)  # noqa: SLF001
+
     def test_compact_empty_state_keeps_overview_card_within_workspace_width(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             view = self._build_view(temp_dir)

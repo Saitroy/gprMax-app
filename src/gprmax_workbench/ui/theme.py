@@ -146,15 +146,20 @@ QMenu::item:selected {{
     color: {c["primary_pressed"]};
 }}
 QFrame#Sidebar {{
-    background-color: {c["surface"]};
+    background-color: {c["surface_alt"]};
     border-radius: {r["lg"]}px;
     border: 1px solid {c["border"]};
 }}
 QLabel#AppTitle {{
-    background: transparent;
-    color: #0f172a;
+    background: {c["primary"]};
+    color: #ffffff;
+    border-radius: 18px;
+    min-width: 36px;
+    min-height: 36px;
+    max-width: 36px;
+    max-height: 36px;
     font-family: "Segoe UI";
-    font-size: 17pt;
+    font-size: 16pt;
     font-weight: 700;
 }}
 QLabel#AppSubtitle {{
@@ -196,6 +201,27 @@ QPushButton[buttonRole="sidebar"]:pressed {{
     background: #dbeafe;
     border-color: #93c5fd;
 }}
+QPushButton[buttonRole="rail"] {{
+    background: {c["surface"]};
+    color: {c["text_muted"]};
+    border: 1px solid {c["border"]};
+    border-radius: {r["md"]}px;
+    min-height: 34px;
+    max-height: 34px;
+    padding: 0;
+    font-size: 8pt;
+    font-weight: 700;
+}}
+QPushButton[buttonRole="rail"]:hover {{
+    background: #e0ecff;
+    color: {c["primary_pressed"]};
+    border-color: #bfdbfe;
+}}
+QPushButton[buttonRole="rail"]:pressed {{
+    background: {c["primary"]};
+    color: #ffffff;
+    border-color: {c["primary"]};
+}}
 QListWidget#Navigation {{
     background: transparent;
     border: none;
@@ -203,18 +229,20 @@ QListWidget#Navigation {{
     outline: none;
 }}
 QListWidget#Navigation::item {{
+    border: 1px solid transparent;
     border-radius: {r["md"]}px;
     margin: 2px 0;
-    padding: 9px 10px;
+    padding: 0;
 }}
 QListWidget#Navigation::item:selected {{
-    background: {c["primary_soft"]};
-    color: {c["primary_pressed"]};
-    border: 1px solid #bfdbfe;
+    background: {c["primary"]};
+    color: #ffffff;
+    border-color: {c["primary"]};
 }}
 QListWidget#Navigation::item:hover:!selected {{
-    background: {c["surface_muted"]};
-    color: {c["text"]};
+    background: #e0ecff;
+    color: {c["primary_pressed"]};
+    border-color: #bfdbfe;
 }}
 QListWidget#ContextNavigation {{
     background: transparent;
