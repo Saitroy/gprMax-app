@@ -155,6 +155,7 @@ class ProjectView(QWidget):
 
         project_card = QFrame()
         project_card.setObjectName("ModelOverviewCard")
+        self._project_card = project_card
         project_layout = QVBoxLayout(project_card)
         project_layout.setContentsMargins(20, 18, 20, 18)
         project_layout.setSpacing(8)
@@ -184,7 +185,7 @@ class ProjectView(QWidget):
 
         self._section_toolbar_card = QFrame()
         self._section_toolbar_card.setObjectName("ViewCard")
-        self._section_toolbar_card.setVisible(False)
+        self._section_toolbar_card.setVisible(True)
         section_toolbar_layout = QVBoxLayout(self._section_toolbar_card)
         section_toolbar_layout.setContentsMargins(14, 12, 14, 12)
         section_toolbar_layout.setSpacing(8)
@@ -233,7 +234,7 @@ class ProjectView(QWidget):
         self._nav_heading.setObjectName("SectionTitle")
         nav_layout.addWidget(self._nav_heading)
         nav_layout.addWidget(self._section_nav, 1)
-        self._nav_card.setVisible(True)
+        self._nav_card.setVisible(False)
 
         for _, panel in self._all_sections:
             self._section_stack.addWidget(panel)
@@ -251,7 +252,9 @@ class ProjectView(QWidget):
         layout.setSpacing(18)
         layout.addWidget(self._header)
         layout.addWidget(self._subtitle)
-        layout.addWidget(project_card)
+        self._project_card.setVisible(False)
+        self._validation_summary_card.setVisible(False)
+        layout.addWidget(self._project_card)
         layout.addWidget(self._validation_summary_card)
         layout.addWidget(self._content_splitter, 1)
 
@@ -480,16 +483,15 @@ class ProjectView(QWidget):
         self,
         validation: ValidationResult | None,
     ) -> None:
+        self._validation_summary_card.setVisible(False)
         self._validation_summary_title.setText(
             self._localization.text("project.validation_summary.title")
         )
         self._clear_validation_issue_rows()
 
         if validation is None or not validation.issues:
-            self._validation_summary_card.setVisible(False)
             return
 
-        self._validation_summary_card.setVisible(True)
         tone = "error" if validation.errors else "warning"
         self._set_status_badge(
             self._validation_summary_badge,

@@ -97,8 +97,24 @@ class ProjectViewSmokeTests(unittest.TestCase):
                 view._section_nav.currentItem().text(),  # noqa: SLF001
                 localization.text("project.section.materials"),
             )
-            self.assertFalse(view._nav_card.isHidden())  # noqa: SLF001
-            self.assertTrue(view._section_toolbar_card.isHidden())  # noqa: SLF001
+            self.assertTrue(view._nav_card.isHidden())  # noqa: SLF001
+            self.assertFalse(view._section_toolbar_card.isHidden())  # noqa: SLF001
+
+    def test_scene_workspace_hides_redundant_editor_overview_cards(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            view = self._build_view(temp_dir)
+
+            self.assertTrue(view._project_card.isHidden())  # noqa: SLF001
+            self.assertTrue(view._validation_summary_card.isHidden())  # noqa: SLF001
+            self.assertTrue(view._nav_card.isHidden())  # noqa: SLF001
+            self.assertIs(view._section_stack.currentWidget(), view._scene_panel)  # noqa: SLF001
+
+    def test_editor_sections_remain_available_from_scene_toolbar(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            view = self._build_view(temp_dir)
+
+            self.assertGreaterEqual(len(view._section_buttons), 8)  # noqa: SLF001
+            self.assertFalse(view._section_toolbar_card.isHidden())  # noqa: SLF001
 
     def test_scene_edit_request_switches_to_matching_section(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
