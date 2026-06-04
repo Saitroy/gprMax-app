@@ -182,7 +182,11 @@ class SimulationView(QWidget):
 
         self._preview_button = QPushButton()
         self._preview_button.setProperty("buttonRole", "secondary")
-        self._preview_button.clicked.connect(self.preview_requested.emit)
+        self._preview_button.clicked.connect(self._open_preview_page)
+
+        self._open_logs_button = QPushButton()
+        self._open_logs_button.setProperty("buttonRole", "ghost")
+        self._open_logs_button.clicked.connect(self._open_log_page)
 
         self._export_button = QPushButton()
         self._export_button.setProperty("buttonRole", "ghost")
@@ -212,6 +216,7 @@ class SimulationView(QWidget):
         self._action_bar.addWidget(self._start_button)
         self._action_bar.addWidget(self._retry_button)
         self._action_bar.addWidget(self._preview_button)
+        self._action_bar.addWidget(self._open_logs_button)
         self._action_bar.addWidget(self._export_button)
         self._action_bar.addWidget(self._cancel_button)
         self._action_bar.addWidget(self._open_run_button)
@@ -276,6 +281,17 @@ class SimulationView(QWidget):
         )
         self._monitor_page = monitor_page
 
+        history_page = QWidget()
+        history_layout = QVBoxLayout(history_page)
+        history_layout.setContentsMargins(0, 0, 0, 0)
+        history_layout.setSpacing(16)
+        history_layout.addWidget(history_card, 1)
+        history_page.setSizePolicy(
+            QSizePolicy.Policy.Ignored,
+            QSizePolicy.Policy.Expanding,
+        )
+        self._history_page = history_page
+
         preview_page = QWidget()
         preview_layout = QVBoxLayout(preview_page)
         preview_layout.setContentsMargins(0, 0, 0, 0)
@@ -298,7 +314,6 @@ class SimulationView(QWidget):
             self._build_card("simulation.log_card", self._build_log_widget()),
             1,
         )
-        logs_layout.addWidget(history_card, 1)
         logs_page.setSizePolicy(
             QSizePolicy.Policy.Ignored,
             QSizePolicy.Policy.Expanding,
@@ -308,13 +323,20 @@ class SimulationView(QWidget):
         self._sections = [
             "simulation.section.launch",
             "simulation.section.monitor",
-            "simulation.section.preview",
-            "simulation.section.logs",
+            "simulation.section.history",
         ]
         self._section_stack.addWidget(self._launch_page)
         self._section_stack.addWidget(self._monitor_page)
+        self._section_stack.addWidget(self._history_page)
         self._section_stack.addWidget(self._preview_page)
         self._section_stack.addWidget(self._log_page)
+        self._section_pages = {
+            "simulation.section.launch": self._launch_page,
+            "simulation.section.monitor": self._monitor_page,
+            "simulation.section.history": self._history_page,
+            "simulation.section.preview": self._preview_page,
+            "simulation.section.logs": self._log_page,
+        }
 
         nav_card = QFrame()
         nav_card.setObjectName("ViewCard")
@@ -752,6 +774,9 @@ class SimulationView(QWidget):
         self._preview_button.setText(
             self._localization.text("simulation.action.preview")
         )
+        self._open_logs_button.setText(
+            self._localization.text("simulation.action.open_logs")
+        )
         self._export_button.setText(
             self._localization.text("simulation.action.export")
         )
@@ -1043,6 +1068,7 @@ class SimulationView(QWidget):
             self._has_project and self._start_allowed and not self._run_in_progress
         )
         self._preview_button.setEnabled(launch_available)
+        self._open_logs_button.setEnabled(True)
         self._export_button.setEnabled(launch_available)
         self._cancel_button.setEnabled(self._run_in_progress)
         self._retry_button.setEnabled(self._has_retry_target and not self._run_in_progress)
@@ -1052,19 +1078,21 @@ class SimulationView(QWidget):
         self._refresh_action_visibility()
 
     def _refresh_action_visibility(self) -> None:
-        section_key = self._current_section_key() or self._pending_section_key
-        is_launch = section_key == "simulation.section.launch"
-        is_monitor = section_key == "simulation.section.monitor"
-        is_preview = section_key == "simulation.section.preview"
-        is_logs = section_key == "simulation.section.logs"
+        current_page = self._section_stack.currentWidget()
+        is_launch = current_page is self._launch_page
+        is_monitor = current_page is self._monitor_page
+        is_history = current_page is self._history_page
+        is_preview = current_page is self._preview_page
+        is_logs = current_page is self._log_page
 
         self._start_button.setVisible(is_launch or is_preview)
         self._preview_button.setVisible(is_launch)
         self._export_button.setVisible(is_launch or is_preview)
-        self._retry_button.setVisible(is_monitor or is_logs)
+        self._open_logs_button.setVisible(not is_logs)
+        self._retry_button.setVisible(is_monitor or is_history or is_logs)
         self._cancel_button.setVisible(self._run_in_progress)
-        self._open_run_button.setVisible(is_monitor or is_logs)
-        self._open_output_button.setVisible(is_monitor or is_logs)
+        self._open_run_button.setVisible(is_monitor or is_history or is_logs)
+        self._open_output_button.setVisible(is_monitor or is_history or is_logs)
 
     def _refresh_responsive_layout(self, *, force: bool = False) -> None:
         wide = self.width() >= 1020
@@ -1081,10 +1109,10 @@ class SimulationView(QWidget):
             if persisted_top is not None:
                 self._apply_splitter_sizes(self._top_splitter, persisted_top)
             elif wide:
-                left_width = max(360, min(520, int(self.width() * 0.42)))
+                readiness_width = max(260, min(340, int(self.width() * 0.28)))
                 self._apply_splitter_sizes(
                     self._top_splitter,
-                    [left_width, max(420, self.width() - left_width)],
+                    [readiness_width, max(520, self.width() - readiness_width)],
                 )
             else:
                 top_height = 260 if self.height() >= 720 else 220
@@ -1161,12 +1189,15 @@ class SimulationView(QWidget):
         if row < 0:
             return
         item = self._section_nav.item(row)
-        self._pending_section_key = (
+        section_key = (
             item.data(Qt.ItemDataRole.UserRole + 1)
             if item is not None
             else self._pending_section_key
         )
-        self._section_stack.setCurrentIndex(row)
+        self._pending_section_key = section_key
+        page = self._section_pages.get(section_key)
+        if page is not None:
+            self._section_stack.setCurrentWidget(page)
         self._refresh_action_visibility()
 
     def _refresh_section_selection(self) -> None:
@@ -1195,6 +1226,15 @@ class SimulationView(QWidget):
                 else "simulation.advanced.hidden"
             )
             self._advanced_hint_label.setText(self._localization.text(key))
+
+    def _open_preview_page(self) -> None:
+        self._section_stack.setCurrentWidget(self._preview_page)
+        self._refresh_action_visibility()
+        self.preview_requested.emit()
+
+    def _open_log_page(self) -> None:
+        self._section_stack.setCurrentWidget(self._log_page)
+        self._refresh_action_visibility()
 
     def _current_section_key(self) -> str | None:
         item = self._section_nav.currentItem()

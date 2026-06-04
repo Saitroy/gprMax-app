@@ -153,13 +153,33 @@ class SimulationViewTests(unittest.TestCase):
         self.assertFalse(view._open_run_button.isHidden())  # noqa: SLF001
         self.assertTrue(view._start_button.isHidden())  # noqa: SLF001
 
-        view._section_nav.setCurrentRow(  # noqa: SLF001
-            view._row_for_section_key("simulation.section.preview")  # noqa: SLF001
-        )
+        view._open_preview_page()  # noqa: SLF001
 
         self.assertFalse(view._start_button.isHidden())  # noqa: SLF001
         self.assertFalse(view._export_button.isHidden())  # noqa: SLF001
         self.assertTrue(view._preview_button.isHidden())  # noqa: SLF001
+
+    def test_simulation_primary_navigation_contains_setup_monitor_and_history(self) -> None:
+        view = SimulationView(
+            localization=LocalizationService("en"),
+            runtime_label="Bundled runtime",
+        )
+
+        labels = [  # noqa: SLF001
+            view._section_nav.item(row).text()
+            for row in range(view._section_nav.count())
+        ]
+
+        self.assertEqual(labels, ["Setup", "Run monitor", "History"])
+
+    def test_preview_and_logs_remain_available_as_secondary_actions(self) -> None:
+        view = SimulationView(
+            localization=LocalizationService("en"),
+            runtime_label="Bundled runtime",
+        )
+
+        self.assertFalse(view._preview_button.isHidden())  # noqa: SLF001
+        self.assertFalse(view._open_logs_button.isHidden())  # noqa: SLF001
 
     def test_standard_desktop_width_keeps_splitters_horizontal(self) -> None:
         view = SimulationView(
@@ -175,6 +195,19 @@ class SimulationViewTests(unittest.TestCase):
         self.assertEqual(view._top_splitter.orientation(), Qt.Orientation.Horizontal)  # noqa: SLF001
         self.assertGreaterEqual(view._content_splitter.handleWidth(), 10)  # noqa: SLF001
         self.assertGreaterEqual(view._top_splitter.handleWidth(), 10)  # noqa: SLF001
+
+    def test_setup_keeps_configuration_main_and_readiness_compact(self) -> None:
+        view = SimulationView(
+            localization=LocalizationService("en"),
+            runtime_label="Bundled runtime",
+        )
+
+        view.resize(1200, 760)
+        view.show()
+        self._app.processEvents()
+
+        sizes = view._top_splitter.sizes()  # noqa: SLF001
+        self.assertGreater(sizes[1], sizes[0])
 
     def test_compact_width_stacks_simulation_navigation_and_setup_cards(self) -> None:
         view = SimulationView(
@@ -206,7 +239,7 @@ class SimulationViewTests(unittest.TestCase):
         self._app.processEvents()
 
         resized_sizes = view._top_splitter.sizes()  # noqa: SLF001
-        self.assertLess(resized_sizes[0], original_sizes[0] - 100)
+        self.assertLess(resized_sizes[0], original_sizes[0])
         self.assertLess(abs(resized_sizes[0] - 250), 40)
 
     def test_manual_content_splitter_resize_survives_responsive_refresh(self) -> None:
