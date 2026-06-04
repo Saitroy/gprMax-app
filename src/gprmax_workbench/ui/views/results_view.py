@@ -937,10 +937,10 @@ class ResultsView(QWidget):
             if persisted_bottom is not None:
                 self._apply_splitter_sizes(self._bottom_splitter, persisted_bottom)
             elif main_orientation == Qt.Orientation.Horizontal:
-                left_width = max(220, min(280, int(self.width() * 0.22)))
+                left_width = max(156, min(210, int(self.width() * 0.16)))
                 self._apply_splitter_sizes(
                     self._bottom_splitter,
-                    [left_width, max(520, self.width() - left_width - 320)],
+                    [left_width, max(620, self.width() - left_width - 280)],
                 )
             else:
                 top_height = 200 if self.height() >= 720 else 170
@@ -964,10 +964,10 @@ class ResultsView(QWidget):
             if persisted_page is not None:
                 self._apply_splitter_sizes(self._page_splitter, persisted_page)
             elif page_orientation == Qt.Orientation.Horizontal:
-                details_width = max(280, min(360, int(self.width() * 0.24)))
+                details_width = max(220, min(280, int(self.width() * 0.19)))
                 self._apply_splitter_sizes(
                     self._page_splitter,
-                    [max(640, self.width() - details_width), details_width],
+                    [max(720, self.width() - details_width), details_width],
                 )
             else:
                 details_height = 260 if self.height() >= 760 else 220

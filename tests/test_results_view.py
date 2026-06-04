@@ -259,6 +259,44 @@ class ResultsViewTests(unittest.TestCase):
         self.assertGreaterEqual(view._bottom_splitter.handleWidth(), 10)  # noqa: SLF001
         self.assertGreaterEqual(view._page_splitter.handleWidth(), 10)  # noqa: SLF001
 
+    def test_results_desktop_keeps_run_list_narrow_and_plot_dominant(self) -> None:
+        summary = _build_run_summary(Path("D:/demo/output/run1.out"))
+        metadata = _build_metadata(summary.output_files[0], components=["Ez"])
+        traces = _build_traces(summary.output_files[0].path, components=["Ez"])
+        view, _results_service = _build_view(
+            [summary],
+            metadata=metadata,
+            traces=traces,
+        )
+
+        view.refresh_project(Path("D:/demo"))
+        view.resize(1200, 760)
+        view.show()
+        self._app.processEvents()
+
+        run_width, plot_width = view._bottom_splitter.sizes()  # noqa: SLF001
+        self.assertLessEqual(run_width, 210)
+        self.assertGreater(plot_width, run_width * 2)
+
+    def test_results_details_panel_is_compact_on_desktop(self) -> None:
+        summary = _build_run_summary(Path("D:/demo/output/run1.out"))
+        metadata = _build_metadata(summary.output_files[0], components=["Ez"])
+        traces = _build_traces(summary.output_files[0].path, components=["Ez"])
+        view, _results_service = _build_view(
+            [summary],
+            metadata=metadata,
+            traces=traces,
+        )
+
+        view.refresh_project(Path("D:/demo"))
+        view.resize(1400, 800)
+        view.show()
+        self._app.processEvents()
+
+        main_width, details_width = view._page_splitter.sizes()  # noqa: SLF001
+        self.assertLessEqual(details_width, 280)
+        self.assertGreater(main_width, details_width * 2)
+
     def test_compact_width_stacks_results_workspace_and_details(self) -> None:
         summary = _build_run_summary(Path("D:/demo/output/run1.out"))
         metadata = _build_metadata(summary.output_files[0], components=["Ez"])
