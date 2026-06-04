@@ -49,6 +49,18 @@ class LocalizationServiceTests(unittest.TestCase):
         self.assertIn("GPU", translated)
         self.assertIn("pycuda", translated)
 
+    def test_redesign_keys_exist_in_ru_and_en_catalogs(self) -> None:
+        required_keys = [
+            "simulation.section.history",
+            "simulation.action.open_logs",
+            "settings.runtime.next_step",
+        ]
+
+        for language in ("ru", "en"):
+            localization = LocalizationService(language)
+            for key in required_keys:
+                self.assertNotEqual(localization.text(key), key)
+
 
 if __name__ == "__main__":
     unittest.main()
