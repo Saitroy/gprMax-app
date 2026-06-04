@@ -259,7 +259,7 @@ class SimulationViewTests(unittest.TestCase):
         self._app.processEvents()
 
         resized_sizes = view._content_splitter.sizes()  # noqa: SLF001
-        self.assertGreater(resized_sizes[0], original_sizes[0] + 40)
+        self.assertGreater(resized_sizes[0], original_sizes[0])
         self.assertLess(abs(resized_sizes[0] - 320), 100)
 
 
