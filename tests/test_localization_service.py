@@ -51,6 +51,8 @@ class LocalizationServiceTests(unittest.TestCase):
 
     def test_redesign_keys_exist_in_ru_and_en_catalogs(self) -> None:
         required_keys = [
+            "navigation.drawer.open",
+            "navigation.drawer.close",
             "simulation.section.history",
             "simulation.action.open_logs",
             "settings.runtime.next_step",

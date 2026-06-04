@@ -2063,6 +2063,8 @@ _EXTERNAL_EXACT_TRANSLATIONS_RU.update(
 
 _TRANSLATIONS["ru"].update(
     {
+        "navigation.drawer.open": "← Меню",
+        "navigation.drawer.close": "← Скрыть",
         "settings.preferences_section": "Основные настройки",
         "settings.runtime_status.ready": "Среда gprMax готова к работе",
         "settings.runtime_status.issue": "Среда gprMax требует внимания",
@@ -2076,6 +2078,8 @@ _TRANSLATIONS["ru"].update(
 
 _TRANSLATIONS["en"].update(
     {
+        "navigation.drawer.open": "← Menu",
+        "navigation.drawer.close": "← Hide",
         "settings.preferences_section": "General settings",
         "settings.runtime_status.ready": "gprMax environment is ready",
         "settings.runtime_status.issue": "gprMax environment needs attention",

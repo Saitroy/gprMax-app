@@ -6,7 +6,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QSize, Qt, QTimer, QUrl
+from PySide6.QtCore import (
+    QAbstractAnimation,
+    QEasingCurve,
+    QRect,
+    QSize,
+    Qt,
+    QTimer,
+    QUrl,
+    QVariantAnimation,
+)
 from PySide6.QtGui import QAction, QDesktopServices, QGuiApplication
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -62,6 +71,18 @@ class MainWindow(QMainWindow):
         self._context = context
         self._localization = context.localization_service
         self._navigation = QListWidget()
+        self._navigation_expanded = False
+        self._navigation_animation = QVariantAnimation(self)
+        self._navigation_animation.setDuration(180)
+        self._navigation_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._navigation_animation.valueChanged.connect(
+            self._apply_navigation_animation_value
+        )
+        self._navigation_animation.finished.connect(self._finish_navigation_animation)
+        self._navigation_animation_start_width = 0
+        self._navigation_animation_end_width = 0
+        self._navigation_animation_start_geometry = QRect()
+        self._navigation_animation_end_geometry = QRect()
         self._stack = QStackedWidget()
         self._simulation_refresh_timer = QTimer(self)
         self._simulation_refresh_timer.setInterval(750)
@@ -298,6 +319,17 @@ class MainWindow(QMainWindow):
         self._sidebar_documentation_button.setText(
             self._localization.text("action.open_documentation")
         )
+        self._navigation_toggle_button.setText(
+            self._localization.text(
+                "navigation.drawer.close"
+                if self._navigation_expanded
+                else "navigation.drawer.open"
+            )
+        )
+        self._rail_settings_button.setText(self._localization.text("settings.title"))
+        self._rail_documentation_button.setText(
+            self._localization.text("action.open_documentation")
+        )
         self._rail_settings_button.setToolTip(self._localization.text("settings.title"))
         self._rail_documentation_button.setToolTip(
             self._localization.text("action.open_documentation")
@@ -324,7 +356,7 @@ class MainWindow(QMainWindow):
                 continue
             page = self._pages[page_index]
             title = self._localization.text(page.title_key)
-            item.setText(page.rail_label)
+            item.setText(title)
             item.setToolTip(f"{title}\n{self._localization.text(page.description_key)}")
 
     def _refresh_shell_state(self) -> None:
@@ -464,17 +496,23 @@ class MainWindow(QMainWindow):
         frame = QFrame()
         frame.setObjectName("Sidebar")
         self._sidebar = frame
-        frame.setMinimumWidth(68)
-        frame.setMaximumWidth(84)
+        collapsed_width = self._collapsed_sidebar_width()
+        frame.setMinimumWidth(collapsed_width)
+        frame.setMaximumWidth(collapsed_width)
         frame.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
 
         layout = QVBoxLayout(frame)
-        layout.setContentsMargins(8, 10, 8, 10)
-        layout.setSpacing(8)
+        layout.setContentsMargins(10, 12, 10, 12)
+        layout.setSpacing(10)
 
         self._sidebar_title = QLabel()
         self._sidebar_title.setObjectName("AppTitle")
         self._sidebar_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self._navigation_toggle_button = QPushButton()
+        self._navigation_toggle_button.setProperty("buttonRole", "drawerToggle")
+        self._navigation_toggle_button.clicked.connect(self._toggle_navigation_drawer)
+        self._navigation_toggle_button.setCursor(Qt.CursorShape.PointingHandCursor)
 
         self._sidebar_subtitle = QLabel()
         self._sidebar_subtitle.setObjectName("AppSubtitle")
@@ -484,6 +522,12 @@ class MainWindow(QMainWindow):
         self._navigation.setObjectName("Navigation")
         self._navigation.setSpacing(6)
         self._navigation.setUniformItemSizes(True)
+        self._navigation.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self._navigation.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
         self._navigation.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
@@ -491,13 +535,16 @@ class MainWindow(QMainWindow):
         for page_index in self._navigation_page_indexes:
             item = QListWidgetItem()
             item.setData(Qt.ItemDataRole.UserRole, page_index)
-            item.setSizeHint(QSize(44, 44))
-            item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            item.setSizeHint(QSize(156, 38))
+            item.setTextAlignment(
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+            )
             self._navigation.addItem(item)
 
         self._navigation.currentRowChanged.connect(self._on_navigation_changed)
 
         layout.addWidget(self._sidebar_title)
+        layout.addWidget(self._navigation_toggle_button)
         layout.addWidget(self._sidebar_subtitle)
         layout.addWidget(self._navigation)
         self._sidebar_status_area = self._build_sidebar_status_area()
@@ -505,11 +552,11 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._sidebar_status_area)
         layout.addStretch(1)
         self._rail_settings_button = self._build_rail_action_button(
-            "Set",
+            "",
             self._open_settings_page,
         )
         self._rail_documentation_button = self._build_rail_action_button(
-            "Doc",
+            "",
             self._open_documentation_dialog,
         )
         layout.addWidget(self._rail_settings_button)
@@ -517,6 +564,7 @@ class MainWindow(QMainWindow):
 
         self._retranslate_navigation()
         self._refresh_sidebar_density()
+        self._refresh_navigation_drawer_visibility()
         return frame
 
     def _build_rail_action_button(self, text: str, handler) -> QPushButton:
@@ -581,7 +629,7 @@ class MainWindow(QMainWindow):
         target_height = min(target_height, available.height())
         self.resize(target_width, target_height)
         if hasattr(self, "_shell_splitter"):
-            sidebar_width = self._sidebar_width_for_window(target_width)
+            sidebar_width = self._active_sidebar_width()
             self._shell_splitter.setSizes(
                 [sidebar_width, max(640, target_width - sidebar_width - 32)]
             )
@@ -591,13 +639,23 @@ class MainWindow(QMainWindow):
         self.move(centered_x, centered_y)
 
     def _sidebar_width_for_window(self, window_width: int) -> int:
-        return 76
+        return 176 if window_width < 1100 else 196
+
+    def _collapsed_sidebar_width(self) -> int:
+        return 104
+
+    def _active_sidebar_width(self) -> int:
+        if not self._navigation_expanded:
+            return self._collapsed_sidebar_width()
+        return self._sidebar_width_for_window(self.width())
 
     def _refresh_sidebar_density(self) -> None:
         if not hasattr(self, "_sidebar_runtime_status"):
             return
 
-        self._refresh_shell_splitter_density()
+        if self._navigation_animation.state() != QAbstractAnimation.State.Running:
+            self._refresh_shell_splitter_density()
+        self._refresh_navigation_drawer_visibility()
         self._sidebar_subtitle.hide()
         self._sidebar_status_area.hide()
         self._sidebar_project_status.hide()
@@ -610,12 +668,125 @@ class MainWindow(QMainWindow):
         sizes = self._shell_splitter.sizes()
         if len(sizes) != 2:
             return
-        sidebar_width = self._sidebar_width_for_window(self.width())
+        sidebar_width = self._active_sidebar_width()
+        self._apply_sidebar_width(sidebar_width)
         if sizes[0] == sidebar_width:
             return
-        self._shell_splitter.setSizes(
-            [sidebar_width, max(1, sum(sizes) - sidebar_width)]
+        self._set_shell_splitter_sidebar_width(sidebar_width)
+
+    def _toggle_navigation_drawer(self) -> None:
+        self._set_navigation_expanded(not self._navigation_expanded)
+
+    def _set_navigation_expanded(
+        self,
+        expanded: bool,
+        *,
+        adjust_window: bool = True,
+        animated: bool = True,
+    ) -> None:
+        if expanded == self._navigation_expanded:
+            return
+        if self._navigation_animation.state() == QAbstractAnimation.State.Running:
+            self._navigation_animation.stop()
+        old_width = self._sidebar.maximumWidth()
+        self._navigation_expanded = expanded
+        new_width = self._active_sidebar_width()
+        if expanded:
+            self._refresh_navigation_drawer_visibility()
+        if not animated:
+            if adjust_window:
+                self._resize_window_for_sidebar_delta(new_width - old_width)
+            self._apply_sidebar_width(new_width)
+            self._set_shell_splitter_sidebar_width(new_width)
+            self._refresh_navigation_drawer_visibility()
+            return
+        if adjust_window:
+            self._navigation_animation_start_geometry = self.geometry()
+            self._navigation_animation_end_geometry = self._window_geometry_for_sidebar_delta(
+                new_width - old_width
+            )
+        else:
+            self._navigation_animation_start_geometry = QRect()
+            self._navigation_animation_end_geometry = QRect()
+        self._navigation_animation_start_width = old_width
+        self._navigation_animation_end_width = new_width
+        self._navigation_animation.setStartValue(0.0)
+        self._navigation_animation.setEndValue(1.0)
+        self._navigation_animation.start()
+
+    def _refresh_navigation_drawer_visibility(self) -> None:
+        if not hasattr(self, "_navigation_toggle_button"):
+            return
+        expanded = self._navigation_expanded
+        self._navigation.setVisible(expanded)
+        self._rail_settings_button.setVisible(expanded)
+        self._rail_documentation_button.setVisible(expanded)
+        self._navigation_toggle_button.setText(
+            self._localization.text(
+                "navigation.drawer.close" if expanded else "navigation.drawer.open"
+            )
         )
+        self._navigation_toggle_button.setToolTip(
+            self._localization.text(
+                "navigation.drawer.close" if expanded else "navigation.drawer.open"
+            )
+        )
+
+    def _resize_window_for_sidebar_delta(self, delta: int) -> None:
+        if delta == 0:
+            return
+        target_geometry = self._window_geometry_for_sidebar_delta(delta)
+        if target_geometry != self.geometry():
+            self.setGeometry(target_geometry)
+
+    def _window_geometry_for_sidebar_delta(self, delta: int) -> QRect:
+        geometry = self.geometry()
+        if delta == 0:
+            return geometry
+        target_width = max(self.minimumWidth(), geometry.width() + delta)
+        target_x = geometry.x()
+        screen = self.screen() or QGuiApplication.primaryScreen()
+        if screen is not None:
+            available = screen.availableGeometry()
+            target_width = min(target_width, available.width())
+            overflow = target_x + target_width - (available.right() + 1)
+            if overflow > 0:
+                target_x = max(available.x(), target_x - overflow)
+        return QRect(target_x, geometry.y(), target_width, geometry.height())
+
+    def _apply_navigation_animation_value(self, value: object) -> None:
+        progress = float(value)
+        start = self._navigation_animation_start_width
+        end = self._navigation_animation_end_width
+        sidebar_width = round(start + (end - start) * progress)
+        if not self._navigation_animation_start_geometry.isNull():
+            start_geometry = self._navigation_animation_start_geometry
+            end_geometry = self._navigation_animation_end_geometry
+            self.setGeometry(
+                round(start_geometry.x() + (end_geometry.x() - start_geometry.x()) * progress),
+                round(start_geometry.y() + (end_geometry.y() - start_geometry.y()) * progress),
+                round(start_geometry.width() + (end_geometry.width() - start_geometry.width()) * progress),
+                round(start_geometry.height() + (end_geometry.height() - start_geometry.height()) * progress),
+            )
+        self._apply_sidebar_width(sidebar_width)
+        self._set_shell_splitter_sidebar_width(sidebar_width)
+
+    def _finish_navigation_animation(self) -> None:
+        self._apply_sidebar_width(self._active_sidebar_width())
+        self._set_shell_splitter_sidebar_width(self._active_sidebar_width())
+        self._refresh_navigation_drawer_visibility()
+
+    def _apply_sidebar_width(self, width: int) -> None:
+        self._sidebar.setMinimumWidth(width)
+        self._sidebar.setMaximumWidth(width)
+
+    def _set_shell_splitter_sidebar_width(self, sidebar_width: int) -> None:
+        if not hasattr(self, "_shell_splitter"):
+            return
+        sizes = self._shell_splitter.sizes()
+        if len(sizes) != 2:
+            return
+        self._shell_splitter.setSizes([sidebar_width, max(1, sum(sizes) - sidebar_width)])
 
     def _build_content_stack(self) -> QWidget:
         for page in self._pages:

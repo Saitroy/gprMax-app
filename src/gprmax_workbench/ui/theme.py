@@ -201,6 +201,26 @@ QPushButton[buttonRole="sidebar"]:pressed {{
     background: #dbeafe;
     border-color: #93c5fd;
 }}
+QPushButton[buttonRole="drawerToggle"] {{
+    background: {c["primary_soft"]};
+    color: {c["primary_pressed"]};
+    border: 1px solid #bfdbfe;
+    border-radius: {r["md"]}px;
+    min-height: 34px;
+    max-height: 34px;
+    padding: 0 8px;
+    font-size: 9pt;
+    font-weight: 700;
+}}
+QPushButton[buttonRole="drawerToggle"]:hover {{
+    background: #dbeafe;
+    border-color: #93c5fd;
+}}
+QPushButton[buttonRole="drawerToggle"]:pressed {{
+    background: {c["primary"]};
+    color: #ffffff;
+    border-color: {c["primary"]};
+}}
 QPushButton[buttonRole="rail"] {{
     background: {c["surface"]};
     color: {c["text_muted"]};
@@ -208,8 +228,9 @@ QPushButton[buttonRole="rail"] {{
     border-radius: {r["md"]}px;
     min-height: 34px;
     max-height: 34px;
-    padding: 0;
-    font-size: 8pt;
+    padding: 0 10px;
+    text-align: left;
+    font-size: 9pt;
     font-weight: 700;
 }}
 QPushButton[buttonRole="rail"]:hover {{
@@ -232,7 +253,9 @@ QListWidget#Navigation::item {{
     border: 1px solid transparent;
     border-radius: {r["md"]}px;
     margin: 2px 0;
-    padding: 0;
+    padding: 0 10px;
+    font-size: 9.2pt;
+    font-weight: 600;
 }}
 QListWidget#Navigation::item:selected {{
     background: {c["primary"]};

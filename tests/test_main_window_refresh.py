@@ -8,6 +8,7 @@ from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -118,7 +119,7 @@ class MainWindowRefreshTests(unittest.TestCase):
         cls._app = QApplication.instance() or QApplication([])
         apply_theme(cls._app)
 
-    def test_sidebar_uses_compact_navigation_rail(self) -> None:
+    def test_sidebar_uses_collapsible_readable_navigation_drawer(self) -> None:
         state = AppState()
         validation_service = ValidationService(state)
         input_generation_service = InputGenerationService(
@@ -156,26 +157,52 @@ class MainWindowRefreshTests(unittest.TestCase):
         window.show()
         self._app.processEvents()
 
-        self.assertLessEqual(window._sidebar.maximumWidth(), 84)  # noqa: SLF001
-        self.assertGreaterEqual(window._sidebar.minimumWidth(), 64)  # noqa: SLF001
+        self.assertEqual(window._sidebar.maximumWidth(), 104)  # noqa: SLF001
+        self.assertEqual(window._sidebar.minimumWidth(), 104)  # noqa: SLF001
+        self.assertTrue(window._navigation.isHidden())  # noqa: SLF001
+        self.assertTrue(window._rail_settings_button.isHidden())  # noqa: SLF001
+        self.assertTrue(window._rail_documentation_button.isHidden())  # noqa: SLF001
+        self.assertEqual(window._navigation_toggle_button.text(), "← Menu")  # noqa: SLF001
+        self.assertGreater(window._navigation_animation.duration(), 0)  # noqa: SLF001
+        self.assertEqual(  # noqa: SLF001
+            window._navigation.verticalScrollBarPolicy(),
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff,
+        )
+        self.assertEqual(  # noqa: SLF001
+            window._navigation.horizontalScrollBarPolicy(),
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff,
+        )
         self.assertTrue(  # noqa: SLF001
             window._sidebar_subtitle.isHidden()
             or not window._sidebar_subtitle.isVisible()
         )
-        self.assertEqual(window._sidebar_width_for_window(1440), 76)  # noqa: SLF001
+        self.assertEqual(window._sidebar_width_for_window(1440), 196)  # noqa: SLF001
         self.assertTrue(  # noqa: SLF001
             window._sidebar_status_area.isHidden()
             or not window._sidebar_status_area.isVisible()
         )
+        width_before_expand = window.width()
+        expected_expanded_width = window._sidebar_width_for_window(window.width())  # noqa: SLF001
+        window._set_navigation_expanded(True, animated=False)  # noqa: SLF001
+        self._app.processEvents()
+
+        self.assertFalse(window._navigation.isHidden())  # noqa: SLF001
+        self.assertEqual(window._sidebar.maximumWidth(), expected_expanded_width)  # noqa: SLF001
+        self.assertGreaterEqual(window.width(), width_before_expand)
         self.assertEqual(  # noqa: SLF001
             [
                 window._navigation.item(index).text()
                 for index in range(window._navigation.count())
             ],
-            ["H", "M", "S", "R"],
+            ["Welcome", "Model Editor", "Simulation", "Results"],
         )
         self.assertFalse(window._rail_settings_button.isHidden())  # noqa: SLF001
         self.assertFalse(window._rail_documentation_button.isHidden())  # noqa: SLF001
+        self.assertEqual(window._rail_settings_button.text(), "Settings")  # noqa: SLF001
+        self.assertEqual(  # noqa: SLF001
+            window._rail_documentation_button.text(),
+            "Documentation",
+        )
         self.assertTrue(window._rail_settings_button.toolTip())  # noqa: SLF001
         self.assertTrue(window._rail_documentation_button.toolTip())  # noqa: SLF001
         rail_actions: list[str] = []
@@ -192,6 +219,12 @@ class MainWindowRefreshTests(unittest.TestCase):
         self._app.processEvents()
 
         self.assertEqual(window._stack.currentIndex(), 2)  # noqa: SLF001
+
+        window._set_navigation_expanded(False, animated=False)  # noqa: SLF001
+        self._app.processEvents()
+
+        self.assertTrue(window._navigation.isHidden())  # noqa: SLF001
+        self.assertEqual(window._sidebar.maximumWidth(), 104)  # noqa: SLF001
 
 
 if __name__ == "__main__":
