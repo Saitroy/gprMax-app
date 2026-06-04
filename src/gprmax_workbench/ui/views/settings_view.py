@@ -48,6 +48,9 @@ class SettingsView(QWidget):
         self._runtime_status_badge.setObjectName("StatusBadge")
         self._runtime_status_badge.setProperty("statusTone", "neutral")
         self._runtime_status_badge.setWordWrap(True)
+        self._runtime_next_step_label = QLabel()
+        self._runtime_next_step_label.setObjectName("StatusDetail")
+        self._runtime_next_step_label.setWordWrap(True)
         self._runtime_summary_label = QLabel()
         self._runtime_summary_label.setObjectName("TechnicalDetails")
         self._runtime_summary_label.setTextInteractionFlags(
@@ -94,6 +97,7 @@ class SettingsView(QWidget):
         runtime_layout.setContentsMargins(0, 0, 0, 0)
         runtime_layout.setSpacing(8)
         runtime_layout.addWidget(self._runtime_status_badge)
+        runtime_layout.addWidget(self._runtime_next_step_label)
         runtime_layout.addWidget(self._capabilities_label)
         runtime_layout.addWidget(
             self._runtime_details_button,
@@ -133,6 +137,7 @@ class SettingsView(QWidget):
             self._update_details_visibility
         )
         self.retranslate_ui()
+        self._update_runtime_field_state()
         self._update_details_visibility()
 
     def set_settings(
@@ -244,6 +249,10 @@ class SettingsView(QWidget):
             self._localization.text(runtime_key),
             "success" if self._runtime_healthy else "error",
         )
+        self._runtime_next_step_label.setText(
+            "" if self._runtime_healthy else self._localization.text("settings.runtime.next_step")
+        )
+        self._runtime_next_step_label.setVisible(not self._runtime_healthy)
         diagnostics_key = (
             "settings.diagnostics_status.clean"
             if self._diagnostics_count == 0
@@ -291,8 +300,8 @@ class SettingsView(QWidget):
         card = QFrame()
         card.setObjectName("ViewCard")
         layout = QVBoxLayout(card)
-        layout.setContentsMargins(16, 14, 16, 14)
-        layout.setSpacing(8)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(7)
         title = QLabel()
         title.setObjectName("SectionTitle")
         self._card_titles[title_key] = title

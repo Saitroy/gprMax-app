@@ -65,6 +65,44 @@ class SettingsViewTests(unittest.TestCase):
         self.assertFalse(view._runtime_summary_label.isHidden())  # noqa: SLF001
         self.assertFalse(view._diagnostics_label.isHidden())  # noqa: SLF001
 
+    def test_settings_shows_actionable_runtime_status_before_technical_paths(
+        self,
+    ) -> None:
+        view = SettingsView(LocalizationService("en"))
+
+        self.assertFalse(view._runtime_status_badge.isHidden())  # noqa: SLF001
+        self.assertTrue(view._runtime_summary_label.isHidden())  # noqa: SLF001
+        self.assertTrue(view._diagnostics_label.isHidden())  # noqa: SLF001
+
+    def test_runtime_executable_is_hidden_outside_advanced_mode(self) -> None:
+        view = SettingsView(LocalizationService("en"))
+
+        self.assertFalse(view._runtime_edit.isEnabled())  # noqa: SLF001
+
+    def test_runtime_issue_shows_plain_next_step(self) -> None:
+        view = SettingsView(LocalizationService("en"))
+        runtime_info = RuntimeInfo(
+            engine=EngineConfig(
+                mode=EngineMode.BUNDLED,
+                python_executable=Path("python"),
+            ),
+            app_version="test",
+            bundled_engine_version="test",
+            gprmax_version=None,
+            settings_path=Path("settings.json"),
+            logs_directory=Path("logs"),
+            cache_directory=Path("cache"),
+            temp_directory=Path("temp"),
+            capabilities=[],
+            diagnostics=["Python executable not found: C:/Python/python.exe"],
+            is_healthy=False,
+        )
+
+        view.set_settings(AppSettings(), runtime_info)
+
+        self.assertFalse(view._runtime_next_step_label.isHidden())  # noqa: SLF001
+        self.assertIn("technical details", view._runtime_next_step_label.text())
+
 
 if __name__ == "__main__":
     unittest.main()
