@@ -655,7 +655,10 @@ class SceneCanvasPanel(QWidget):
         self._fit_scene_button.setObjectName("SceneToolbarAction")
 
         self._entity_list = QListWidget()
+        self._entity_list.setObjectName("SceneEntityList")
         self._entity_list.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
+        self._entity_list.setTextElideMode(Qt.TextElideMode.ElideRight)
+        self._entity_list.setMinimumWidth(0)
         self._entity_list.itemSelectionChanged.connect(self._select_entities_from_list)
         self._status_label = build_status_label("")
         self._hint_label = QLabel()
@@ -772,6 +775,9 @@ class SceneCanvasPanel(QWidget):
         self._show_labels_button = _SceneToolbarButton("labels")
         self._show_labels_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
         self._show_labels_button.clicked.connect(self._toggle_scene_labels)
+        self._inspector_toggle_button = QPushButton()
+        self._inspector_toggle_button.setObjectName("SceneToolbarAction")
+        self._inspector_toggle_button.clicked.connect(self._toggle_inspector)
         self._layer_buttons: dict[str, _SceneToolbarButton] = {}
         self._build_scene_toolbar()
 
@@ -914,8 +920,18 @@ class SceneCanvasPanel(QWidget):
         snap_form.addRow(self._grid_step_label_global, self._grid_step)
         self._entities_title = QLabel()
         self._entities_title.setObjectName("SectionTitle")
+        self._entities_title.setWordWrap(True)
         entities_layout.addWidget(self._entities_title)
         entities_layout.addWidget(self._entity_list, 1)
+
+        self._layer_rail = QFrame()
+        self._layer_rail.setObjectName("WorkbenchLayerRail")
+        layer_rail_layout = QVBoxLayout(self._layer_rail)
+        layer_rail_layout.setContentsMargins(8, 8, 8, 8)
+        layer_rail_layout.setSpacing(8)
+        layer_rail_layout.addWidget(self._entities_card, 1)
+        self._layer_rail.setMinimumWidth(148)
+        self._layer_rail.setMaximumWidth(220)
 
         self._side_panel = QWidget()
         self._side_layout = QVBoxLayout(self._side_panel)
@@ -927,7 +943,6 @@ class SceneCanvasPanel(QWidget):
         self._side_layout.addWidget(domain_card)
         self._side_layout.addWidget(self._palette_card)
         self._side_layout.addWidget(inspector)
-        self._side_layout.addWidget(self._entities_card, 1)
         self._side_layout.addWidget(self._status_label)
 
         self._side_scroll = QScrollArea()
@@ -959,10 +974,12 @@ class SceneCanvasPanel(QWidget):
         view_shell_layout.setRowStretch(2, 1)
 
         self._workspace_splitter = configure_splitter(QSplitter(Qt.Orientation.Horizontal))
+        self._workspace_splitter.addWidget(self._layer_rail)
         self._workspace_splitter.addWidget(view_shell)
         self._workspace_splitter.addWidget(self._side_scroll)
-        self._workspace_splitter.setStretchFactor(0, 1)
-        self._workspace_splitter.setStretchFactor(1, 0)
+        self._workspace_splitter.setStretchFactor(0, 0)
+        self._workspace_splitter.setStretchFactor(1, 1)
+        self._workspace_splitter.setStretchFactor(2, 0)
         self._workspace_splitter.splitterMoved.connect(self._on_workspace_splitter_moved)
 
         layout = QHBoxLayout(self)
@@ -979,6 +996,7 @@ class SceneCanvasPanel(QWidget):
     def resizeEvent(self, event) -> None:  # noqa: N802
         super().resizeEvent(event)
         self._refresh_toolbar_compact_mode()
+        self._refresh_entity_rail_title()
         self._refresh_workspace_splitter_sizes()
 
     def _build_scene_toolbar(self) -> None:
@@ -1023,6 +1041,7 @@ class SceneCanvasPanel(QWidget):
         self._scene_toolbar_layout.addWidget(
             self._fit_scene_button,
         )
+        self._scene_toolbar_layout.addWidget(self._inspector_toggle_button)
 
     def _build_toolbar_section(self, title: QLabel, content_layout: QHBoxLayout) -> QWidget:
         wrapper = QWidget()
@@ -1198,6 +1217,9 @@ class SceneCanvasPanel(QWidget):
         self._fit_scene_button.setText(
             "" if compact else self._localization.text("editor.scene.fit")
         )
+        self._inspector_toggle_button.setText(
+            "I" if compact else self._localization.text("editor.scene.inspector")
+        )
         self._show_labels_button.setText(
             self._localization.text(
                 "editor.scene.labels.short"
@@ -1215,6 +1237,15 @@ class SceneCanvasPanel(QWidget):
             )
         self._scene_toolbar.updateGeometry()
 
+    def _refresh_entity_rail_title(self) -> None:
+        title_key = (
+            "editor.scene.layer.geometry"
+            if self.width() < 980
+            else "editor.scene.entities"
+        )
+        self._entities_title.setText(self._localization.text(title_key))
+        self._entities_title.setToolTip(self._localization.text("editor.scene.entities"))
+
     def _refresh_workspace_splitter_sizes(self, *, force: bool = False) -> None:
         if not hasattr(self, "_workspace_splitter"):
             return
@@ -1229,6 +1260,7 @@ class SceneCanvasPanel(QWidget):
         if orientation_changed:
             self._workspace_splitter.setOrientation(orientation)
             self._workspace_splitter_user_resized = False
+        self._refresh_layer_rail_constraints(orientation)
         self._refresh_side_scroll_constraints(orientation)
         if self._workspace_splitter_user_resized and not force:
             return
@@ -1240,26 +1272,55 @@ class SceneCanvasPanel(QWidget):
 
         if orientation == Qt.Orientation.Vertical:
             total_height = max(self.height(), 1)
-            sidebar_height = max(220, min(360, int(total_height * 0.42)))
-            scene_height = max(320, total_height - sidebar_height)
-            self._apply_workspace_splitter_sizes([scene_height, sidebar_height])
+            layer_height = 0 if self._layer_rail.isHidden() else 170
+            sidebar_height = 0 if self._side_scroll.isHidden() else max(220, min(340, int(total_height * 0.34)))
+            scene_height = max(320, total_height - layer_height - sidebar_height)
+            self._apply_workspace_splitter_sizes([layer_height, scene_height, sidebar_height])
             return
 
         total_width = max(self.width(), 1)
-        if total_width >= 1500:
+        layer_target_width = 132 if total_width < 980 else 180
+        layer_width = 0 if self._layer_rail.isHidden() else max(
+            self._layer_rail.minimumWidth(),
+            min(layer_target_width, self._layer_rail.maximumWidth()),
+        )
+        if self._side_scroll.isHidden():
+            sidebar_width = 0
+        elif total_width >= 1500:
             sidebar_width = 360
         elif total_width >= 1280:
             sidebar_width = 330
         elif total_width >= 1080:
             sidebar_width = 300
-        elif total_width >= 900:
-            sidebar_width = 270
+        elif total_width >= 980:
+            sidebar_width = 280
         else:
             sidebar_width = 240
 
-        sidebar_width = max(self._side_scroll.minimumWidth(), min(sidebar_width, 420))
-        scene_width = max(320, total_width - sidebar_width)
-        self._apply_workspace_splitter_sizes([scene_width, sidebar_width])
+        if not self._side_scroll.isHidden():
+            sidebar_width = max(self._side_scroll.minimumWidth(), min(sidebar_width, self._side_scroll.maximumWidth()))
+        scene_width = max(320, total_width - layer_width - sidebar_width)
+        self._apply_workspace_splitter_sizes([layer_width, scene_width, sidebar_width])
+
+    def _refresh_layer_rail_constraints(self, orientation: Qt.Orientation) -> None:
+        if orientation == Qt.Orientation.Vertical:
+            self._layer_rail.setMinimumWidth(0)
+            self._layer_rail.setMaximumWidth(16_777_215)
+            self._layer_rail.setMinimumHeight(140)
+            self._layer_rail.setMaximumHeight(220)
+            self._layer_rail.setSizePolicy(
+                QSizePolicy.Policy.Expanding,
+                QSizePolicy.Policy.Preferred,
+            )
+            return
+        self._layer_rail.setMinimumWidth(128 if self.width() < 980 else 148)
+        self._layer_rail.setMaximumWidth(220)
+        self._layer_rail.setMinimumHeight(0)
+        self._layer_rail.setMaximumHeight(16_777_215)
+        self._layer_rail.setSizePolicy(
+            QSizePolicy.Policy.Preferred,
+            QSizePolicy.Policy.Expanding,
+        )
 
     def _refresh_side_scroll_constraints(self, orientation: Qt.Orientation) -> None:
         if orientation == Qt.Orientation.Vertical:
@@ -1272,14 +1333,19 @@ class SceneCanvasPanel(QWidget):
                 QSizePolicy.Policy.Preferred,
             )
             return
-        self._side_scroll.setMinimumWidth(240)
-        self._side_scroll.setMaximumWidth(440)
+        self._side_scroll.setMinimumWidth(240 if self.width() < 980 else 276)
+        self._side_scroll.setMaximumWidth(360)
         self._side_scroll.setMinimumHeight(0)
         self._side_scroll.setMaximumHeight(16_777_215)
         self._side_scroll.setSizePolicy(
             QSizePolicy.Policy.Preferred,
             QSizePolicy.Policy.Expanding,
         )
+
+    def _toggle_inspector(self) -> None:
+        self._side_scroll.setVisible(self._side_scroll.isHidden())
+        self._workspace_splitter_user_resized = False
+        self._refresh_workspace_splitter_sizes(force=True)
 
     def _on_workspace_splitter_moved(self, _pos: int, _index: int) -> None:
         if self._workspace_splitter_syncing:
@@ -1316,7 +1382,7 @@ class SceneCanvasPanel(QWidget):
         if state.get("orientation") != orientation:
             return None
         sizes = state.get("sizes")
-        if not isinstance(sizes, list) or len(sizes) != 2:
+        if not isinstance(sizes, list) or len(sizes) != self._workspace_splitter.count():
             return None
         if not all(isinstance(item, int) and item > 0 for item in sizes):
             return None
@@ -1394,13 +1460,15 @@ class SceneCanvasPanel(QWidget):
         self._toolbar_layers_label.setText(self._localization.text("editor.scene.layers"))
         self._toolbar_history_label.setText(self._localization.text("editor.scene.history"))
         self._palette_title.setText(self._localization.text("editor.scene.palette"))
-        self._entities_title.setText(self._localization.text("editor.scene.entities"))
+        self._refresh_entity_rail_title()
         self._guide_title.setText(self._localization.text("editor.scene.guide_title"))
         self._legend_label.setText(self._localization.text("editor.scene.legend"))
         self._hint_label.setText(self._localization.text("editor.scene.hint"))
         self._snap_to_grid.setText(self._localization.text("editor.scene.snap"))
         self._grid_step_label_global.setText(self._localization.text("editor.scene.grid_step"))
         self._inspector_title.setText(self._localization.text("editor.scene.inspector"))
+        self._inspector_toggle_button.setText(self._localization.text("editor.scene.inspector"))
+        self._inspector_toggle_button.setToolTip(self._localization.text("editor.scene.inspector"))
         self._apply_button.setText(self._localization.text("editor.scene.apply"))
         self._undo_button.setText(self._localization.text("common.undo"))
         self._redo_button.setText(self._localization.text("common.redo"))
@@ -1540,8 +1608,10 @@ class SceneCanvasPanel(QWidget):
 
     def set_workbench_mode(self, enabled: bool) -> None:
         self._workbench_mode = enabled
+        self._layer_rail.setVisible(not enabled)
         self._entities_card.setVisible(not enabled)
         self._hint_label.setVisible(not enabled)
+        self._refresh_workspace_splitter_sizes(force=True)
 
     def ui_state(self) -> dict[str, object]:
         return {

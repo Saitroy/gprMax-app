@@ -823,13 +823,48 @@ class SceneCanvasPanelTests(unittest.TestCase):
             self._app.processEvents()  # noqa: SLF001
 
             initial_sizes = panel._workspace_splitter.sizes()  # noqa: SLF001
-            panel._workspace_splitter.setSizes([700, 420])  # noqa: SLF001
+            panel._workspace_splitter.setSizes([180, 700, 420])  # noqa: SLF001
             self._app.processEvents()  # noqa: SLF001
             updated_sizes = panel._workspace_splitter.sizes()  # noqa: SLF001
 
             self.assertEqual(panel._workspace_splitter.orientation(), Qt.Orientation.Horizontal)  # noqa: SLF001
-            self.assertGreater(updated_sizes[1], initial_sizes[1])
+            self.assertEqual(panel._workspace_splitter.count(), 3)  # noqa: SLF001
+            self.assertGreater(updated_sizes[2], initial_sizes[2])
             self.assertFalse(panel._workspace_splitter.childrenCollapsible())  # noqa: SLF001
+
+    def test_scene_workspace_uses_layer_rail_canvas_and_inspector(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Scene Demo", Path(temp_dir))
+            state = AppState(
+                current_project=project,
+                current_project_validation=validate_project(project),
+            )
+            editor = ModelEditorService(state)
+            validation = ValidationService(state)
+            panel = SceneCanvasPanel(LocalizationService("en"), editor, validation)
+
+            panel.set_project(project)
+
+            self.assertEqual(panel._workspace_splitter.count(), 3)  # noqa: SLF001
+            self.assertIs(panel._workspace_splitter.widget(0), panel._layer_rail)  # noqa: SLF001
+            self.assertIs(panel._workspace_splitter.widget(2), panel._side_scroll)  # noqa: SLF001
+
+    def test_scene_inspector_can_collapse_and_restore(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project = default_project("Scene Demo", Path(temp_dir))
+            state = AppState(
+                current_project=project,
+                current_project_validation=validate_project(project),
+            )
+            editor = ModelEditorService(state)
+            validation = ValidationService(state)
+            panel = SceneCanvasPanel(LocalizationService("en"), editor, validation)
+
+            panel.set_project(project)
+            panel._toggle_inspector()  # noqa: SLF001
+            self.assertTrue(panel._side_scroll.isHidden())  # noqa: SLF001
+            panel._toggle_inspector()  # noqa: SLF001
+            self.assertFalse(panel._side_scroll.isHidden())  # noqa: SLF001
 
     def test_scene_sidebar_stacks_below_canvas_on_compact_width(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

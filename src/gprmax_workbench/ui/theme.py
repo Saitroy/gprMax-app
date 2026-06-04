@@ -267,7 +267,8 @@ QListWidget#ContextNavigation::item:hover:!selected {{
 QFrame#ViewCard,
 QFrame#ModelOverviewCard,
 QFrame#ValidationSummaryCard,
-QFrame#WorkbenchSidebar {{
+QFrame#WorkbenchSidebar,
+QFrame#WorkbenchLayerRail {{
     background: {c["surface"]};
     border: 1px solid #e5edf5;
     border-radius: {r["md"]}px;
@@ -673,6 +674,12 @@ QTreeWidget::item:selected {{
 QListWidget::item:hover:!selected,
 QTreeWidget::item:hover:!selected {{
     background: {c["surface_muted"]};
+}}
+QListWidget#SceneEntityList {{
+    padding: 4px;
+}}
+QListWidget#SceneEntityList::item {{
+    padding: 5px 4px;
 }}
 QListWidget#RecentProjectsList::item {{
     padding: 10px 8px;
